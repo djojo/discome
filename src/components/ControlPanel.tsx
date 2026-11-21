@@ -366,7 +366,7 @@ export function ControlPanel({
       <section className="shortcuts">
         <h2>Raccourcis</h2>
         <p>
-          <kbd>←</kbd> <kbd>→</kbd> scènes · <kbd>1</kbd>–<kbd>{Math.min(9, SCENES.length)}</kbd> accès direct ·{" "}
+          <kbd>←</kbd> <kbd>→</kbd> scènes · <kbd>1</kbd>–<kbd>{SCENES.length >= 10 ? 0 : SCENES.length}</kbd> accès direct ·{" "}
           <kbd>Espace</kbd> drop · <kbd>T</kbd> tap tempo · <kbd>L</kbd> verrouiller · <kbd>F</kbd> plein écran ·{" "}
           <kbd>H</kbd> masquer l&apos;interface · <kbd>D</kbd> debug
         </p>

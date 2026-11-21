@@ -9,6 +9,7 @@ import type { Section } from "@/lib/audio/MusicAnalyzer";
 import { ControlPanel, SOURCE_LABELS } from "./ControlPanel";
 import { applyLook, findLook, loadSettings, QUALITY_DPR, saveCurrentLook, saveSettings, type Settings } from "./settings";
 import { lookScenes } from "@/looks";
+import { preloadDancer } from "@/scenes/3d/humanoid/dancerAsset";
 import type { DirectorContext } from "@/engine/Director";
 
 const IDLE_MS = 3500;
@@ -237,6 +238,11 @@ export default function Visualizer() {
   }, [engine]);
 
   useEffect(() => {
+    // Warm the dancer model download so humanoid scenes appear without a wait
+    preloadDancer().catch(() => {});
+  }, []);
+
+  useEffect(() => {
     engine.setOnEnded(() => setSource(null));
     return () => {
       engine.setOnEnded(null);
@@ -311,8 +317,8 @@ export default function Visualizer() {
       } else if (e.key === "t" || e.key === "T") engine.tap();
       else if (e.key === "l" || e.key === "L") setSettings((s) => ({ ...s, locked: !s.locked }));
       else if (e.key === "d" || e.key === "D") setDebugOpen((v) => !v);
-      else if (/^[1-9]$/.test(e.key)) {
-        const s = SCENES[Number(e.key) - 1];
+      else if (/^[0-9]$/.test(e.key)) {
+        const s = SCENES[e.key === "0" ? 9 : Number(e.key) - 1];
         if (s) goToScene(s.id);
       } else return;
       e.preventDefault();

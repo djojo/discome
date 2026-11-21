@@ -6,12 +6,15 @@ import { tunnel } from "./shader/tunnel";
 import { kaleido } from "./shader/kaleido";
 import { orb } from "./3d/orb";
 import { terrain } from "./3d/terrain";
+import { dancer } from "./3d/humanoid/dancer";
+import { android } from "./3d/humanoid/android";
+import { particleBody } from "./3d/humanoid/particleBody";
 
 /**
  * The scene library. To add a scene: create a file exporting a SceneDef
  * (2D canvas, fullscreen shader via defineShaderScene, or three.js) and list it here.
  */
-export const SCENES: SceneDef[] = [halo, kaleido, orb, tunnel, nebula, terrain, echoes];
+export const SCENES: SceneDef[] = [halo, kaleido, orb, tunnel, nebula, terrain, echoes, dancer, android, particleBody];
 
 export const sceneById = (id: string) => SCENES.find((s) => s.id === id) ?? SCENES[0];
 
