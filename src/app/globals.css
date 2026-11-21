@@ -405,6 +405,71 @@ button:disabled {
   background: rgba(192, 132, 252, 0.14);
 }
 
+.mode-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.action-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin: 12px 0;
+}
+
+.chip-center {
+  text-align: center;
+}
+
+.chip-hot {
+  border-color: rgba(255, 60, 172, 0.5);
+  background: rgba(255, 60, 172, 0.12);
+}
+
+.chip-hot:hover:not(:disabled) {
+  border-color: var(--hot);
+}
+
+.music-info {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 12px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.music-info[data-section="breakdown"] {
+  border-color: #22d3ee;
+}
+
+.music-info[data-section="build"] {
+  border-color: #facc15;
+  color: #fde68a;
+}
+
+.music-info[data-section="drop"] {
+  border-color: var(--hot);
+  background: rgba(255, 60, 172, 0.2);
+}
+
+.debug {
+  position: absolute;
+  top: 60px;
+  left: 16px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.7);
+  border: 1px solid var(--line-strong);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre;
+  pointer-events: none;
+}
+
 .scene-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

@@ -61,6 +61,8 @@ export class Compositor {
       uLayerOpacity: { value: 1 },
       uTime: { value: 0 },
       uRes: { value: new THREE.Vector2(1, 1) },
+      uTension: { value: 0 },
+      uBeatPulse: { value: 0 },
     };
     this.material = new THREE.ShaderMaterial({
       uniforms: this.uniforms,
@@ -124,7 +126,13 @@ export class Compositor {
     this.layer = id ? this.acquire(id) : null;
   }
 
-  render(frame: AudioFrame, paramsFor: (id: string) => ParamValues, dt: number, layer: LayerSettings) {
+  render(
+    frame: AudioFrame,
+    paramsFor: (id: string) => ParamValues,
+    dt: number,
+    layer: LayerSettings,
+    fx: { tension: number } = { tension: 0 },
+  ) {
     this.time += dt;
     if (this.next) {
       this.elapsed += dt;
@@ -153,6 +161,8 @@ export class Compositor {
     }
 
     u.uTime.value = this.time;
+    u.uTension.value = fx.tension;
+    u.uBeatPulse.value = frame.beatPulse;
     this.renderer.getDrawingBufferSize(u.uRes.value);
     this.renderer.setRenderTarget(null);
     this.renderer.render(this.quadScene, this.quadCamera);

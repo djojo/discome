@@ -1,5 +1,6 @@
 import { defaultParams, SCENES, type ParamValues } from "@/scenes";
 import { BLEND_MODES, TRANSITIONS, type LayerSettings, type TransitionId } from "@/engine/transitions";
+import { DIRECTOR_MODES, type DirectorMode } from "@/engine/Director";
 
 export type Quality = "auto" | "low" | "normal" | "high";
 
@@ -10,8 +11,12 @@ export interface Settings {
   sceneId: string;
   params: Record<string, ParamValues>;
   sensitivity: number;
-  autoCycle: boolean;
-  cycleSeconds: number;
+  /** Auto VJ mode. */
+  director: DirectorMode;
+  /** Director varies palette and settings on each cut. */
+  vary: boolean;
+  /** Director keeps the current scene. */
+  locked: boolean;
   quality: Quality;
   transition: TransitionId;
   /** Seconds. */
@@ -26,8 +31,9 @@ export function defaultSettings(): Settings {
     sceneId: SCENES[0].id,
     params: Object.fromEntries(SCENES.map((s) => [s.id, defaultParams(s)])),
     sensitivity: 1,
-    autoCycle: false,
-    cycleSeconds: 20,
+    director: "club",
+    vary: true,
+    locked: false,
     quality: "auto",
     transition: "fade",
     transitionTime: 1.2,
@@ -55,6 +61,7 @@ export function loadSettings(): Settings {
       sceneId: sceneExists(saved.sceneId) ? saved.sceneId : base.sceneId,
       transition: TRANSITIONS.some((t) => t.id === saved.transition) ? saved.transition! : base.transition,
       quality: saved.quality && saved.quality in QUALITY_DPR ? saved.quality : base.quality,
+      director: DIRECTOR_MODES.some((m) => m.id === saved.director) ? saved.director! : base.director,
       params,
       layer,
     };

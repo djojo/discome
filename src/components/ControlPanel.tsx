@@ -4,6 +4,7 @@ import type { SourceKind } from "@/lib/audio/AudioEngine";
 import { SCENES, type ParamValue, type ParamValues, type SceneDef } from "@/scenes";
 import { ParamControl } from "./ParamControl";
 import { BLEND_MODES, TRANSITIONS, type BlendModeId, type TransitionId } from "@/engine/transitions";
+import { DIRECTOR_MODES } from "@/engine/Director";
 import type { Quality, Settings } from "./settings";
 
 export const SOURCE_LABELS: Record<SourceKind, string> = {
@@ -24,6 +25,8 @@ interface Props {
   onResetParams: () => void;
   onSettings: (patch: Partial<Settings>) => void;
   onSource: (kind: SourceKind) => void;
+  onTap: () => void;
+  onDrop: () => void;
 }
 
 export function ControlPanel({
@@ -37,7 +40,10 @@ export function ControlPanel({
   onResetParams,
   onSettings,
   onSource,
+  onTap,
+  onDrop,
 }: Props) {
+  const mode = DIRECTOR_MODES.find((m) => m.id === settings.director) ?? DIRECTOR_MODES[0];
   return (
     <div className="panel-inner">
       <section>
@@ -54,6 +60,48 @@ export function ControlPanel({
             </button>
           ))}
         </div>
+      </section>
+
+      <section>
+        <h2>Réalisateur</h2>
+        <div className="mode-grid">
+          {DIRECTOR_MODES.map((m) => (
+            <button
+              key={m.id}
+              className={`chip chip-center ${settings.director === m.id ? "chip-active" : ""}`}
+              onClick={() => onSettings({ director: m.id })}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+        <p className="hint">{mode.hint}</p>
+        <div className="action-row">
+          <button className="chip chip-center" onClick={onTap} title="Tape en rythme (touche T)">
+            Tap tempo
+          </button>
+          <button className="chip chip-center chip-hot" onClick={onDrop} title="Déclenche un drop (Espace)">
+            Drop !
+          </button>
+        </div>
+        <label className="field field-toggle">
+          <span>Varier couleurs et réglages</span>
+          <input
+            type="checkbox"
+            role="switch"
+            checked={settings.vary}
+            onChange={(e) => onSettings({ vary: e.target.checked })}
+          />
+        </label>
+        <label className="field field-toggle">
+          <span>Verrouiller la scène</span>
+          <input
+            type="checkbox"
+            role="switch"
+            checked={settings.locked}
+            onChange={(e) => onSettings({ locked: e.target.checked })}
+          />
+        </label>
       </section>
 
       <section>
@@ -200,31 +248,6 @@ export function ControlPanel({
             onChange={(e) => onSettings({ sensitivity: Number(e.target.value) })}
           />
         </label>
-        <label className="field field-toggle">
-          <span>Enchaîner les scènes</span>
-          <input
-            type="checkbox"
-            role="switch"
-            checked={settings.autoCycle}
-            onChange={(e) => onSettings({ autoCycle: e.target.checked })}
-          />
-        </label>
-        {settings.autoCycle && (
-          <label className="field">
-            <span className="field-head">
-              <span>Toutes les</span>
-              <span className="field-value">{settings.cycleSeconds} s</span>
-            </span>
-            <input
-              type="range"
-              min={5}
-              max={120}
-              step={5}
-              value={settings.cycleSeconds}
-              onChange={(e) => onSettings({ cycleSeconds: Number(e.target.value) })}
-            />
-          </label>
-        )}
         <label className="field">
           <span className="field-head">
             <span>Qualité</span>
@@ -241,8 +264,9 @@ export function ControlPanel({
       <section className="shortcuts">
         <h2>Raccourcis</h2>
         <p>
-          <kbd>←</kbd> <kbd>→</kbd> scènes · <kbd>1</kbd>–<kbd>{SCENES.length}</kbd> accès direct · <kbd>F</kbd>{" "}
-          plein écran · <kbd>H</kbd> masquer l&apos;interface
+          <kbd>←</kbd> <kbd>→</kbd> scènes · <kbd>1</kbd>–<kbd>{Math.min(9, SCENES.length)}</kbd> accès direct ·{" "}
+          <kbd>Espace</kbd> drop · <kbd>T</kbd> tap tempo · <kbd>L</kbd> verrouiller · <kbd>F</kbd> plein écran ·{" "}
+          <kbd>H</kbd> masquer l&apos;interface · <kbd>D</kbd> debug
         </p>
       </section>
     </div>

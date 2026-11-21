@@ -24,6 +24,8 @@ uniform int uLayerMode;
 uniform float uLayerOpacity;
 uniform float uTime;
 uniform vec2 uRes;
+uniform float uTension;
+uniform float uBeatPulse;
 varying vec2 vUv;
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -101,7 +103,11 @@ vec3 blendLayer(vec3 base, vec3 l) {
 }
 
 void main() {
-  vec3 col = transition(vUv);
+  // Build-up tension: the frame pushes in on every beat and lifts toward white
+  float push = uTension * (0.35 + 0.65 * uBeatPulse);
+  vec2 uv = 0.5 + (vUv - 0.5) * (1.0 - 0.07 * push);
+  vec3 col = transition(uv);
+  col += vec3(0.35) * uTension * uTension * uBeatPulse;
   if (uHasL > 0.5) col = mix(col, blendLayer(col, texture2D(uL, vUv).rgb), uLayerOpacity);
   gl_FragColor = vec4(col, 1.0);
 }

@@ -4,10 +4,19 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AudioEngine, type SourceKind } from "@/lib/audio/AudioEngine";
 import { defaultParams, SCENES, sceneById, type ParamValue, type Viewport } from "@/scenes";
 import { Compositor } from "@/engine/Compositor";
+import { Director } from "@/engine/Director";
+import type { Section } from "@/lib/audio/MusicAnalyzer";
 import { ControlPanel, SOURCE_LABELS } from "./ControlPanel";
 import { loadSettings, QUALITY_DPR, saveSettings, type Settings } from "./settings";
 
 const IDLE_MS = 3500;
+
+const SECTION_LABELS: Record<Section, string> = {
+  calm: "Groove",
+  breakdown: "Breakdown",
+  build: "Montée",
+  drop: "Drop",
+};
 
 function describeError(e: unknown): string {
   if (e instanceof DOMException) {
@@ -30,12 +39,15 @@ export default function Visualizer() {
   const [uiHidden, setUiHidden] = useState(false);
   const [idle, setIdle] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [debugOpen, setDebugOpen] = useState(false);
 
   const stageRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const meterRefs = useRef<(HTMLDivElement | null)[]>([]);
   const beatRef = useRef<HTMLDivElement>(null);
+  const hudRef = useRef<HTMLSpanElement>(null);
+  const debugRef = useRef<HTMLPreElement>(null);
   const settingsRef = useRef(settings);
   const overPanelRef = useRef(false);
 
@@ -67,7 +79,6 @@ export default function Visualizer() {
     let viewport: Viewport = { width: 1, height: 1, dpr: 1 };
     let raf = 0;
     let last = performance.now();
-    let lastSwitch = performance.now();
     let firstShow = true;
 
     // "Auto" quality: lower the resolution when frames get slow, raise it back when there's headroom.
@@ -114,46 +125,83 @@ export default function Visualizer() {
     ro.observe(stage);
     measure();
 
+    const director = new Director();
+    let hudText = "";
+    let debugText = "";
+
     const loop = (now: number) => {
       raf = requestAnimationFrame(loop);
       const interval = (now - last) / 1000;
       const dt = Math.min(0.1, interval);
       last = now;
-      const s = settingsRef.current;
 
       adaptQuality(now, interval);
-      if (s.quality !== lastQuality) {
-        lastQuality = s.quality;
+      if (settingsRef.current.quality !== lastQuality) {
+        lastQuality = settingsRef.current.quality;
         measure();
       }
+
+      const frame = engine.update(dt);
+      let s = settingsRef.current;
+
+      // ---- Auto director
+      const decision = director.update(frame, {
+        mode: s.director,
+        locked: s.locked,
+        vary: s.vary,
+        currentId: compositor.sceneId,
+        layerId: s.layer.sceneId,
+        inTransition: compositor.inTransition,
+        scenes: SCENES,
+        params: s.params,
+      });
+      if (decision?.preload) {
+        const id = decision.preload;
+        compositor.preload(id, frame, s.params[id] ?? defaultParams(sceneById(id)));
+      }
+      if (decision?.sceneId && decision.transition) {
+        const id = decision.sceneId;
+        const varied = decision.params;
+        s = { ...s, sceneId: id, params: varied ? { ...s.params, [id]: varied } : s.params };
+        settingsRef.current = s; // right away, so the manual-change check below doesn't undo the cut
+        setSettings((cur) => ({ ...cur, sceneId: id, params: varied ? { ...cur.params, [id]: varied } : cur.params }));
+        compositor.show(id, decision.transition);
+        firstShow = false;
+      }
+
+      // ---- Manual changes (panel, keyboard)
       if (s.sceneId !== compositor.sceneId) {
         compositor.show(
           s.sceneId,
           firstShow ? { type: "cut", duration: 0 } : { type: s.transition, duration: s.transitionTime },
         );
+        if (!firstShow) director.noteManualCut(s.sceneId);
         firstShow = false;
-        lastSwitch = now;
       }
       if (s.layer.sceneId !== compositor.layerId) compositor.setLayer(s.layer.sceneId);
 
-      const frame = engine.update(dt);
-      compositor.render(frame, (id) => s.params[id] ?? defaultParams(sceneById(id)), dt, s.layer);
+      const params = s.params;
+      compositor.render(frame, (id) => params[id] ?? defaultParams(sceneById(id)), dt, s.layer, {
+        tension: director.tension,
+      });
 
-      // HUD meters, written straight to the DOM (no React re-render per frame)
+      // ---- HUD, written straight to the DOM (no React re-render per frame)
       const levels = [frame.bass, frame.mid, frame.treble, frame.volume];
       meterRefs.current.forEach((el, i) => {
         if (el) el.style.transform = `scaleY(${0.04 + levels[i] * 0.96})`;
       });
       if (beatRef.current) beatRef.current.style.opacity = String(0.15 + frame.beatPulse * 0.85);
-
-      // Auto-cycle: switch on a beat once the delay has passed (or a bit later if no beat comes)
-      if (s.autoCycle && frame.active && !compositor.inTransition) {
-        const elapsed = (now - lastSwitch) / 1000;
-        if ((elapsed > s.cycleSeconds && frame.beat) || elapsed > s.cycleSeconds + 4) {
-          lastSwitch = now;
-          const i = SCENES.findIndex((x) => x.id === compositor.sceneId);
-          const nextId = SCENES[(i + 1) % SCENES.length].id;
-          setSettings((cur) => ({ ...cur, sceneId: nextId }));
+      const hud = `${frame.bpm > 0 ? Math.round(frame.bpm) : "—"} BPM · ${SECTION_LABELS[frame.section]}`;
+      if (hudRef.current && hud !== hudText) {
+        hudText = hud;
+        hudRef.current.textContent = hud;
+        hudRef.current.dataset.section = frame.section;
+      }
+      if (debugRef.current) {
+        const text = director.describe(frame, s.director);
+        if (text !== debugText) {
+          debugText = text;
+          debugRef.current.textContent = text;
         }
       }
     };
@@ -235,6 +283,12 @@ export default function Visualizer() {
       else if (e.key === "ArrowLeft") stepScene(-1);
       else if (e.key === "f" || e.key === "F") toggleFullscreen();
       else if (e.key === "h" || e.key === "H") setUiHidden((v) => !v);
+      else if (e.key === " ") {
+        (document.activeElement as HTMLElement | null)?.blur?.();
+        engine.triggerDrop();
+      } else if (e.key === "t" || e.key === "T") engine.tap();
+      else if (e.key === "l" || e.key === "L") setSettings((s) => ({ ...s, locked: !s.locked }));
+      else if (e.key === "d" || e.key === "D") setDebugOpen((v) => !v);
       else if (/^[1-9]$/.test(e.key)) {
         const s = SCENES[Number(e.key) - 1];
         if (s) goToScene(s.id);
@@ -243,7 +297,7 @@ export default function Visualizer() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [stepScene, goToScene, toggleFullscreen]);
+  }, [stepScene, goToScene, toggleFullscreen, engine]);
 
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wake = useCallback(() => {
@@ -352,6 +406,8 @@ export default function Visualizer() {
                 }
                 onSettings={patchSettings}
                 onSource={(k) => startSource(k)}
+                onTap={() => engine.tap()}
+                onDrop={() => engine.triggerDrop()}
               />
             </aside>
           )}
@@ -367,6 +423,7 @@ export default function Visualizer() {
               <div className="beat" ref={beatRef} title="Beat" />
             </div>
             <div className="source-info">
+              <span ref={hudRef} className="music-info" />
               <span className="dot" />
               {SOURCE_LABELS[source]}
               {fileName && <em> · {fileName}</em>}
@@ -389,6 +446,7 @@ export default function Visualizer() {
         </>
       )}
 
+      {source && debugOpen && <pre ref={debugRef} className="debug" />}
       {dragging && <div className="dropzone">Dépose ton fichier audio</div>}
       {error && (
         <div className="toast" role="alert" onClick={() => setError(null)}>
