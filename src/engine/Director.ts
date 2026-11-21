@@ -79,7 +79,14 @@ export interface DirectorContext {
   currentId: string | null;
   layerId: string | null;
   inTransition: boolean;
+  /** Scenes the director may use (the active look's selection). */
   scenes: SceneDef[];
+  /** Relative odds per scene id (default 1). */
+  weights?: Record<string, number>;
+  /** Palettes allowed by the look. */
+  palettes?: string[];
+  /** Look-specific transition sets. */
+  transitions?: { calm?: TransitionId[]; drop?: TransitionId[] };
   params: Record<string, ParamValues>;
 }
 
@@ -128,7 +135,13 @@ export class Director {
 
     if (ctx.locked || !f.active) return null;
     const auto = ctx.mode !== "manual";
-    const pacing = PACING[ctx.mode === "manual" ? "club" : ctx.mode];
+    const base = PACING[ctx.mode === "manual" ? "club" : ctx.mode];
+    const pacing: Pacing = {
+      ...base,
+      calmTransitions: ctx.transitions?.calm ?? base.calmTransitions,
+      dropTransitions: ctx.transitions?.drop ?? base.dropTransitions,
+      burstTransitions: ctx.transitions?.drop ?? base.burstTransitions,
+    };
     const beat = f.bpm > 0 ? 60 / f.bpm : 0.5;
 
     // ---- Drop: impact, then a burst of cuts
@@ -221,7 +234,7 @@ export class Director {
     this.lastCutTime = this.now;
     this.remember(id);
     const def = ctx.scenes.find((s) => s.id === id);
-    const params = ctx.vary && def ? mutate(def, ctx.params[id]) : undefined;
+    const params = ctx.vary && def ? mutate(def, ctx.params[id], ctx.palettes) : undefined;
     return { sceneId: id, transition, params };
   }
 
@@ -241,18 +254,26 @@ export class Director {
       free,
     ];
     const pool = tiers.find((t) => t.length > 0) ?? ctx.scenes;
-    return pickOne(pool).id;
+    // Weighted draw: a look can favour some scenes
+    const w = (id: string) => ctx.weights?.[id] ?? 1;
+    let r = Math.random() * pool.reduce((sum, s) => sum + w(s.id), 0);
+    for (const s of pool) {
+      r -= w(s.id);
+      if (r <= 0) return s.id;
+    }
+    return pool[pool.length - 1].id;
   }
 }
 
 /** Fresh palette + small nudges on a couple of sliders, so a returning scene never looks identical. */
-function mutate(def: SceneDef, current: ParamValues | undefined): ParamValues {
+function mutate(def: SceneDef, current: ParamValues | undefined, palettes?: string[]): ParamValues {
   const out: ParamValues = { ...(current ?? {}) };
   const ranges = def.params.filter((p) => p.type === "range");
   for (const p of def.params) {
     if (p.type === "select" && p.key === "palette") {
-      const others = paletteOptions.filter((o) => o.value !== out.palette);
-      out.palette = pickOne(others).value;
+      const allowed = palettes?.length ? palettes : paletteOptions.map((o) => o.value);
+      const others = allowed.filter((v) => v !== out.palette);
+      out.palette = others.length ? pickOne(others) : allowed[0];
     }
   }
   for (let n = 0; n < 2 && ranges.length; n++) {

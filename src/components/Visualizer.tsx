@@ -7,7 +7,9 @@ import { Compositor } from "@/engine/Compositor";
 import { Director } from "@/engine/Director";
 import type { Section } from "@/lib/audio/MusicAnalyzer";
 import { ControlPanel, SOURCE_LABELS } from "./ControlPanel";
-import { loadSettings, QUALITY_DPR, saveSettings, type Settings } from "./settings";
+import { applyLook, findLook, loadSettings, QUALITY_DPR, saveCurrentLook, saveSettings, type Settings } from "./settings";
+import { lookScenes } from "@/looks";
+import type { DirectorContext } from "@/engine/Director";
 
 const IDLE_MS = 3500;
 
@@ -126,6 +128,24 @@ export default function Visualizer() {
     measure();
 
     const director = new Director();
+    // Director pool derived from the active look, rebuilt only when the look changes
+    let lookKey = "";
+    let lookCtx: Pick<DirectorContext, "scenes" | "weights" | "palettes" | "transitions"> = { scenes: SCENES };
+    const lookContext = (s: Settings) => {
+      const key = `${s.lookId}:${s.customLooks.length}`;
+      if (key !== lookKey) {
+        lookKey = key;
+        const look = findLook(s);
+        const pool = lookScenes(look);
+        lookCtx = {
+          scenes: pool.length ? pool.map((e) => sceneById(e.id)) : SCENES,
+          weights: Object.fromEntries(pool.map((e) => [e.id, e.weight ?? 1])),
+          palettes: look.palettes,
+          transitions: look.transitions,
+        };
+      }
+      return lookCtx;
+    };
     let hudText = "";
     let debugText = "";
 
@@ -152,8 +172,8 @@ export default function Visualizer() {
         currentId: compositor.sceneId,
         layerId: s.layer.sceneId,
         inTransition: compositor.inTransition,
-        scenes: SCENES,
         params: s.params,
+        ...lookContext(s),
       });
       if (decision?.preload) {
         const id = decision.preload;
@@ -183,6 +203,8 @@ export default function Visualizer() {
       const params = s.params;
       compositor.render(frame, (id) => params[id] ?? defaultParams(sceneById(id)), dt, s.layer, {
         tension: director.tension,
+        fx: s.fx,
+        safeFlash: s.safeFlash,
       });
 
       // ---- HUD, written straight to the DOM (no React re-render per frame)
@@ -408,6 +430,23 @@ export default function Visualizer() {
                 onSource={(k) => startSource(k)}
                 onTap={() => engine.tap()}
                 onDrop={() => engine.triggerDrop()}
+                onLook={(id) => {
+                  const look = findLook(settings, id);
+                  if (look.fx.strobe && look.fx.strobe !== "off" && !settings.strobeWarned) {
+                    setError("Ce look utilise un stroboscope sur les drops. Active « Limiter les flashs » si besoin.");
+                  }
+                  setSettings((s) => ({ ...applyLook(s, findLook(s, id)), strobeWarned: s.strobeWarned || !!look.fx.strobe }));
+                }}
+                onSaveLook={() => setSettings((s) => saveCurrentLook(s))}
+                onDeleteLook={(id) =>
+                  setSettings((s) => ({
+                    ...s,
+                    customLooks: s.customLooks.filter((l) => l.id !== id),
+                    lookId: s.lookId === id ? "free" : s.lookId,
+                  }))
+                }
+                onFx={(patch) => setSettings((s) => ({ ...s, fx: { ...s.fx, ...patch } }))}
+                onResetFx={() => setSettings((s) => ({ ...s, fx: applyLook(s, findLook(s)).fx }))}
               />
             </aside>
           )}

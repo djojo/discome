@@ -405,6 +405,93 @@ button:disabled {
   background: rgba(192, 132, 252, 0.14);
 }
 
+.look-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.look-wrap {
+  position: relative;
+}
+
+.look-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding: 6px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.04);
+  text-align: left;
+}
+
+.look-card:hover {
+  border-color: var(--line-strong);
+}
+
+.look-card-active {
+  border-color: transparent;
+  background:
+    linear-gradient(rgba(30, 20, 45, 0.95), rgba(30, 20, 45, 0.95)) padding-box,
+    var(--grad) border-box;
+}
+
+.look-swatch {
+  display: block;
+  height: 26px;
+  border-radius: 6px;
+}
+
+.look-name {
+  font-size: 12px;
+  padding: 0 2px 2px;
+}
+
+.look-delete {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 0;
+  background: rgba(0, 0, 0, 0.6);
+  font-size: 13px;
+  line-height: 1;
+}
+
+.fx-details summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.fx-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.fx-details summary::after {
+  content: "+";
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+
+.fx-details[open] summary::after {
+  content: "−";
+}
+
+.fx-head {
+  margin-bottom: 10px;
+}
+
+.fx-head .hint {
+  margin: 0;
+}
+
 .mode-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

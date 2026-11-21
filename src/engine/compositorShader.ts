@@ -26,6 +26,24 @@ uniform float uTime;
 uniform vec2 uRes;
 uniform float uTension;
 uniform float uBeatPulse;
+// post-effects
+uniform sampler2D uPrev;
+uniform float uHasPrev;
+uniform float uTrails;
+uniform float uChroma;
+uniform float uScan;
+uniform float uCrt;
+uniform float uGrain;
+uniform float uVhs;
+uniform float uVignette;
+uniform float uHue;
+uniform float uSat;
+uniform float uContrast;
+uniform float uBright;
+uniform float uMirror;
+uniform float uPoster;
+uniform float uStrobe;
+uniform int uStrobeMode;
 varying vec2 vUv;
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -102,13 +120,88 @@ vec3 blendLayer(vec3 base, vec3 l) {
   return base * smoothstep(0.05, 0.4, luma(l));
 }
 
+vec3 composite(vec2 uv) {
+  vec3 col = transition(uv);
+  if (uHasL > 0.5) col = mix(col, blendLayer(col, texture2D(uL, uv).rgb), uLayerOpacity);
+  return col;
+}
+
+vec2 barrel(vec2 uv, float k) {
+  vec2 c = uv * 2.0 - 1.0;
+  c *= 1.0 + k * 0.18 * dot(c, c);
+  return c * 0.5 + 0.5;
+}
+
+vec2 mirrorFold(vec2 uv, float n) {
+  if (n < 1.5) return uv;
+  float aspect = uRes.x / uRes.y;
+  vec2 p = (uv - 0.5) * vec2(aspect, 1.0);
+  float seg = 6.2831853 / n;
+  float a = abs(mod(atan(p.y, p.x) + seg * 0.5, seg) - seg * 0.5);
+  p = vec2(cos(a), sin(a)) * length(p);
+  return p / vec2(aspect, 1.0) + 0.5;
+}
+
+vec3 hueShift(vec3 c, float deg) {
+  float a = radians(deg);
+  vec3 k = vec3(0.57735);
+  float ca = cos(a);
+  return c * ca + cross(k, c) * sin(a) + k * dot(k, c) * (1.0 - ca);
+}
+
 void main() {
   // Build-up tension: the frame pushes in on every beat and lifts toward white
   float push = uTension * (0.35 + 0.65 * uBeatPulse);
   vec2 uv = 0.5 + (vUv - 0.5) * (1.0 - 0.07 * push);
-  vec3 col = transition(uv);
+
+  uv = barrel(uv, uCrt);
+  vec2 edge = abs(uv - 0.5) * 2.0;
+  float inside = 1.0 - step(1.0, max(edge.x, edge.y));
+  uv = mirrorFold(uv, uMirror);
+
+  // Tape: per-line jitter + a tracking band drifting up the screen
+  if (uVhs > 0.0) {
+    float line = floor(uv.y * 240.0);
+    float jitter = (hash(vec2(line, floor(uTime * 24.0))) - 0.5) * 0.006;
+    float band = 1.0 - smoothstep(0.0, 0.035, abs(uv.y - fract(uTime * 0.11)));
+    uv.x += (jitter + band * 0.03) * uVhs;
+  }
+
+  // Chromatic aberration: channels pulled apart radially, harder on the kick
+  float ca = uChroma * (0.004 + 0.012 * uBeatPulse) + uVhs * 0.004;
+  vec3 col;
+  if (ca > 0.0001) {
+    vec2 off = (uv - 0.5) * ca * 2.0 + vec2(uVhs * 0.002, 0.0);
+    col = vec3(composite(uv + off).r, composite(uv).g, composite(uv - off).b);
+  } else {
+    col = composite(uv);
+  }
+
   col += vec3(0.35) * uTension * uTension * uBeatPulse;
-  if (uHasL > 0.5) col = mix(col, blendLayer(col, texture2D(uL, vUv).rgb), uLayerOpacity);
-  gl_FragColor = vec4(col, 1.0);
+
+  // Grading
+  col += uBright;
+  col = (col - 0.5) * uContrast + 0.5;
+  col = mix(vec3(luma(col)), col, uSat);
+  if (abs(uHue) > 0.5) col = hueShift(col, uHue);
+  if (uPoster > 0.0) {
+    float levels = mix(12.0, 3.0, uPoster);
+    col = floor(clamp(col, 0.0, 1.0) * levels + 0.5) / levels;
+  }
+
+  // Light trails: keep the brighter of now and a slightly zoomed previous frame
+  if (uHasPrev > 0.5) col = max(col, texture2D(uPrev, 0.5 + (vUv - 0.5) * 0.985).rgb * uTrails);
+
+  // Screen texture
+  col *= 1.0 - uScan * 0.4 * (0.5 + 0.5 * sin(gl_FragCoord.y * 2.0));
+  col += (hash(gl_FragCoord.xy + fract(uTime) * 413.0) - 0.5) * (0.18 * uGrain + 0.08 * uVhs);
+  col *= 1.0 - uVignette * smoothstep(0.25, 0.85, length((vUv - 0.5) * vec2(uRes.x / uRes.y, 1.0)) * 0.9);
+
+  if (uStrobe > 0.0) {
+    if (uStrobeMode == 1) col = mix(col, vec3(1.0), uStrobe);
+    else col = mix(col, 1.0 - clamp(col, 0.0, 1.0), step(0.5, uStrobe));
+  }
+
+  gl_FragColor = vec4(max(col, 0.0) * inside, 1.0);
 }
 `;

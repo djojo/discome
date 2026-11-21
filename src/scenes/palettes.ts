@@ -14,10 +14,14 @@ interface Palette {
 export const PALETTES: Record<string, Palette> = {
   acid: { label: "Acide", a: [0.5, 0.5, 0.5], b: [0.5, 0.5, 0.5], c: [1, 1, 1], d: [0, 0.33, 0.67] },
   neon: { label: "Néon", a: [0.5, 0.5, 0.5], b: [0.5, 0.5, 0.5], c: [2, 1, 0], d: [0.5, 0.2, 0.25] },
-  sunset: { label: "Couchant", a: [0.5, 0.5, 0.5], b: [0.5, 0.5, 0.5], c: [1, 1, 0.5], d: [0.8, 0.9, 0.3] },
-  ocean: { label: "Océan", a: [0.5, 0.5, 0.5], b: [0.5, 0.5, 0.5], c: [1, 1, 1], d: [0.3, 0.2, 0.2] },
+  // Themed palettes stay within one colour family (a look keeps its identity)
+  sunset: { label: "Couchant", a: [0.75, 0.4, 0.5], b: [0.25, 0.3, 0.35], c: [1, 1, 1], d: [0, 0.1, 0.25] },
+  ocean: { label: "Océan", a: [0.1, 0.4, 0.65], b: [0.1, 0.3, 0.3], c: [1, 1, 1], d: [0.5, 0.15, 0] },
   fire: { label: "Feu", a: [0.8, 0.5, 0.4], b: [0.2, 0.4, 0.2], c: [2, 1, 1], d: [0, 0.25, 0.25] },
-  ice: { label: "Glace", a: [0.5, 0.5, 0.5], b: [0.5, 0.5, 0.5], c: [1, 0.7, 0.4], d: [0, 0.15, 0.2] },
+  ice: { label: "Glace", a: [0.65, 0.8, 0.92], b: [0.3, 0.2, 0.08], c: [1, 1, 1], d: [0.05, 0.1, 0.15] },
+  mono: { label: "Noir & blanc", a: [0.5, 0.5, 0.5], b: [0.5, 0.5, 0.5], c: [1, 1, 1], d: [0, 0, 0] },
+  chrome: { label: "Chrome", a: [0.62, 0.66, 0.72], b: [0.38, 0.38, 0.36], c: [1, 1, 1], d: [0, 0.02, 0.06] },
+  vhs: { label: "VHS", a: [0.55, 0.45, 0.5], b: [0.4, 0.35, 0.35], c: [1, 1, 1], d: [0.05, 0.3, 0.55] },
 };
 
 export const paletteOptions = Object.entries(PALETTES).map(([value, p]) => ({ value, label: p.label }));

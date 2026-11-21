@@ -5,7 +5,8 @@ import { SCENES, type ParamValue, type ParamValues, type SceneDef } from "@/scen
 import { ParamControl } from "./ParamControl";
 import { BLEND_MODES, TRANSITIONS, type BlendModeId, type TransitionId } from "@/engine/transitions";
 import { DIRECTOR_MODES } from "@/engine/Director";
-import type { Quality, Settings } from "./settings";
+import { FX_SLIDERS, MIRROR_OPTIONS, STROBE_OPTIONS, type FxSettings, type StrobeMode } from "@/engine/fx";
+import { allLooks, type Quality, type Settings } from "./settings";
 
 export const SOURCE_LABELS: Record<SourceKind, string> = {
   mic: "Micro / entrée",
@@ -27,6 +28,11 @@ interface Props {
   onSource: (kind: SourceKind) => void;
   onTap: () => void;
   onDrop: () => void;
+  onLook: (id: string) => void;
+  onSaveLook: () => void;
+  onDeleteLook: (id: string) => void;
+  onFx: (patch: Partial<FxSettings>) => void;
+  onResetFx: () => void;
 }
 
 export function ControlPanel({
@@ -42,6 +48,11 @@ export function ControlPanel({
   onSource,
   onTap,
   onDrop,
+  onLook,
+  onSaveLook,
+  onDeleteLook,
+  onFx,
+  onResetFx,
 }: Props) {
   const mode = DIRECTOR_MODES.find((m) => m.id === settings.director) ?? DIRECTOR_MODES[0];
   return (
@@ -58,6 +69,34 @@ export function ControlPanel({
             >
               {SOURCE_LABELS[k]}
             </button>
+          ))}
+        </div>
+      </section>
+
+      <section>
+        <div className="section-head">
+          <h2>Esthétique</h2>
+          <button className="link" onClick={onSaveLook} title="Garde les post-effets actuels dans un nouveau look">
+            Enregistrer mon look
+          </button>
+        </div>
+        <div className="look-grid">
+          {allLooks(settings).map((l) => (
+            <div key={l.id} className="look-wrap">
+              <button
+                className={`look-card ${settings.lookId === l.id ? "look-card-active" : ""}`}
+                onClick={() => onLook(l.id)}
+                title={l.description}
+              >
+                <span className="look-swatch" style={{ background: `linear-gradient(120deg, ${l.swatch.join(", ")})` }} />
+                <span className="look-name">{l.name}</span>
+              </button>
+              {l.custom && (
+                <button className="look-delete" onClick={() => onDeleteLook(l.id)} aria-label={`Supprimer ${l.name}`}>
+                  ×
+                </button>
+              )}
+            </div>
           ))}
         </div>
       </section>
@@ -233,7 +272,70 @@ export function ControlPanel({
       </section>
 
       <section>
+        <details className="fx-details">
+          <summary>
+            <h2>Post-FX</h2>
+          </summary>
+          <div className="section-head fx-head">
+            <span className="hint">Effets globaux, par-dessus toutes les scènes.</span>
+            <button className="link" onClick={onResetFx}>
+              Réinitialiser
+            </button>
+          </div>
+          {FX_SLIDERS.map((d) => (
+            <label key={d.key} className="field">
+              <span className="field-head">
+                <span>{d.label}</span>
+                <span className="field-value">{settings.fx[d.key].toFixed(d.step >= 1 ? 0 : 2)}</span>
+              </span>
+              <input
+                type="range"
+                min={d.min}
+                max={d.max}
+                step={d.step}
+                value={settings.fx[d.key]}
+                onChange={(e) => onFx({ [d.key]: Number(e.target.value) })}
+              />
+            </label>
+          ))}
+          <label className="field">
+            <span className="field-head">
+              <span>Miroir global</span>
+            </span>
+            <select value={settings.fx.mirror} onChange={(e) => onFx({ mirror: Number(e.target.value) })}>
+              {MIRROR_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            <span className="field-head">
+              <span>Stroboscope au drop</span>
+            </span>
+            <select value={settings.fx.strobe} onChange={(e) => onFx({ strobe: e.target.value as StrobeMode })}>
+              {STROBE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </details>
+      </section>
+
+      <section>
         <h2>Général</h2>
+        <label className="field field-toggle">
+          <span>Limiter les flashs (photosensibilité)</span>
+          <input
+            type="checkbox"
+            role="switch"
+            checked={settings.safeFlash}
+            onChange={(e) => onSettings({ safeFlash: e.target.checked })}
+          />
+        </label>
         <label className="field">
           <span className="field-head">
             <span>Sensibilité</span>

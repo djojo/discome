@@ -3,6 +3,22 @@ import type { AudioFrame } from "@/lib/audio/AudioEngine";
 import { sceneById, type ParamValues, type SceneDef, type SceneInstance, type Viewport } from "@/scenes";
 import { COMPOSITOR_FRAG, COMPOSITOR_VERT } from "./compositorShader";
 import { blendCode, transitionCode, type LayerSettings, type TransitionSpec } from "./transitions";
+import { NEUTRAL_FX, type FxSettings } from "./fx";
+
+export interface PostFx {
+  /** 0..1 build-up tension from the director. */
+  tension: number;
+  fx: FxSettings;
+  /** Photosensitivity: dimmer strobe, at most ~3 flashes per second, no inversion. */
+  safeFlash: boolean;
+}
+
+const COPY_FRAG = /* glsl */ `
+precision highp float;
+uniform sampler2D tMap;
+varying vec2 vUv;
+void main() { gl_FragColor = vec4(texture2D(tMap, vUv).rgb, 1.0); }
+`;
 
 /** A live scene instance plus the surface it draws into. */
 interface Slot {
@@ -33,6 +49,13 @@ export class Compositor {
   private transition: TransitionSpec = { type: "cut", duration: 0 };
   private elapsed = 0;
   private time = 0;
+  private strobeEnv = 0;
+  private lastStrobe = -10;
+  /** Ping-pong buffers for the trails effect (allocated on first use). */
+  private feedback: [THREE.WebGLRenderTarget, THREE.WebGLRenderTarget] | null = null;
+  private feedbackIndex = 0;
+  private readonly copyScene = new THREE.Scene();
+  private readonly copyMaterial: THREE.ShaderMaterial;
 
   private readonly black: THREE.DataTexture;
   private readonly quadScene = new THREE.Scene();
@@ -63,6 +86,23 @@ export class Compositor {
       uRes: { value: new THREE.Vector2(1, 1) },
       uTension: { value: 0 },
       uBeatPulse: { value: 0 },
+      uPrev: { value: this.black as THREE.Texture },
+      uHasPrev: { value: 0 },
+      uTrails: { value: 0 },
+      uChroma: { value: 0 },
+      uScan: { value: 0 },
+      uCrt: { value: 0 },
+      uGrain: { value: 0 },
+      uVhs: { value: 0 },
+      uVignette: { value: 0 },
+      uHue: { value: 0 },
+      uSat: { value: 1 },
+      uContrast: { value: 1 },
+      uBright: { value: 0 },
+      uMirror: { value: 0 },
+      uPoster: { value: 0 },
+      uStrobe: { value: 0 },
+      uStrobeMode: { value: 1 },
     };
     this.material = new THREE.ShaderMaterial({
       uniforms: this.uniforms,
@@ -72,6 +112,14 @@ export class Compositor {
       depthWrite: false,
     });
     this.quadScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.material));
+    this.copyMaterial = new THREE.ShaderMaterial({
+      uniforms: { tMap: { value: this.black as THREE.Texture } },
+      vertexShader: COMPOSITOR_VERT,
+      fragmentShader: COPY_FRAG,
+      depthTest: false,
+      depthWrite: false,
+    });
+    this.copyScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.copyMaterial));
   }
 
   /** Scene shown once the current transition (if any) completes. */
@@ -92,6 +140,8 @@ export class Compositor {
     this.renderer.setPixelRatio(v.dpr);
     this.renderer.setSize(v.width, v.height, false);
     for (const s of this.slots()) this.resizeSlot(s);
+    const { w, h } = this.bufferSize();
+    this.feedback?.forEach((t) => t.setSize(w, h));
   }
 
   /** Switch to a scene. A transition already running is completed first. */
@@ -131,7 +181,7 @@ export class Compositor {
     paramsFor: (id: string) => ParamValues,
     dt: number,
     layer: LayerSettings,
-    fx: { tension: number } = { tension: 0 },
+    post: PostFx = { tension: 0, fx: NEUTRAL_FX, safeFlash: false },
   ) {
     this.time += dt;
     if (this.next) {
@@ -161,11 +211,61 @@ export class Compositor {
     }
 
     u.uTime.value = this.time;
-    u.uTension.value = fx.tension;
+    u.uTension.value = post.tension * (post.safeFlash ? 0.5 : 1);
     u.uBeatPulse.value = frame.beatPulse;
     this.renderer.getDrawingBufferSize(u.uRes.value);
-    this.renderer.setRenderTarget(null);
-    this.renderer.render(this.quadScene, this.quadCamera);
+    this.applyFx(post, frame, dt);
+
+    if (post.fx.trails > 0.01) {
+      // Render into a feedback buffer (which reads the previous one), then copy to the screen.
+      if (!this.feedback) {
+        const { w, h } = this.bufferSize();
+        this.feedback = [new THREE.WebGLRenderTarget(w, h), new THREE.WebGLRenderTarget(w, h)];
+      }
+      const prev = this.feedback[this.feedbackIndex];
+      const next = this.feedback[1 - this.feedbackIndex];
+      u.uPrev.value = prev.texture;
+      u.uHasPrev.value = 1;
+      this.renderer.setRenderTarget(next);
+      this.renderer.render(this.quadScene, this.quadCamera);
+      this.copyMaterial.uniforms.tMap.value = next.texture;
+      this.renderer.setRenderTarget(null);
+      this.renderer.render(this.copyScene, this.quadCamera);
+      this.feedbackIndex = 1 - this.feedbackIndex;
+    } else {
+      u.uHasPrev.value = 0;
+      this.renderer.setRenderTarget(null);
+      this.renderer.render(this.quadScene, this.quadCamera);
+    }
+  }
+
+  private applyFx(post: PostFx, frame: AudioFrame, dt: number) {
+    const u = this.uniforms;
+    const fx = post.fx;
+    u.uTrails.value = fx.trails;
+    u.uChroma.value = fx.chroma;
+    u.uScan.value = fx.scanlines;
+    u.uCrt.value = fx.crt;
+    u.uGrain.value = fx.grain;
+    u.uVhs.value = fx.vhs;
+    u.uVignette.value = fx.vignette;
+    u.uHue.value = fx.hue;
+    u.uSat.value = fx.saturation;
+    u.uContrast.value = fx.contrast;
+    u.uBright.value = fx.brightness;
+    u.uMirror.value = fx.mirror;
+    u.uPoster.value = fx.posterize;
+
+    // Strobe: fires on the kicks of the first seconds of a drop
+    const armed = fx.strobe !== "off" && frame.section === "drop" && frame.sectionTime < 16;
+    const minGap = post.safeFlash ? 0.34 : 0.1;
+    if (armed && frame.beat && this.time - this.lastStrobe >= minGap) {
+      this.strobeEnv = 1;
+      this.lastStrobe = this.time;
+    }
+    this.strobeEnv *= Math.exp(-dt * 18);
+    u.uStrobe.value = this.strobeEnv * (post.safeFlash ? 0.35 : 0.85);
+    u.uStrobeMode.value = fx.strobe === "invert" && !post.safeFlash ? 2 : 1;
   }
 
   dispose() {
@@ -173,6 +273,8 @@ export class Compositor {
     this.pool = [];
     this.current = this.next = this.layer = null;
     this.material.dispose();
+    this.copyMaterial.dispose();
+    this.feedback?.forEach((t) => t.dispose());
     this.black.dispose();
     this.renderer.dispose();
   }
