@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import type { AudioFrame } from "@/lib/audio/AudioEngine";
-import type { ParamDef, ParamValues, SceneGLDef } from "../types";
+import type { Energy, ParamDef, ParamValues, SceneGLDef } from "../types";
 import { applyPalette, PALETTE_GLSL, paletteUniforms } from "../palettes";
 
 /** Uniforms every fullscreen shader gets for free. */
@@ -24,6 +24,7 @@ interface ShaderSceneOptions {
   id: string;
   name: string;
   description: string;
+  energy: Energy;
   params: ParamDef[];
   /** Fragment shader body. Has access to the header uniforms above and `pal(t)`. */
   fragment: string;
@@ -39,8 +40,9 @@ export function defineShaderScene(opts: ShaderSceneOptions): SceneGLDef {
     description: opts.description,
     tag: "Shader",
     kind: "webgl",
+    energy: opts.energy,
     params: opts.params,
-    create({ renderer }) {
+    create({ renderer, target }) {
       const scene = new THREE.Scene();
       const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
       const pal = paletteUniforms();
@@ -65,12 +67,10 @@ export function defineShaderScene(opts: ShaderSceneOptions): SceneGLDef {
       });
       const geometry = new THREE.PlaneGeometry(2, 2);
       scene.add(new THREE.Mesh(geometry, material));
-      const size = new THREE.Vector2();
 
       return {
         render(f, params, dt) {
-          renderer.getDrawingBufferSize(size);
-          (uniforms.uRes.value as THREE.Vector2).copy(size);
+          (uniforms.uRes.value as THREE.Vector2).set(target.width, target.height);
           uniforms.uTime.value = f.time;
           uniforms.uEnergy.value = f.energy;
           uniforms.uBass.value = f.bass;
@@ -80,6 +80,7 @@ export function defineShaderScene(opts: ShaderSceneOptions): SceneGLDef {
           uniforms.uBeat.value = f.beatPulse;
           applyPalette(pal, params.palette);
           opts.update?.(uniforms, f, params, dt);
+          renderer.setRenderTarget(target);
           renderer.render(scene, camera);
         },
         dispose() {

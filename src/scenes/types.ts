@@ -20,8 +20,13 @@ export interface Viewport {
 export interface SceneInstance {
   resize?(viewport: Viewport): void;
   render(frame: AudioFrame, params: ParamValues, dt: number): void;
+  /** WebGL scenes that don't end in `target` (e.g. an EffectComposer) return their final texture here. */
+  output?(): THREE.Texture;
   dispose?(): void;
 }
+
+/** How hard a scene hits: the auto director picks scenes that fit the music. */
+export type Energy = "calm" | "medium" | "intense";
 
 interface SceneMeta {
   id: string;
@@ -29,17 +34,20 @@ interface SceneMeta {
   description: string;
   /** Badge shown in the library. */
   tag: "2D" | "Shader" | "3D";
+  energy: Energy;
   params: ParamDef[];
 }
 
+/** 2D scenes draw into their own canvas (the compositor uploads it as a texture). */
 export interface Scene2DDef extends SceneMeta {
   kind: "2d";
   create(ctx: { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D; viewport: Viewport }): SceneInstance;
 }
 
+/** WebGL scenes render into `target` (or expose `output()`), never to the screen. */
 export interface SceneGLDef extends SceneMeta {
   kind: "webgl";
-  create(ctx: { canvas: HTMLCanvasElement; renderer: THREE.WebGLRenderer; viewport: Viewport }): SceneInstance;
+  create(ctx: { renderer: THREE.WebGLRenderer; viewport: Viewport; target: THREE.WebGLRenderTarget }): SceneInstance;
 }
 
 export type SceneDef = Scene2DDef | SceneGLDef;

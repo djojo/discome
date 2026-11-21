@@ -10,8 +10,11 @@ export function createBloomComposer(
   scene: THREE.Scene,
   camera: THREE.Camera,
   viewport: Viewport,
+  target: THREE.WebGLRenderTarget,
 ) {
-  const composer = new EffectComposer(renderer);
+  // Uses the compositor's target as its first buffer; the result stays offscreen (readBuffer).
+  const composer = new EffectComposer(renderer, target);
+  composer.renderToScreen = false;
   composer.addPass(new RenderPass(scene, camera));
   const bloom = new UnrealBloomPass(new THREE.Vector2(viewport.width, viewport.height), 1, 0.45, 0.22);
   // No OutputPass on purpose: shader colours are authored as display values (like the 2D scenes),
@@ -28,6 +31,7 @@ export function createBloomComposer(
     composer,
     bloom,
     resize,
+    output: () => composer.readBuffer.texture,
     dispose() {
       bloom.dispose();
       composer.dispose();

@@ -3,6 +3,7 @@
 import type { SourceKind } from "@/lib/audio/AudioEngine";
 import { SCENES, type ParamValue, type ParamValues, type SceneDef } from "@/scenes";
 import { ParamControl } from "./ParamControl";
+import { BLEND_MODES, TRANSITIONS, type BlendModeId, type TransitionId } from "@/engine/transitions";
 import type { Quality, Settings } from "./settings";
 
 export const SOURCE_LABELS: Record<SourceKind, string> = {
@@ -86,6 +87,104 @@ export function ControlPanel({
       </section>
 
       <section>
+        <h2>Transitions</h2>
+        <label className="field">
+          <span className="field-head">
+            <span>Style</span>
+          </span>
+          <select
+            value={settings.transition}
+            onChange={(e) => onSettings({ transition: e.target.value as TransitionId })}
+          >
+            {TRANSITIONS.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        {settings.transition !== "cut" && (
+          <label className="field">
+            <span className="field-head">
+              <span>Durée</span>
+              <span className="field-value">{settings.transitionTime.toFixed(1)} s</span>
+            </span>
+            <input
+              type="range"
+              min={0.2}
+              max={4}
+              step={0.1}
+              value={settings.transitionTime}
+              onChange={(e) => onSettings({ transitionTime: Number(e.target.value) })}
+            />
+          </label>
+        )}
+      </section>
+
+      <section>
+        <h2>Calque</h2>
+        <label className="field">
+          <span className="field-head">
+            <span>Scène superposée</span>
+          </span>
+          <select
+            value={settings.layer.sceneId ?? ""}
+            onChange={(e) => onSettings({ layer: { ...settings.layer, sceneId: e.target.value || null } })}
+          >
+            <option value="">Aucune</option>
+            {SCENES.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        {settings.layer.sceneId && (
+          <>
+            <label className="field">
+              <span className="field-head">
+                <span>Fusion</span>
+              </span>
+              <select
+                value={settings.layer.mode}
+                onChange={(e) => onSettings({ layer: { ...settings.layer, mode: e.target.value as BlendModeId } })}
+              >
+                {BLEND_MODES.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span className="field-head">
+                <span>Opacité</span>
+                <span className="field-value">{settings.layer.opacity.toFixed(2)}</span>
+              </span>
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.01}
+                value={settings.layer.opacity}
+                onChange={(e) => onSettings({ layer: { ...settings.layer, opacity: Number(e.target.value) } })}
+              />
+            </label>
+            <label className="field field-toggle">
+              <span>Pulse au beat</span>
+              <input
+                type="checkbox"
+                role="switch"
+                checked={settings.layer.pulse}
+                onChange={(e) => onSettings({ layer: { ...settings.layer, pulse: e.target.checked } })}
+              />
+            </label>
+            <p className="hint">Ses réglages sont ceux de la scène : sélectionne-la pour les modifier.</p>
+          </>
+        )}
+      </section>
+
+      <section>
         <h2>Général</h2>
         <label className="field">
           <span className="field-head">
@@ -131,6 +230,7 @@ export function ControlPanel({
             <span>Qualité</span>
           </span>
           <select value={settings.quality} onChange={(e) => onSettings({ quality: e.target.value as Quality })}>
+            <option value="auto">Auto (s&apos;adapte à la fluidité)</option>
             <option value="low">Basse (fluide)</option>
             <option value="normal">Normale</option>
             <option value="high">Haute (Retina)</option>

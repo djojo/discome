@@ -7,6 +7,7 @@ export const halo: Scene2DDef = {
   id: "halo",
   name: "Halo",
   tag: "2D",
+  energy: "medium",
   kind: "2d",
   description: "Spectre radial en symétrie, façon mandala.",
   params: [

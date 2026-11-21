@@ -6,6 +6,7 @@ export const tunnel = defineShaderScene({
   id: "tunnel",
   name: "Tunnel",
   description: "Tunnel infini qui accélère avec les basses et se tord avec les médiums.",
+  energy: "intense",
   params: [
     paletteParam("neon"),
     { type: "range", key: "speed", label: "Vitesse", min: 0, max: 3, step: 0.05, default: 1 },

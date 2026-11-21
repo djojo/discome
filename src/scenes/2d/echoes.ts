@@ -7,6 +7,7 @@ export const echoes: Scene2DDef = {
   id: "echoes",
   name: "Échos",
   tag: "2D",
+  energy: "medium",
   kind: "2d",
   description: "Oscilloscope dans une boucle de feedback qui zoome et tourne.",
   params: [

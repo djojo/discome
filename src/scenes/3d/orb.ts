@@ -58,6 +58,7 @@ export const orb: SceneGLDef = {
   id: "orb",
   name: "Orbe",
   tag: "3D",
+  energy: "medium",
   kind: "webgl",
   description: "Sphère de bruit qui respire avec les basses, anneaux spectraux et étoiles.",
   params: [
@@ -68,7 +69,7 @@ export const orb: SceneGLDef = {
     { type: "range", key: "bloom", label: "Lueur", min: 0, max: 3, step: 0.05, default: 1 },
     { type: "toggle", key: "wire", label: "Maillage filaire", default: true },
   ],
-  create({ renderer, viewport }) {
+  create({ renderer, viewport, target }) {
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x000000);
     const camera = new THREE.PerspectiveCamera(55, viewport.width / viewport.height, 0.1, 200);
@@ -139,10 +140,11 @@ export const orb: SceneGLDef = {
       return { geo, mat, line };
     });
 
-    const fx = createBloomComposer(renderer, scene, camera, viewport);
+    const fx = createBloomComposer(renderer, scene, camera, viewport, target);
     let orbit = 0;
 
     return {
+      output: fx.output,
       resize(v) {
         camera.aspect = v.width / v.height;
         camera.updateProjectionMatrix();

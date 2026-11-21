@@ -10,6 +10,7 @@ export const nebula: Scene2DDef = {
   id: "nebula",
   name: "Nébuleuse",
   tag: "2D",
+  energy: "calm",
   kind: "2d",
   description: "Explosions de particules sur chaque beat, en spirale.",
   params: [

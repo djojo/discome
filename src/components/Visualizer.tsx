@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import * as THREE from "three";
 import { AudioEngine, type SourceKind } from "@/lib/audio/AudioEngine";
-import { defaultParams, SCENES, sceneById, type ParamValue, type SceneInstance, type Viewport } from "@/scenes";
+import { defaultParams, SCENES, sceneById, type ParamValue, type Viewport } from "@/scenes";
+import { Compositor } from "@/engine/Compositor";
 import { ControlPanel, SOURCE_LABELS } from "./ControlPanel";
 import { loadSettings, QUALITY_DPR, saveSettings, type Settings } from "./settings";
 
@@ -32,8 +32,7 @@ export default function Visualizer() {
   const [dragging, setDragging] = useState(false);
 
   const stageRef = useRef<HTMLDivElement>(null);
-  const canvas2dRef = useRef<HTMLCanvasElement>(null);
-  const canvasGlRef = useRef<HTMLCanvasElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const meterRefs = useRef<(HTMLDivElement | null)[]>([]);
   const beatRef = useRef<HTMLDivElement>(null);
@@ -64,53 +63,51 @@ export default function Visualizer() {
   // ---------------------------------------------------------------- render loop
   useEffect(() => {
     const stage = stageRef.current!;
-    const c2d = canvas2dRef.current!;
-    const cgl = canvasGlRef.current!;
-    const ctx2d = c2d.getContext("2d")!;
-    const renderer = new THREE.WebGLRenderer({ canvas: cgl, antialias: true, powerPreference: "high-performance" });
-    renderer.setClearColor(0x000000, 1);
-    // Scene colours are authored as final display values (same as the 2D canvas), so no sRGB encode at the end.
-    renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
-
-    let instance: SceneInstance | null = null;
-    let instanceId = "";
-    let lastSwitch = performance.now();
+    const compositor = new Compositor(canvasRef.current!);
     let viewport: Viewport = { width: 1, height: 1, dpr: 1 };
     let raf = 0;
     let last = performance.now();
+    let lastSwitch = performance.now();
+    let firstShow = true;
+
+    // "Auto" quality: lower the resolution when frames get slow, raise it back when there's headroom.
+    const AUTO_MIN = 0.6;
+    const autoMax = Math.min(window.devicePixelRatio || 1, 1.5);
+    let autoDpr = Math.min(QUALITY_DPR.auto, autoMax);
+    let frameAvg = 1 / 60;
+    let nextCheck = performance.now() + 2500;
+    let goodChecks = 0;
 
     const measure = () => {
-      const q = QUALITY_DPR[settingsRef.current.quality];
+      const q = settingsRef.current.quality;
+      const cap = q === "auto" ? autoDpr : QUALITY_DPR[q];
       viewport = {
         width: Math.max(1, stage.clientWidth),
         height: Math.max(1, stage.clientHeight),
-        dpr: Math.min(window.devicePixelRatio || 1, q),
+        dpr: Math.min(window.devicePixelRatio || 1, cap),
       };
-      c2d.width = Math.round(viewport.width * viewport.dpr);
-      c2d.height = Math.round(viewport.height * viewport.dpr);
-      renderer.setPixelRatio(viewport.dpr);
-      renderer.setSize(viewport.width, viewport.height, false);
-      instance?.resize?.(viewport);
+      compositor.setViewport(viewport);
     };
 
-    const mountScene = (id: string) => {
-      instance?.dispose?.();
-      const def = sceneById(id);
-      instanceId = def.id;
-      lastSwitch = performance.now();
-      ctx2d.setTransform(1, 0, 0, 1, 0, 0);
-      ctx2d.globalCompositeOperation = "source-over";
-      ctx2d.globalAlpha = 1;
-      ctx2d.fillStyle = "#000";
-      ctx2d.fillRect(0, 0, c2d.width, c2d.height);
-      c2d.style.display = def.kind === "2d" ? "block" : "none";
-      cgl.style.display = def.kind === "webgl" ? "block" : "none";
-      instance =
-        def.kind === "2d"
-          ? def.create({ canvas: c2d, ctx: ctx2d, viewport })
-          : def.create({ canvas: cgl, renderer, viewport });
-      instance.resize?.(viewport);
+    const adaptQuality = (now: number, interval: number) => {
+      if (interval < 0.25) frameAvg += (interval - frameAvg) * 0.05; // ignore pauses (hidden tab)
+      if (settingsRef.current.quality !== "auto" || now < nextCheck) return;
+      nextCheck = now + 2000;
+      if (frameAvg > 1 / 45 && autoDpr > AUTO_MIN) {
+        autoDpr = Math.max(AUTO_MIN, autoDpr * 0.85);
+        goodChecks = 0;
+        measure();
+      } else if (frameAvg < 1 / 57 && autoDpr < autoMax && ++goodChecks >= 4) {
+        autoDpr = Math.min(autoMax, autoDpr * 1.1);
+        goodChecks = 0;
+        measure();
+      }
     };
+
+    if (process.env.NODE_ENV !== "production") {
+      // Dev-only handle for debugging from the console.
+      (window as unknown as { __discome?: unknown }).__discome = { compositor, engine };
+    }
 
     let lastQuality = settingsRef.current.quality;
     const ro = new ResizeObserver(measure);
@@ -119,19 +116,28 @@ export default function Visualizer() {
 
     const loop = (now: number) => {
       raf = requestAnimationFrame(loop);
-      const dt = Math.min(0.1, (now - last) / 1000);
+      const interval = (now - last) / 1000;
+      const dt = Math.min(0.1, interval);
       last = now;
       const s = settingsRef.current;
 
+      adaptQuality(now, interval);
       if (s.quality !== lastQuality) {
         lastQuality = s.quality;
         measure();
       }
-      if (s.sceneId !== instanceId) mountScene(s.sceneId);
+      if (s.sceneId !== compositor.sceneId) {
+        compositor.show(
+          s.sceneId,
+          firstShow ? { type: "cut", duration: 0 } : { type: s.transition, duration: s.transitionTime },
+        );
+        firstShow = false;
+        lastSwitch = now;
+      }
+      if (s.layer.sceneId !== compositor.layerId) compositor.setLayer(s.layer.sceneId);
 
       const frame = engine.update(dt);
-      const p = s.params[instanceId] ?? defaultParams(sceneById(instanceId));
-      instance!.render(frame, p, dt);
+      compositor.render(frame, (id) => s.params[id] ?? defaultParams(sceneById(id)), dt, s.layer);
 
       // HUD meters, written straight to the DOM (no React re-render per frame)
       const levels = [frame.bass, frame.mid, frame.treble, frame.volume];
@@ -141,11 +147,11 @@ export default function Visualizer() {
       if (beatRef.current) beatRef.current.style.opacity = String(0.15 + frame.beatPulse * 0.85);
 
       // Auto-cycle: switch on a beat once the delay has passed (or a bit later if no beat comes)
-      if (s.autoCycle && frame.active) {
+      if (s.autoCycle && frame.active && !compositor.inTransition) {
         const elapsed = (now - lastSwitch) / 1000;
         if ((elapsed > s.cycleSeconds && frame.beat) || elapsed > s.cycleSeconds + 4) {
           lastSwitch = now;
-          const i = SCENES.findIndex((x) => x.id === instanceId);
+          const i = SCENES.findIndex((x) => x.id === compositor.sceneId);
           const nextId = SCENES[(i + 1) % SCENES.length].id;
           setSettings((cur) => ({ ...cur, sceneId: nextId }));
         }
@@ -156,8 +162,7 @@ export default function Visualizer() {
     return () => {
       cancelAnimationFrame(raf);
       ro.disconnect();
-      instance?.dispose?.();
-      renderer.dispose();
+      compositor.dispose();
     };
   }, [engine]);
 
@@ -222,8 +227,9 @@ export default function Visualizer() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
-      if (target.closest("input, select, textarea") && !(target instanceof HTMLInputElement && target.type === "range")) return;
+      const target = e.target instanceof Element ? e.target : null;
+      const typing = target?.closest("input, select, textarea");
+      if (typing && !(target instanceof HTMLInputElement && target.type === "range")) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === "ArrowRight") stepScene(1);
       else if (e.key === "ArrowLeft") stepScene(-1);
@@ -271,10 +277,8 @@ export default function Visualizer() {
       }}
     >
       <div ref={stageRef} className="stage">
-        <canvas ref={canvas2dRef} />
-        <canvas ref={canvasGlRef} />
+        <canvas ref={canvasRef} />
       </div>
-      <div key={scene.id} className="flash" />
 
       {!source ? (
         <div className="start">

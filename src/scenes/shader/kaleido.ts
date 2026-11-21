@@ -6,6 +6,7 @@ export const kaleido = defineShaderScene({
   id: "kaleido",
   name: "Kaléidoscope",
   description: "Fractale repliée en kaléidoscope, pulsée par le kick.",
+  energy: "intense",
   params: [
     paletteParam("acid"),
     { type: "range", key: "segments", label: "Miroirs", min: 2, max: 16, step: 1, default: 8 },

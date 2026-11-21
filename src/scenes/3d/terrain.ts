@@ -85,6 +85,7 @@ export const terrain: SceneGLDef = {
   id: "terrain",
   name: "Spectro-terrain",
   tag: "3D",
+  energy: "calm",
   kind: "webgl",
   description: "Paysage néon sculpté par l'historique du spectre, soleil rétro.",
   params: [
@@ -95,7 +96,7 @@ export const terrain: SceneGLDef = {
     { type: "toggle", key: "grid", label: "Grille néon", default: true },
     { type: "toggle", key: "sun", label: "Soleil", default: true },
   ],
-  create({ renderer, viewport }) {
+  create({ renderer, viewport, target }) {
     const scene = new THREE.Scene();
     const fogColor = new THREE.Color();
     scene.background = fogColor;
@@ -143,11 +144,12 @@ export const terrain: SceneGLDef = {
     sun.renderOrder = -1;
     scene.add(sun);
 
-    const fx = createBloomComposer(renderer, scene, camera, viewport);
+    const fx = createBloomComposer(renderer, scene, camera, viewport, target);
     let acc = 0;
     let scrolled = 0;
 
     return {
+      output: fx.output,
       resize(v) {
         camera.aspect = v.width / v.height;
         camera.updateProjectionMatrix();
