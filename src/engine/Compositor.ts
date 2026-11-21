@@ -216,7 +216,7 @@ export class Compositor {
     this.renderer.getDrawingBufferSize(u.uRes.value);
     this.applyFx(post, frame, dt);
 
-    if (post.fx.trails > 0.01) {
+    if ((post.fx?.trails ?? 0) > 0.01) {
       // Render into a feedback buffer (which reads the previous one), then copy to the screen.
       if (!this.feedback) {
         const { w, h } = this.bufferSize();
@@ -241,7 +241,7 @@ export class Compositor {
 
   private applyFx(post: PostFx, frame: AudioFrame, dt: number) {
     const u = this.uniforms;
-    const fx = post.fx;
+    const fx = post.fx ?? NEUTRAL_FX;
     u.uTrails.value = fx.trails;
     u.uChroma.value = fx.chroma;
     u.uScan.value = fx.scanlines;
