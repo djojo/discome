@@ -56,6 +56,11 @@ export interface Look {
   fx: Partial<FxSettings>;
   transitions?: { calm?: TransitionId[]; drop?: TransitionId[] };
   director?: DirectorMode;
+  /**
+   * The world's leading colours: the colour of the moment glides to the next one on every drop (and on its own every
+   * few minutes); every scene of the world follows it (frame.tint, uTint in the shaders).
+   */
+  tints?: string[];
   /** Legacy look, outside the art-directed rotation. */
   classic?: boolean;
   custom?: boolean;
@@ -114,27 +119,18 @@ export const LOOKS: Look[] = [
   {
     id: "mercure",
     name: "Mercure",
-    description: "Métal liquide dans un studio noir : billes, ondes, volutes ; la couleur n'existe que dans les reflets.",
-    swatch: ["#07080B", "#C9CDD3", "#FF8A3D"],
+    description: "Métal liquide dans un studio : billes, ondes, volutes, coulées. Une couleur de métal mène le monde et change à chaque drop.",
+    swatch: ["#07080B", "#C9CDD3", "#2F5BFF"],
     palettes: ["mercury", "cobalt"],
+    // cobalt, gold, copper, anodised titanium: the coloured metal of the moment
+    tints: ["#2F5BFF", "#E8B04A", "#D9774A", "#8A6BFF"],
     scenes: [
-      { id: "mercury", key: "houle", label: "Houle", weight: 3, role: "drop", params: { swell: 1.5 } },
-      { id: "mercury", key: "miroir", label: "Miroir", weight: 2, role: "after", params: { swell: 0.3 } },
+      { id: "mercury", key: "houle", label: "Houle", weight: 3, role: "drop", params: { swell: 1.2 } },
       { id: "mercury-beads", weight: 3, role: "build", params: { palette: "mercury" } },
       { id: "mercury-wave", weight: 2, role: "calm", params: { palette: "mercury", variant: "waves" } },
       { id: "mercury-wave", key: "pics", label: "Pics", weight: 2, role: "drop", params: { palette: "mercury", variant: "spikes" } },
-      { id: "mercury-blend", weight: 2, role: "calm", params: { palette: "mercury", metal: "or" } },
-      { id: "mercury-flow", weight: 2, role: "calm", params: { palette: "mercury", metal: "or" } },
-      { id: "mercury-flow", key: "coulee-cobalt", label: "Cobalt", weight: 1, role: "after", params: { palette: "mercury", metal: "cobalt" } },
-      {
-        id: "mercury-blend",
-        key: "cobalt",
-        label: "Cobalt",
-        weight: 1,
-        role: "after",
-        params: { palette: "mercury", metal: "cobalt" },
-        vary: { palettes: ["mercury"] },
-      },
+      { id: "mercury-blend", weight: 2, role: "calm", params: { palette: "mercury" } },
+      { id: "mercury-flow", weight: 2, role: "after", params: { palette: "mercury" } },
     ],
     backgrounds: [
       { id: "orb", weight: 2, params: { palette: "mercury", wire: false, bloom: 0.2, amp: 0.7, scale: 1.1 } },

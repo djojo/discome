@@ -1,7 +1,7 @@
 /**
  * The studio of the Mercure world: what liquid metal reflects. A pale room, darker toward the floor, a ring light
- * overhead with a dark centre (what lets a flat mirror show every ripple), two big white softboxes on the sides
- * (barely tinted by the palette at their edges) and the line of the horizon. Mercury reflects almost all of it:
+ * overhead with a dark centre (what lets a flat mirror show every ripple), two big softboxes on the sides (one in
+ * the world's leading colour, uTint, the other white) and the line of the horizon. Mercury reflects almost all of it:
  * this is what makes it read as liquid silver rather than black glass. Needs the palette uniforms and uTime.
  */
 export const STUDIO_GLSL = /* glsl */ `
@@ -19,8 +19,8 @@ vec3 studio(vec3 r) {
   float a2 = abs(mod(az + 2.2 + 3.14159, 6.28318) - 3.14159);
   float band = smoothstep(-.2, .1, r.y) * (1. - smoothstep(.55, .75, r.y));
   float s1 = smoothstep(.36, .3, a1) * band, s2 = smoothstep(.3, .24, a2) * band;
-  c += mix(vec3(1.), uAccent, .3 * smoothstep(.2, .34, a1)) * 2.2 * s1;
-  c += mix(vec3(1.), uPal1, .3 * smoothstep(.16, .28, a2)) * 1.9 * s2;
+  c += mix(vec3(1.), uTint, .55 + .3 * smoothstep(.15, .34, a1)) * 2.3 * s1;
+  c += vec3(1.) * 1.9 * s2;
   return c;
 }
 `;

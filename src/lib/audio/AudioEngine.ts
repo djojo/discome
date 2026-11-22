@@ -38,6 +38,8 @@ export interface AudioFrame extends MusicState {
   active: boolean;
   /** 0..1: how far the night has drifted since the source started (set by the visualizer, see Settings.drift). */
   drift: number;
+  /** The world's leading colour now (set by the visualizer from Look.tints), or null when the world has none. */
+  tint: [number, number, number] | null;
 }
 
 export const BAND_COUNT = 64;
@@ -106,6 +108,7 @@ export class AudioEngine {
       energy: 0,
       active: false,
       drift: 0,
+      tint: null,
       ...emptyMusicState(),
     };
   }

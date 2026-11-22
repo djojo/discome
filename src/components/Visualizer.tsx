@@ -23,7 +23,7 @@ import {
 import { NEUTRAL_FX, type FxSettings } from "@/engine/fx";
 import { findPlan, lookBackgrounds, lookPlans, planDefaults, sceneForKey } from "@/looks";
 import { HEADS, preloadHeads } from "@/scenes/art/heads";
-import { getPalette, ink } from "@/scenes/palettes";
+import { getPalette, hex, ink } from "@/scenes/palettes";
 import { preloadDancer } from "@/scenes/3d/humanoid/dancerAsset";
 import type { DirectorContext } from "@/engine/Director";
 
@@ -165,6 +165,16 @@ export default function Visualizer() {
     let driftTime = 0;
     let driftKind: unknown = null;
     let driftOverride: number | null = null;
+    // The world's leading colour (Look.tints): one glide at a time from the colour of the moment to the next
+    let tintLook = "";
+    let tintCols: [number, number, number][] = [];
+    let tintIdx = 0;
+    let tintFrom: [number, number, number] = [1, 1, 1];
+    let tintTo: [number, number, number] = [1, 1, 1];
+    let tintK = 1;
+    let tintDur = 1;
+    let tintHeld = 0;
+    const tintNow: [number, number, number] = [1, 1, 1];
     const director = new Director();
     const fxShown: FxSettings = { ...NEUTRAL_FX, ...settingsRef.current.fx };
     // Director pool derived from the active look, rebuilt only when the look changes
@@ -224,6 +234,34 @@ export default function Visualizer() {
       const driftMin = settingsRef.current.drift;
       frame.drift = driftOverride ?? (driftMin > 0 ? Math.min(1, driftTime / (driftMin * 60)) : 0);
       let s = settingsRef.current;
+
+      // ---- The world's leading colour: the next one on every drop (over four bars), and on its own every few minutes
+      if (s.lookId !== tintLook) {
+        tintLook = s.lookId;
+        tintCols = (findLook(s).tints ?? []).map(hex);
+        tintIdx = 0;
+        if (tintCols.length) {
+          tintFrom = tintTo = tintCols[0];
+          tintNow.splice(0, 3, ...tintCols[0]);
+        }
+        tintK = 1;
+        tintHeld = 0;
+      }
+      if (tintCols.length) {
+        tintHeld += dt;
+        if ((frame.drop || tintHeld > 240) && tintCols.length > 1) {
+          tintFrom = [tintNow[0], tintNow[1], tintNow[2]];
+          tintIdx = (tintIdx + 1) % tintCols.length;
+          tintTo = tintCols[tintIdx];
+          tintK = 0;
+          tintDur = frame.drop ? (frame.bpm > 0 ? 60 / frame.bpm : 0.5) * 16 : 30;
+          tintHeld = 0;
+        }
+        tintK = Math.min(1, tintK + dt / tintDur);
+        const e = tintK * tintK * (3 - 2 * tintK);
+        for (let i = 0; i < 3; i++) tintNow[i] = tintFrom[i] + (tintTo[i] - tintFrom[i]) * e;
+        frame.tint = tintNow;
+      } else frame.tint = null;
 
       // ---- Auto director
       const decision = director.update(frame, {

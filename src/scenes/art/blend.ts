@@ -1,4 +1,3 @@
-import * as THREE from "three";
 import { defineShaderScene } from "../shader/defineShaderScene";
 import { paletteParam } from "../palettes";
 import { ART_LIB } from "./lib.glsl";
@@ -13,16 +12,10 @@ const FRAMINGS: Framing[] = [
   { az: 2.4, el: -0.2, dist: 7, target: [0, 0, 0], focal: 1.8, weight: 1 },
 ];
 
-/** Reflectance of the second metal. */
-const METALS: Record<string, [number, number, number]> = {
-  or: [1, 0.74, 0.32],
-  cobalt: [0.32, 0.5, 1],
-};
-
 /**
- * Mélange: a great sphere of liquid metal where mercury and a second metal (gold or cobalt) turn together in
- * volutes and marble each other without ever quite mixing. The seams between them light up on the kick; the
- * drop stirs everything in a whirl. As the night drifts, the gold slowly wins over the mercury.
+ * Mélange: a great sphere of liquid metal where mercury and a second metal (in the world's leading colour) turn
+ * together in volutes and marble each other without ever quite mixing. The seams between them light up on the kick; the
+ * drop stirs everything in a whirl. As the night drifts, the coloured metal slowly wins over the mercury.
  */
 export const blend = defineShaderScene({
   id: "mercury-blend",
@@ -32,32 +25,18 @@ export const blend = defineShaderScene({
   mask: true,
   camera: { framings: FRAMINGS, glideBars: 2 },
   description:
-    "Une grande sphère de métal liquide où le mercure et l'or (ou le cobalt) tournent en volutes et se marbrent sans se mêler ; les coutures s'allument au kick, le drop brasse tout ; l'or gagne au fil de la soirée.",
-  params: [
-    paletteParam("mercury"),
-    {
-      type: "select",
-      key: "metal",
-      label: "Second métal",
-      options: [
-        { value: "or", label: "Or" },
-        { value: "cobalt", label: "Cobalt" },
-      ],
-      default: "or",
-    },
-  ],
+    "Une grande sphère de métal liquide où le mercure et un second métal (la couleur du monde) tournent en volutes et se marbrent sans se mêler ; les coutures s'allument au kick, le drop brasse tout ; le métal coloré gagne au fil de la soirée.",
+  params: [paletteParam("mercury")],
   uniforms: () => ({
     uFlow: { value: 0 },
     uTwist: { value: 0 },
     uShare: { value: 0.4 },
     uSeam: { value: 0 },
     uBulge: { value: 0 },
-    uMetal: { value: new THREE.Vector3(...METALS.or) },
     // CPU side only
     uSpin: { value: 0 },
   }),
-  update(u, f, p, dt) {
-    (u.uMetal.value as THREE.Vector3).set(...(METALS[String(p.metal)] ?? METALS.or));
+  update(u, f, _p, dt) {
     // The volutes flow at their own pace, a little faster when the music is full
     // (slow, heavy: a liquid metal, not a swirl of smoke)
     u.uFlow.value = (u.uFlow.value as number) + dt * (0.0035 + 0.004 * f.energy);
@@ -70,7 +49,7 @@ export const blend = defineShaderScene({
     u.uSeam.value = f.beat ? 1 : (u.uSeam.value as number) * Math.exp(-dt * 2.5);
     const b = u.uBulge.value as number;
     u.uBulge.value = b + (f.bass - b) * (1 - Math.exp(-dt * (f.bass > b ? 8 : 2)));
-    // Over the night, the gold wins
+    // Over the night, the coloured metal wins
     u.uShare.value = 0.36 + 0.4 * f.drift;
   },
   fragment: /* glsl */ `
@@ -79,7 +58,6 @@ uniform float uTwist;    // the drop's whirl, around the vertical axis
 uniform float uShare;    // how much of the surface the second metal covers
 uniform float uSeam;     // the kick on the seams
 uniform float uBulge;    // the bass, swelling the surface
-uniform vec3 uMetal;     // the second metal's reflectance
 ${ART_LIB}
 ${CAMERA_GLSL}
 ${STUDIO_GLSL}
@@ -143,11 +121,11 @@ vec3 metals(vec3 n, vec3 rd, vec2 mb) {
   float fre = pow(1. - clamp(dot(n, -rd), 0., 1.), 5.);
   vec3 env = studio(reflect(rd, n));
   vec3 silver = env * mix(uInk * .85, vec3(1.), fre);
-  vec3 other = env * mix(uMetal, vec3(1.), fre);
+  vec3 other = env * mix(uTint, vec3(1.), fre);
   vec3 c = mix(silver, other, mb.x);
   // the seam: a thin dark meniscus, lit up by the kick
   c *= 1. - .55 * mb.y;
-  c += mix(uMetal, vec3(1.), .5) * mb.y * uSeam * 1.4;
+  c += mix(uTint, vec3(1.), .5) * mb.y * uSeam * 1.4;
   return c;
 }
 

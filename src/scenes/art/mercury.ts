@@ -40,7 +40,10 @@ export const mercury = defineShaderScene({
   }),
   update(u, f, p, dt) {
     setHead(u, p.head);
-    u.uSwell.value = num(p.swell, 1);
+    // The swell follows the track: a mirror in the breakdown, rising through the build, strongest on the drop
+    const sw = num(p.swell, 1) * (f.section === "breakdown" ? 0.2 : f.section === "build" ? 0.5 + 0.7 * f.buildProgress : f.section === "drop" ? 1.5 : 0.8);
+    const cur = u.uSwell.value as number;
+    u.uSwell.value = cur + (sw - cur) * (1 - Math.exp(-dt * 0.4));
     // Ages of the last four kicks: each one is a ring travelling outward
     const k = u.uKicks.value as THREE.Vector4;
     k.addScalar(dt);
@@ -104,9 +107,9 @@ vec3 chart(vec3 r) {
 vec3 env(vec3 r) {
   float az = atan(r.z, r.x) + uTime * .05;
   float el = r.y;
-  vec3 c = uBase * 1.3 + uInk * .27 * smoothstep(-.05, .95, el) + uAccent * .04 * (1. - smoothstep(-.4, .1, el));
+  vec3 c = uBase * 1.3 + uInk * .27 * smoothstep(-.05, .95, el) + uTint * .04 * (1. - smoothstep(-.4, .1, el));
   float a1 = abs(mod(az - .8 + PI, 2. * PI) - PI);
-  c += uAccent * 3.6 * (1. - smoothstep(.015, .04, abs(el - .28))) * (1. - smoothstep(.5, .75, a1));
+  c += uTint * 3.6 * (1. - smoothstep(.015, .04, abs(el - .28))) * (1. - smoothstep(.5, .75, a1));
   float a2 = abs(mod(az + 2.3 + PI, 2. * PI) - PI);
   c += uPal1 * 3. * (1. - smoothstep(.02, .05, abs(el - .08))) * (1. - smoothstep(.7, .95, a2));
   c += vec3(1.) * 1.1 * smoothstep(.9, .98, el);

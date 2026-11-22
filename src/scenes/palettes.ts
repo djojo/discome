@@ -18,7 +18,7 @@ export interface Palette {
   family: "art" | "vivid";
 }
 
-const hex = (h: string): RGB => {
+export const hex = (h: string): RGB => {
   const n = parseInt(h.replace("#", ""), 16);
   return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
 };

@@ -4,7 +4,7 @@ import { ART_LIB } from "./lib.glsl";
 import { STUDIO_GLSL } from "./studio.glsl";
 
 /**
- * Coulée: a wall of liquid metal, seen flat. Mercury and gold run down it very slowly and mix as they go: broad
+ * Coulée: a wall of liquid metal, seen flat. Mercury and a second metal (the world's leading colour) run down it very slowly and mix as they go: broad
  * separate streams at the top, curling round each other lower down, finer and finer, until near the bottom they
  * melt into one alloy. Heavy drips slide down at their own pace. The kick catches the crests of the streams; on the
  * drop a pour of gold comes down from the top and the wall runs a little faster for a few bars.
@@ -15,30 +15,16 @@ export const flow = defineShaderScene({
   energy: "calm",
   renderScale: 0.85,
   description:
-    "Un mur de métal liquide vu de face : le mercure et l'or y coulent très lentement et se mélangent en descendant, en filets qui s'enroulent jusqu'à se fondre ; au drop, une coulée d'or descend du haut.",
-  params: [
-    paletteParam("mercury"),
-    {
-      type: "select",
-      key: "metal",
-      label: "Second métal",
-      options: [
-        { value: "or", label: "Or" },
-        { value: "cobalt", label: "Cobalt" },
-      ],
-      default: "or",
-    },
-  ],
+    "Un mur de métal liquide vu de face : le mercure et un second métal (la couleur du monde) y coulent très lentement et se mélangent en descendant, en filets qui s'enroulent jusqu'à se fondre ; au drop, une coulée d'or descend du haut.",
+  params: [paletteParam("mercury")],
   uniforms: () => ({
     uFlow: { value: 0 },
     uGush: { value: 99 },
     uGlint: { value: 0 },
-    uCobalt: { value: 0 },
     // CPU side only
     uRush: { value: 0 },
   }),
-  update(u, f, p, dt) {
-    u.uCobalt.value = p.metal === "cobalt" ? 1 : 0;
+  update(u, f, _p, dt) {
     const bar = f.bpm > 0 ? (60 / f.bpm) * 4 : 2;
     // the drop: a gush from the top, and the wall runs faster for a while
     if (f.drop) {
@@ -54,7 +40,6 @@ export const flow = defineShaderScene({
 uniform float uFlow;     // how far the wall has run
 uniform float uGush;     // seconds since the drop's gush
 uniform float uGlint;    // the kick on the crests
-uniform float uCobalt;
 ${ART_LIB}
 ${STUDIO_GLSL}
 
@@ -117,7 +102,8 @@ void main() {
   vec3 r = reflect(rd, n);
   vec3 env = studio(vec3(r.x, r.y, -r.z));
   float fre = pow(1. - clamp(dot(n, -rd), 0., 1.), 5.);
-  vec3 other = mix(vec3(1., .74, .32), vec3(.32, .5, 1.), uCobalt);
+  // the second metal: the world's leading colour
+  vec3 other = uTint;
   vec3 silver = env * mix(uInk * .9, vec3(1.), fre);
   vec3 metal2 = env * mix(other, vec3(1.), fre);
   vec3 col = mix(silver, metal2, c0.y);

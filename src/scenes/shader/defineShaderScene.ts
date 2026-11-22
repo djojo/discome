@@ -27,6 +27,8 @@ uniform float uSeed;
 /** 0..1: how far the night has drifted (the worlds degrade slowly over the set; see Settings.drift). */
 uniform float uDrift;
 ${PALETTE_GLSL}
+/** The world's leading colour (Look.tints), gliding over the set; the palette's accent when the world has none. */
+uniform vec3 uTint;
 mat2 rot(float a) { float c = cos(a), s = sin(a); return mat2(c, -s, s, c); }
 `;
 
@@ -95,6 +97,7 @@ export function defineShaderScene(opts: ShaderSceneOptions): SceneGLDef {
         uDrop: { value: 0 },
         uBuild: { value: 0 },
         uDrift: { value: 0 },
+        uTint: { value: new THREE.Vector3(1, 1, 1) },
         uBands: { value: new Array<number>(8).fill(0) },
         ...pal,
         uSeed: { value: Math.random() * 100 },
@@ -139,6 +142,9 @@ export function defineShaderScene(opts: ShaderSceneOptions): SceneGLDef {
             bands[i] = sum / per;
           }
           applyPalette(pal, params.palette);
+          const tint = uniforms.uTint.value as THREE.Vector3;
+          if (f.tint) tint.set(f.tint[0], f.tint[1], f.tint[2]);
+          else tint.copy(pal.uAccent.value as THREE.Vector3);
           if (flight) {
             flight.update(f, dt, opts.flight!.cruise * num(params.speed, 1), num(params.dynamics, 1), opts.flight!.pump);
             uniforms.uTravel.value = flight.travel;
