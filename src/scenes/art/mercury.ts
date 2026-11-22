@@ -70,7 +70,6 @@ void main() {
   }
   col = aces(col);
   col *= vignette(fc / uRes);
-  col += grain(fc) * .025;
   gl_FragColor = vec4(col, step(0., tt));
 }
 `,

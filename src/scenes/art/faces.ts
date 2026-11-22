@@ -60,7 +60,6 @@ void main() {
     float light = .2 + .8 * clamp(dot(n, normalize(vec3(-.5, .5, .75))), 0., 1.);
     col = mix(uBase, uInk, line * light);
   }
-  col += grain(fc) * .02;
   gl_FragColor = vec4(col, step(0., tt)); // alpha = silhouette, keeps the background behind the face
 }
 `,
@@ -108,7 +107,6 @@ void main() {
     float rimR = smoothstep(.1, .5, pow(edge, 2.) * clamp(dot(n, Lr) * .8 + .2, 0., 1.));
     col += uAccent * rimR * (uDrop * 2. + uBuild * .8);
   }
-  col += grain(fc) * .02;
   gl_FragColor = vec4(col, step(0., tt)); // alpha = silhouette, keeps the background behind the face
 }
 `,

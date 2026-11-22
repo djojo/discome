@@ -71,9 +71,9 @@ void main() {
   }
   col = aces(col * 1.05);
   col *= vignette(fc / uRes);
-  col += grain(fc) * .03;
   float lb = uCinema > .5 ? letterbox(fc) : 1.;
-  gl_FragColor = vec4(col * lb, step(0., tt));
+  // Letterbox bars stay opaque: the background never shows through them
+  gl_FragColor = vec4(col * lb, max(step(0., tt), 1. - lb));
 }
 `,
 });
