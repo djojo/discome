@@ -124,6 +124,8 @@ export const LOOKS: Look[] = [
       { id: "mercury-wave", weight: 2, role: "calm", params: { palette: "mercury", variant: "waves" } },
       { id: "mercury-wave", key: "pics", label: "Pics", weight: 2, role: "drop", params: { palette: "mercury", variant: "spikes" } },
       { id: "mercury-blend", weight: 2, role: "calm", params: { palette: "mercury", metal: "or" } },
+      { id: "mercury-flow", weight: 2, role: "calm", params: { palette: "mercury", metal: "or" } },
+      { id: "mercury-flow", key: "coulee-cobalt", label: "Cobalt", weight: 1, role: "after", params: { palette: "mercury", metal: "cobalt" } },
       {
         id: "mercury-blend",
         key: "cobalt",
@@ -373,7 +375,7 @@ export const LOOKS: Look[] = [
     description: "Les premières scènes et leurs couleurs vives, hors rotation des mondes.",
     swatch: ["#ff3cac", "#a855f7", "#22d3ee"],
     palettes: ["acid", "neon", "sunset", "ocean", "ice", "fire", "chrome", "vhs"],
-    scenes: SCENES.filter((s) => !["porcelain", "metamorphosis", "faithful", "flux", "panopticon", "warehouse", "downpour", "race", "mercury-beads", "mercury-wave", "mercury-blend", "flesh-morph", "flesh-radiolaria", "flesh-jelly", "canyon-cactus", "canyon-spirit", "canyon-vision", "topo-head", "profile-head", "halftone-head", "mercury", "cathedral", "monolith", "canyon-gorge", "canyon-mesas", "arcane-architect", "arcane-nomad", "arcane-prism", "arcane-portal", "arcane-road", "grimoire", "flesh", "signal"].includes(s.id)).map((s) => ({ id: s.id, weight: 1 })),
+    scenes: SCENES.filter((s) => !["porcelain", "metamorphosis", "faithful", "flux", "panopticon", "warehouse", "downpour", "race", "mercury-beads", "mercury-wave", "mercury-blend", "mercury-flow", "flesh-morph", "flesh-radiolaria", "flesh-jelly", "canyon-cactus", "canyon-spirit", "canyon-vision", "topo-head", "profile-head", "halftone-head", "mercury", "cathedral", "monolith", "canyon-gorge", "canyon-mesas", "arcane-architect", "arcane-nomad", "arcane-prism", "arcane-portal", "arcane-road", "grimoire", "flesh", "signal"].includes(s.id)).map((s) => ({ id: s.id, weight: 1 })),
     fx: {},
     classic: true,
   },

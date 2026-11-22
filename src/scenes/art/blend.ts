@@ -60,10 +60,10 @@ export const blend = defineShaderScene({
     (u.uMetal.value as THREE.Vector3).set(...(METALS[String(p.metal)] ?? METALS.or));
     // The volutes flow at their own pace, a little faster when the music is full
     // (slow, heavy: a liquid metal, not a swirl of smoke)
-    u.uFlow.value = (u.uFlow.value as number) + dt * (0.009 + 0.012 * f.energy);
+    u.uFlow.value = (u.uFlow.value as number) + dt * (0.0035 + 0.004 * f.energy);
     // The drop: a whirl that stirs everything, then slowly settles
-    let spin = (u.uSpin.value as number) * Math.exp(-dt * 0.5);
-    if (f.drop) spin = 2.2;
+    let spin = (u.uSpin.value as number) * Math.exp(-dt * 0.35);
+    if (f.drop) spin = 0.9;
     u.uSpin.value = spin;
     u.uTwist.value = ((u.uTwist.value as number) + spin * dt) * Math.exp(-dt * 0.04);
     // The seams light up on the kick
@@ -88,13 +88,13 @@ const float R = 1.35;
 /** The sphere's own slow turn, and the whirl (stronger near the equator, like a stirred liquid). */
 vec3 toLocal(vec3 p) {
   vec3 q = p;
-  q.xz *= rot(uTime * .018);
+  q.xz *= rot(uTime * .007);
   q.xz *= rot(uTwist * (1. - q.y * q.y / (R * R)));
   return q;
 }
 
 float disp(vec3 q) {
-  return (.012 + .025 * uBulge) * sin(q.x * 3.1 + uTime * .22) * sin(q.y * 2.7 - uTime * .17) * sin(q.z * 3.3 + uTime * .2);
+  return (.012 + .025 * uBulge) * sin(q.x * 3.1 + uTime * .09) * sin(q.y * 2.7 - uTime * .07) * sin(q.z * 3.3 + uTime * .08);
 }
 
 float sdBlob(vec3 p) { return length(p) - R - disp(toLocal(p)); }

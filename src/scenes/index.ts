@@ -30,6 +30,7 @@ import { arcaneRoad } from "./art/road";
 import { beads } from "./art/beads";
 import { wave } from "./art/wave";
 import { blend } from "./art/blend";
+import { flow } from "./art/flow";
 import { morphose } from "./art/morphose";
 import { radiolaria } from "./art/radiolaria";
 import { jellyfish } from "./art/jellyfish";
@@ -69,6 +70,7 @@ export const SCENES: SceneDef[] = [
   beads,
   wave,
   blend,
+  flow,
   morphose,
   radiolaria,
   jellyfish,
