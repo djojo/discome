@@ -2,6 +2,7 @@ import { defineShaderScene } from "../shader/defineShaderScene";
 import { paletteParam } from "../palettes";
 import { ART_LIB } from "./lib.glsl";
 import { CAMERA_GLSL, type Framing } from "./camera";
+import { NIGHT_GLSL } from "./night.glsl";
 
 const FRAMINGS: Framing[] = [
   // from low down, the cactus against the turning sky
@@ -77,6 +78,7 @@ uniform float uTwist;    // the sky's spiral
 uniform float uBreath;   // the ground's slow breath
 ${ART_LIB}
 ${CAMERA_GLSL}
+${NIGHT_GLSL}
 const float NR = 14.;    // ribs
 float gU;                // where on the cactus: height along the trunk or arm
 float gTheta;            // angle round the stem
@@ -150,47 +152,8 @@ vec3 calcN(vec3 p) {
   return normalize(k.xyy * map(p + k.xyy * e) + k.yyx * map(p + k.yyx * e) + k.yxy * map(p + k.yxy * e) + k.xxx * map(p + k.xxx * e));
 }
 
-/** Colour of the yarn: the palette, stepped, as in a yarn painting. */
-vec3 yarn(float x) { return pal(floor(x * 6.) / 6. + .05); }
-
-/** The ground: concentric rings of colour breathing out from the cactus; petals on the drop: a mandala. */
-vec3 groundCol(vec3 p) {
-  float r = length(p.xz);
-  float a = atan(p.z, p.x);
-  float bl = bloomA();
-  float rr = r * (1. + .08 * bl * cos(a * 12.)) - uBreath * .25;
-  float band = fract(rr * 1.6);
-  float line = smoothstep(.0, .08, band) * (1. - smoothstep(.55, .63, band));
-  vec3 c = yarn(fract(floor(rr * 1.6) * .17)) * line;
-  // the mandala's petals and spokes, on the drop
-  c += yarn(fract(r * .1 + .5)) * bl * (1. - smoothstep(.0, .05, abs(sin(a * 6. + r * .5)))) * .8;
-  // fade into the night
-  return c * .55 * exp(-r * .09) + uBase * .4;
-}
-
-/** The sky: deep night, stars turning round the zenith, and spiral arms of yarn light that wind up with the build. */
-vec3 skyCol(vec3 rd) {
-  vec3 c = mix(uBase * 1.6 + uPal1 * .05, uBase * .6, smoothstep(0., .6, rd.y));
-  float el = asin(clamp(rd.y, -1., 1.));
-  float z = 1.5708 - el;                       // angle from the zenith
-  float a = atan(rd.z, rd.x) + uTwist * z * 1.6 + uTime * .015;
-  // stars
-  vec2 g = vec2(a * 14., z * 30.);
-  vec2 id = floor(g);
-  vec2 f = fract(g) - .5;
-  float h = hash12(id + 7.);
-  if (h > .72) {
-    vec2 o = (vec2(hash12(id + 1.3), hash12(id + 2.7)) - .5) * .6;
-    float tw = .5 + .5 * sin(uTime * (1. + 3. * h) + h * 50.);
-    float sz = .05 + .07 * h * h;
-    c += mix(vec3(1.), yarn(h), .6) * (1. - smoothstep(0., sz, length((f - o) * vec2(1., .8)))) * tw * smoothstep(-.02, .15, rd.y);
-  }
-  // spiral arms of light: they appear as the sky winds up
-  float arms = sin(a * 3. - log(z + .05) * 4.);
-  float band = 1. - smoothstep(.0, .35, abs(arms));
-  c += yarn(fract(z * .5 + uTime * .01)) * band * .14 * smoothstep(.2, 1.5, uTwist) * smoothstep(.0, .3, rd.y);
-  return c;
-}
+vec3 groundCol(vec3 p) { return groundRings(p.xz, uBreath, bloomA()); }
+vec3 skyCol(vec3 rd) { return nightSky(rd, uTwist); }
 
 void main() {
   vec2 fc = gl_FragCoord.xy;
