@@ -135,6 +135,8 @@ export class Compositor {
       uBgInk: { value: new THREE.Vector3(1, 1, 1) },
       uMaskA: { value: 0 },
       uMaskB: { value: 0 },
+      uMotionA: { value: 0 },
+      uMotionB: { value: 0 },
     };
     this.material = new THREE.ShaderMaterial({
       uniforms: this.uniforms,
@@ -165,6 +167,11 @@ export class Compositor {
 
   get inTransition(): boolean {
     return this.next !== null;
+  }
+
+  /** Debug line of the scene on screen (travelling scenes describe their flight). */
+  get sceneInfo(): string | null {
+    return (this.next ?? this.current)?.instance.describe?.() ?? null;
   }
 
   /** Background shown once its cross-fade (if any) completes. */
@@ -291,6 +298,11 @@ export class Compositor {
     } else {
       u.uHasL.value = 0;
     }
+
+    // Travelling scenes report their speed: radial blur, at full resolution
+    const blur = (post.fx?.speedBlur ?? NEUTRAL_FX.speedBlur) * 0.1;
+    u.uMotionA.value = (this.current?.instance.motion?.() ?? 0) * blur;
+    u.uMotionB.value = this.next ? (this.next.instance.motion?.() ?? 0) * blur : 0;
 
     u.uTime.value = this.time;
     u.uTension.value = post.tension * (post.safeFlash ? 0.5 : 1);

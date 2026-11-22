@@ -2,6 +2,8 @@ import * as THREE from "three";
 import type { AudioFrame } from "@/lib/audio/AudioEngine";
 import type { Energy, ParamDef, ParamValues, SceneGLDef } from "../types";
 import { applyPalette, PALETTE_GLSL, paletteUniforms } from "../palettes";
+import { Flight, flightUniforms } from "../art/flight";
+import { num } from "../utils";
 
 /** Uniforms every fullscreen shader gets for free. */
 const HEADER = /* glsl */ `
@@ -37,7 +39,13 @@ interface ShaderSceneOptions {
   /** Fragment shader body. Has access to the header uniforms above and `pal(t)`. */
   fragment: string;
   uniforms?: () => Uniforms;
-  update?: (u: Uniforms, frame: AudioFrame, params: ParamValues, dt: number) => void;
+  /**
+   * Travelling scene: a Flight (speed following the track's structure) drives uTravel, uSpeed, uAccel,
+   * uBank, uSway and uDive. `cruise` is the distance per second at cruise speed; the scene's
+   * `speed` and `dynamics` params scale it (see flightParams).
+   */
+  flight?: { cruise: number };
+  update?: (u: Uniforms, frame: AudioFrame, params: ParamValues, dt: number, flight: Flight | null) => void;
 }
 
 /** Fullscreen-quad scene: write a fragment shader, get audio uniforms + palette wired up. */
@@ -69,8 +77,10 @@ export function defineShaderScene(opts: ShaderSceneOptions): SceneGLDef {
         uDrop: { value: 0 },
         uBuild: { value: 0 },
         ...pal,
+        ...(opts.flight ? flightUniforms() : {}),
         ...(opts.uniforms?.() ?? {}),
       };
+      const flight = opts.flight ? new Flight() : null;
       const material = new THREE.ShaderMaterial({
         uniforms,
         vertexShader: "void main() { gl_Position = vec4(position.xy, 0.0, 1.0); }",
@@ -95,10 +105,21 @@ export function defineShaderScene(opts: ShaderSceneOptions): SceneGLDef {
           uniforms.uDrop.value = f.dropPulse;
           uniforms.uBuild.value = f.buildProgress;
           applyPalette(pal, params.palette);
-          opts.update?.(uniforms, f, params, dt);
+          if (flight) {
+            flight.update(f, dt, opts.flight!.cruise * num(params.speed, 1), num(params.dynamics, 1));
+            uniforms.uTravel.value = flight.travel;
+            uniforms.uSpeed.value = flight.speedNorm;
+            uniforms.uAccel.value = flight.accel;
+            uniforms.uBank.value = flight.bank;
+            uniforms.uSway.value = flight.sway;
+            uniforms.uDive.value = flight.dive;
+          }
+          opts.update?.(uniforms, f, params, dt, flight);
           renderer.setRenderTarget(target);
           renderer.render(scene, camera);
         },
+        motion: flight ? () => flight.motion : undefined,
+        describe: flight ? () => flight.describe() : undefined,
         dispose() {
           geometry.dispose();
           material.dispose();

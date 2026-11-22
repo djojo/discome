@@ -22,6 +22,8 @@ export interface FxSettings {
   posterize: number;
   /** Feedback of the previous frame (light trails). */
   trails: number;
+  /** Radial blur of travelling scenes, following their speed (nothing at cruise). */
+  speedBlur: number;
   /** Strobe on the kicks of a drop. */
   strobe: StrobeMode;
 }
@@ -40,6 +42,7 @@ export const NEUTRAL_FX: FxSettings = {
   mirror: 0,
   posterize: 0,
   trails: 0,
+  speedBlur: 0.5,
   strobe: "off",
 };
 
@@ -49,6 +52,7 @@ type NumericFx = Exclude<keyof FxSettings, "strobe" | "mirror">;
 export const FX_SLIDERS: { key: NumericFx; label: string; min: number; max: number; step: number }[] = [
   { key: "chroma", label: "Aberration chromatique", min: 0, max: 1, step: 0.01 },
   { key: "trails", label: "Traînées", min: 0, max: 0.95, step: 0.01 },
+  { key: "speedBlur", label: "Flou de vitesse", min: 0, max: 1, step: 0.01 },
   { key: "scanlines", label: "Scanlines", min: 0, max: 1, step: 0.01 },
   { key: "crt", label: "Courbure CRT", min: 0, max: 1, step: 0.01 },
   { key: "vhs", label: "VHS", min: 0, max: 1, step: 0.01 },

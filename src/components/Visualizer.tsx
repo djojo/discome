@@ -287,7 +287,8 @@ export default function Visualizer() {
         hudRef.current.dataset.section = frame.section;
       }
       if (debugRef.current) {
-        const text = director.describe(frame, s.director);
+        const info = compositor.sceneInfo;
+        const text = director.describe(frame, s.director) + (info ? `\n${info}` : "");
         if (text !== debugText) {
           debugText = text;
           debugRef.current.textContent = text;

@@ -55,21 +55,29 @@ uniform float uBgBlur;
 uniform vec3 uBgInk;
 uniform float uMaskA;
 uniform float uMaskB;
+// radial speed blur of travelling scenes (0 = none)
+uniform float uMotionA;
+uniform float uMotionB;
 varying vec2 vUv;
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
-vec3 A(vec2 uv) { return texture2D(uA, uv).rgb; }
-vec3 B(vec2 uv) { return texture2D(uB, uv).rgb; }
 
-vec3 zoomBlurB(vec2 uv, float amount) {
+/** Zoom blur toward the centre, jittered per pixel so the 8 taps read as streaks, not copies. */
+vec3 zoomTap(sampler2D t, vec2 uv, float amount) {
   vec3 acc = vec3(0.0);
+  vec2 d = uv - 0.5;
+  float j = hash(gl_FragCoord.xy + fract(uTime) * 61.0);
   for (int i = 0; i < 8; i++) {
-    float s = 1.0 - amount * float(i) / 8.0;
-    acc += B(0.5 + (uv - 0.5) * s);
+    float s = 1.0 - amount * (float(i) + j) / 8.0;
+    acc += texture2D(t, 0.5 + d * s).rgb;
   }
   return acc / 8.0;
 }
+
+vec3 A(vec2 uv) { return uMotionA > 0.001 ? zoomTap(uA, uv, uMotionA) : texture2D(uA, uv).rgb; }
+vec3 B(vec2 uv) { return uMotionB > 0.001 ? zoomTap(uB, uv, uMotionB) : texture2D(uB, uv).rgb; }
+vec3 zoomBlurB(vec2 uv, float amount) { return zoomTap(uB, uv, amount + uMotionB); }
 
 vec3 transition(vec2 uv) {
   float p = clamp(uProgress, 0.0, 1.0);

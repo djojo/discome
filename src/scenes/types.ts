@@ -22,6 +22,10 @@ export interface SceneInstance {
   render(frame: AudioFrame, params: ParamValues, dt: number): void;
   /** WebGL scenes that don't end in `target` (e.g. an EffectComposer) return their final texture here. */
   output?(): THREE.Texture;
+  /** Travelling scenes: 0..1, how fast it feels right now (the compositor adds a radial speed blur). */
+  motion?(): number;
+  /** One line for the debug panel (D). */
+  describe?(): string;
   dispose?(): void;
 }
 
