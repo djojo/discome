@@ -42,7 +42,7 @@ interface Column {
  * Flux: an endless feed of cards without a single word — blurred pictures, avatars, grey bars, hearts, a row of
  * stories. It scrolls on its own, in thumb flicks (a push, a glide, a stop), faster through the build (and, over the night, faster and faster); hearts fill on the
  * kick and notification dots blink on the hats. The drop freezes it and tears it into falling pixels; in
- * the breakdown a single empty card is left, still.
+ * the breakdown it slows almost to a stop and dims, a reflex flick now and then.
  */
 export const flux: Scene2DDef = {
   id: "flux",
@@ -53,7 +53,7 @@ export const flux: Scene2DDef = {
   // it covers the whole frame: no world background showing through its dark areas
   mask: true,
   description:
-    "Un fil infini de cartes sans un mot qui défile tout seul, de plus en plus vite ; au drop il se fige et se déchire en pixels, au breakdown il ne reste qu'une carte vide.",
+    "Un fil infini de cartes sans un mot qui défile tout seul, de plus en plus vite ; au drop il se fige et se déchire en pixels, au breakdown il ralentit presque jusqu'à l'arrêt et s'assombrit.",
   params: [paletteParam("mono")],
   create({ canvas, ctx }) {
     const seed = Math.floor(Math.random() * 1e6);
@@ -72,6 +72,8 @@ export const flux: Scene2DDef = {
     let tearT = 99;
     let liked = new Set<number>();
     let lastBeat = 0;
+    /** 0..1: how far the feed has dimmed (the breakdown). */
+    let dim = 0;
 
     /** Draw one column of width cw centred on cx, scrolled by its own state. */
     const drawColumn = (col: Column, cx: number, cw: number, alpha: number, f: AudioFrame, pal: ReturnType<typeof getPalette>) => {
@@ -200,34 +202,17 @@ export const flux: Scene2DDef = {
           return;
         }
 
-        // In the breakdown: a single empty card, still, breathing, waiting to refresh
-        if (f.section === "breakdown") {
-          const ch = cw * 1.2;
-          const a = 0.35 + 0.1 * Math.sin(f.time * 0.8);
-          const sa = f.time * 4;
-          ctx.beginPath();
-          ctx.arc(w / 2, h / 2 - ch / 2 - cw * 0.12, cw * 0.035, sa, sa + 4.4);
-          ctx.strokeStyle = rgbCss(ink(pal), a);
-          ctx.lineWidth = Math.max(1, cw * 0.008);
-          ctx.stroke();
-          roundRect(ctx, w / 2 - cw / 2, h / 2 - ch / 2, cw, ch, cw * 0.04);
-          ctx.strokeStyle = rgbCss(ink(pal), a);
-          ctx.lineWidth = Math.max(1, cw * 0.004);
-          ctx.stroke();
-          roundRect(ctx, w / 2 - cw * 0.46, h / 2 - ch / 2 + cw * 0.12, cw * 0.92, ch - cw * 0.31, cw * 0.02);
-          ctx.fillStyle = rgbCss(ink(pal), a * 0.15);
-          ctx.fill();
-          return;
-        }
-
-        // Speed: on its own, faster through the build and the drop, faster and faster over the night
+        // Speed: on its own, faster through the build and the drop, faster and faster over the night; in the
+        // breakdown it almost stops and dims
+        const still = f.section === "breakdown";
+        dim += ((still ? 1 : 0) - dim) * (1 - Math.exp(-dt * 0.7));
         const base = h * 0.12 * (1 + 1.5 * f.drift);
-        const target = base * (f.section === "build" ? 1 + 6 * f.buildProgress * f.buildProgress : f.section === "drop" ? 5 : 1);
+        const target = still ? base * 0.15 : base * (f.section === "build" ? 1 + 6 * f.buildProgress * f.buildProgress : f.section === "drop" ? 5 : 1);
         // Thumb flicks: each one sized so that the feed keeps the target speed on average; they come faster
-        // when the feed rushes
+        // when the feed rushes, and only now and then in the breakdown (a reflex)
         nextFlick -= dt;
         if (nextFlick <= 0) {
-          const gap = (0.7 + 0.9 * Math.random()) / (1 + (target / base - 1) * 0.5);
+          const gap = still ? 2.5 + 2.5 * Math.random() : (0.7 + 0.9 * Math.random()) / (1 + (target / base - 1) * 0.5);
           nextFlick = gap;
           vel = target * gap * FRICTION;
         }
@@ -271,6 +256,10 @@ export const flux: Scene2DDef = {
           ctx.arc(sx, sy, sr * 0.78, 0, Math.PI * 2);
           ctx.fillStyle = palCss(pal, rand(k, seed + 20), 0.8);
           ctx.fill();
+        }
+        if (dim > 0.01) {
+          ctx.fillStyle = rgbCss(pal.base, 0.6 * dim);
+          ctx.fillRect(0, 0, w, h);
         }
       },
     };
