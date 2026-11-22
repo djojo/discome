@@ -37,6 +37,8 @@ interface SceneMeta {
   energy: Energy;
   /** Render offscreen at this fraction of the screen resolution (heavy shaders). Default 1. */
   renderScale?: number;
+  /** Alpha of the output is the subject's silhouette: the background stays behind it. */
+  mask?: boolean;
   params: ParamDef[];
 }
 

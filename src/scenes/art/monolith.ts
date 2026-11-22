@@ -9,6 +9,7 @@ export const monolith = defineShaderScene({
   name: "Monolithe",
   energy: "calm",
   renderScale: 0.6,
+  mask: true,
   description: "Architecture brutaliste, un seul soleil rasant : les blocs montent sur les basses, le soleil change de côté à chaque drop.",
   params: [
     paletteParam("concrete"),
@@ -102,7 +103,7 @@ void main() {
   col = aces(col * .95);
   col *= vignette(fc / uRes);
   col += grain(fc) * .04;
-  gl_FragColor = vec4(col * letterbox(fc), 1.);
+  gl_FragColor = vec4(col * letterbox(fc), step(0., t));
 }
 `,
 });

@@ -10,6 +10,7 @@ export const mercury = defineShaderScene({
   tag: "Visage",
   energy: "medium",
   renderScale: 0.7,
+  mask: true,
   description: "Masque chromé qui émerge d'un bain de métal liquide ; les basses font des ondes, le drop soulève le bain.",
   params: [
     paletteParam("mercury"),
@@ -70,7 +71,7 @@ void main() {
   col = aces(col);
   col *= vignette(fc / uRes);
   col += grain(fc) * .025;
-  gl_FragColor = vec4(col, 1.);
+  gl_FragColor = vec4(col, step(0., tt));
 }
 `,
 });

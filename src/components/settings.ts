@@ -2,7 +2,19 @@ import { defaultParams, SCENES, type ParamValues } from "@/scenes";
 import { BLEND_MODES, TRANSITIONS, type LayerSettings, type TransitionId } from "@/engine/transitions";
 import { DIRECTOR_MODES, type DirectorMode } from "@/engine/Director";
 import { NEUTRAL_FX, type FxSettings } from "@/engine/fx";
-import { LOOKS, lookFx, lookScenes, ROTATION, type Look } from "@/looks";
+import { LOOKS, lookBackgrounds, lookFx, lookScenes, pickShot, ROTATION, type Look } from "@/looks";
+
+export interface BackgroundSettings {
+  /** The director picks and changes the background from the world's list. */
+  auto: boolean;
+  sceneId: string | null;
+  /** 0..1, the world's default when entering it in auto mode. */
+  opacity: number;
+  /** Recolour into the world's palette. */
+  tint: boolean;
+  /** 0..1 extra softness. */
+  blur: number;
+}
 
 /** When worlds take turns: at each breakdown (with a safety change every 8 phrases), or every N phrases. */
 export type WorldRule = "breakdown" | "phrases4" | "phrases8";
@@ -43,6 +55,7 @@ export interface Settings {
   customLooks: Look[];
   /** Worlds take turns automatically. */
   worldCycle: { enabled: boolean; rule: WorldRule };
+  background: BackgroundSettings;
 }
 
 // v2: the art-directed worlds replaced the first looks; start fresh rather than inherit vivid settings.
@@ -66,6 +79,7 @@ export function defaultSettings(): Settings {
     strobeWarned: false,
     customLooks: [],
     worldCycle: { enabled: true, rule: "breakdown" },
+    background: { auto: true, sceneId: null, opacity: 0.4, tint: true, blur: 0.4 },
   };
   return applyLook(base, LOOKS[0]);
 }
@@ -81,14 +95,20 @@ export const findLook = (s: Settings, id = s.lookId): Look => allLooks(s).find((
 export function applyLook(s: Settings, look: Look): Settings {
   const params = { ...s.params };
   const pool = lookScenes(look);
-  for (const entry of pool) {
+  const backgrounds = lookBackgrounds(look);
+  for (const entry of [...pool, ...backgrounds]) {
     const def = SCENES.find((d) => d.id === entry.id)!;
     const p = { ...defaultParams(def), ...(entry.params ?? {}) };
     if (look.palettes.length && !look.palettes.includes(String(p.palette))) p.palette = look.palettes[0];
     params[entry.id] = p;
   }
   const sceneId = pool.some((e) => e.id === s.sceneId) ? s.sceneId : (pool[0]?.id ?? s.sceneId);
-  return { ...s, lookId: look.id, fx: lookFx(look), params, sceneId, director: look.director ?? s.director };
+  let background = s.background;
+  if (background.auto) {
+    const shot = pickShot(backgrounds, [sceneId, s.layer.sceneId]);
+    background = { ...background, sceneId: shot?.id ?? null, opacity: look.bgOpacity ?? 0.4, tint: shot?.tint ?? true };
+  }
+  return { ...s, lookId: look.id, fx: lookFx(look), params, sceneId, background, director: look.director ?? s.director };
 }
 
 /** Enter a world and cut to one of its shots (weighted draw, avoiding the scene on screen). */
@@ -153,6 +173,11 @@ export function loadSettings(): Settings {
       worldCycle: {
         enabled: saved.worldCycle?.enabled ?? base.worldCycle.enabled,
         rule: WORLD_RULES.some((r) => r.id === saved.worldCycle?.rule) ? saved.worldCycle!.rule : base.worldCycle.rule,
+      },
+      background: {
+        ...base.background,
+        ...(saved.background ?? {}),
+        sceneId: sceneExists(saved.background?.sceneId) ? saved.background!.sceneId : base.background.sceneId,
       },
     };
   } catch {

@@ -9,6 +9,7 @@ export const flesh = defineShaderScene({
   name: "Chair",
   energy: "calm",
   renderScale: 0.7,
+  mask: true,
   description: "Matière organique translucide et nacrée : contractions sur les basses, frémissement sur les aigus.",
   params: [
     paletteParam("flesh"),
@@ -63,7 +64,7 @@ void main() {
   col = aces(col * 1.1);
   col *= vignette(fc / uRes);
   col += grain(fc) * .035;
-  gl_FragColor = vec4(col, 1.);
+  gl_FragColor = vec4(col, step(0., tt));
 }
 `,
 });

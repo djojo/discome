@@ -8,6 +8,15 @@ import { SCENES, type ParamValues } from "@/scenes";
  * the catalogue + its settings for this world), palettes, post-effects, transitions and pacing.
  * The same scene shows up in several worlds with different settings (a red or a white Cathedral…).
  */
+/** A shot: a scene of the catalogue with its settings for this world. */
+export interface Shot {
+  id: string;
+  weight?: number;
+  params?: ParamValues;
+  /** Backgrounds only: recolour into the world's palette (default true). */
+  tint?: boolean;
+}
+
 export interface Look {
   id: string;
   name: string;
@@ -15,7 +24,12 @@ export interface Look {
   /** CSS colours for the card preview. */
   swatch: string[];
   palettes: string[];
-  scenes: { id: string; weight?: number; params?: ParamValues }[];
+  /** Foreground shots: what the director cuts between. */
+  scenes: Shot[];
+  /** Background shots: soft, recoloured, behind the foreground (the first scenes live here). */
+  backgrounds?: Shot[];
+  /** Default background presence for this world, 0..1. */
+  bgOpacity?: number;
   fx: Partial<FxSettings>;
   transitions?: { calm?: TransitionId[]; drop?: TransitionId[] };
   director?: DirectorMode;
@@ -37,8 +51,12 @@ export const LOOKS: Look[] = [
       { id: "halftone-head", weight: 2, params: { palette: "porcelain" } },
       { id: "topo-head", weight: 1, params: { palette: "bone" } },
       { id: "signal", weight: 1, params: { palette: "porcelain", density: 0.3, readouts: false } },
-      { id: "nebula", weight: 1, params: { palette: "bone", trail: 0.9, amount: 0.6 } },
     ],
+    backgrounds: [
+      { id: "nebula", weight: 2, params: { palette: "bone", trail: 0.92, amount: 0.6, speed: 0.6 } },
+      { id: "echoes", weight: 1, params: { palette: "bone", shape: "circle", zoom: 0.5, spin: 0.3 } },
+    ],
+    bgOpacity: 0.35,
     fx: { grain: 0.18, vignette: 0.45, saturation: 0.9, contrast: 1.05 },
     transitions: { calm: ["fade", "luma"], drop: ["flash", "fade"] },
     director: "chill",
@@ -53,10 +71,14 @@ export const LOOKS: Look[] = [
       { id: "signal", weight: 3 },
       { id: "topo-head", weight: 2, params: { palette: "mono" } },
       { id: "halftone-head", weight: 2, params: { palette: "mono", cells: 80 } },
-      { id: "halo", weight: 1, params: { palette: "mono", trail: 0.2, symmetry: 2 } },
+    ],
+    backgrounds: [
+      { id: "halo", weight: 2, params: { palette: "mono", trail: 0.3, symmetry: 2 } },
+      { id: "terrain", weight: 1, params: { palette: "mono", sun: false, bloom: 0 } },
       { id: "echoes", weight: 1, params: { palette: "mono", shape: "line" } },
       { id: "tunnel", weight: 1, params: { palette: "mono", segments: 16 } },
     ],
+    bgOpacity: 0.5,
     fx: { vignette: 0, contrast: 1.2, saturation: 0, strobe: "invert" },
     transitions: { calm: ["cut", "glitch"], drop: ["cut", "flash"] },
     director: "rave",
@@ -69,11 +91,14 @@ export const LOOKS: Look[] = [
     palettes: ["mercury", "cobalt"],
     scenes: [
       { id: "mercury", weight: 3 },
-      { id: "orb", weight: 2, params: { palette: "mercury", wire: false, bloom: 0.2, amp: 0.7, scale: 1.1 } },
       { id: "profile-head", weight: 1, params: { palette: "mercury" } },
       { id: "dancer", weight: 1, params: { palette: "mercury", look: "chrome", formation: "solo" } },
-      { id: "particle-body", weight: 1, params: { palette: "cobalt", bloom: 0.8 } },
     ],
+    backgrounds: [
+      { id: "orb", weight: 2, params: { palette: "mercury", wire: false, bloom: 0.2, amp: 0.7, scale: 1.1 } },
+      { id: "particle-body", weight: 1, params: { palette: "cobalt", bloom: 0.6 } },
+    ],
+    bgOpacity: 0.4,
     fx: { grain: 0.1, vignette: 0.5, chroma: 0.12 },
     transitions: { calm: ["fade", "luma"], drop: ["punch", "flash"] },
     director: "club",
@@ -86,12 +111,15 @@ export const LOOKS: Look[] = [
     palettes: ["signalRed", "whiteLight"],
     scenes: [
       { id: "cathedral", weight: 3 },
-      { id: "tunnel", weight: 2, params: { palette: "signalRed", segments: 12 } },
       { id: "profile-head", weight: 1, params: { palette: "signalRed" } },
       { id: "signal", weight: 1, params: { palette: "signalRed" } },
-      { id: "particle-body", weight: 1, params: { palette: "signalRed", bloom: 0.9 } },
-      { id: "halo", weight: 1, params: { palette: "signalRed", symmetry: 2, trail: 0.4 } },
     ],
+    backgrounds: [
+      { id: "tunnel", weight: 2, params: { palette: "signalRed", segments: 12 } },
+      { id: "halo", weight: 1, params: { palette: "signalRed", symmetry: 2, trail: 0.4 } },
+      { id: "particle-body", weight: 1, params: { palette: "signalRed", bloom: 0.6 } },
+    ],
+    bgOpacity: 0.45,
     fx: { vignette: 0.5, grain: 0.1, strobe: "flash" },
     transitions: { calm: ["fade", "iris"], drop: ["flash", "cut"] },
     director: "club",
@@ -105,10 +133,13 @@ export const LOOKS: Look[] = [
     scenes: [
       { id: "monolith", weight: 3 },
       { id: "porcelain", weight: 1, params: { palette: "concrete" } },
-      { id: "terrain", weight: 1, params: { palette: "concrete", bloom: 0.4, sun: false } },
+    ],
+    backgrounds: [
+      { id: "terrain", weight: 2, params: { palette: "concrete", bloom: 0.3, sun: false } },
       { id: "nebula", weight: 1, params: { palette: "sodium", trail: 0.9, amount: 0.5 } },
       { id: "echoes", weight: 1, params: { palette: "concrete", shape: "circle" } },
     ],
+    bgOpacity: 0.35,
     fx: { grain: 0.25, vignette: 0.45, saturation: 0.85 },
     transitions: { calm: ["luma", "fade"], drop: ["flash", "fade"] },
     director: "chill",
@@ -122,10 +153,13 @@ export const LOOKS: Look[] = [
     scenes: [
       { id: "flesh", weight: 3 },
       { id: "porcelain", weight: 1, params: { palette: "flesh" } },
-      { id: "kaleido", weight: 1, params: { palette: "flesh", complexity: 3, segments: 6 } },
       { id: "dancer", weight: 1, params: { palette: "flesh", look: "psyche", formation: "solo" } },
+    ],
+    backgrounds: [
+      { id: "kaleido", weight: 2, params: { palette: "flesh", complexity: 3, segments: 6 } },
       { id: "nebula", weight: 1, params: { palette: "flesh", trail: 0.9 } },
     ],
+    bgOpacity: 0.4,
     fx: { grain: 0.2, trails: 0.3, vignette: 0.5 },
     transitions: { calm: ["fade", "luma"], drop: ["fade", "punch"] },
     director: "chill",
@@ -146,6 +180,21 @@ export const lookFx = (look: Look): FxSettings => ({ ...NEUTRAL_FX, ...look.fx }
 
 /** Shots of a world whose scene still exists (a saved world may reference a scene removed since). */
 export const lookScenes = (look: Look) => look.scenes.filter((s) => SCENES.some((d) => d.id === s.id));
+
+export const lookBackgrounds = (look: Look) => (look.backgrounds ?? []).filter((s) => SCENES.some((d) => d.id === s.id));
+
+/** Weighted random pick among shots, avoiding some ids when possible. */
+export function pickShot(shots: Shot[], avoid: (string | null)[] = []): Shot | null {
+  const pool = shots.filter((s) => !avoid.includes(s.id));
+  const from = pool.length ? pool : shots;
+  if (!from.length) return null;
+  let r = Math.random() * from.reduce((sum, s) => sum + (s.weight ?? 1), 0);
+  for (const s of from) {
+    r -= s.weight ?? 1;
+    if (r <= 0) return s;
+  }
+  return from[from.length - 1];
+}
 
 /** The art-directed worlds that take turns when "Enchaîner les mondes" is on. */
 export const ROTATION = LOOKS.filter((l) => !l.classic).map((l) => l.id);

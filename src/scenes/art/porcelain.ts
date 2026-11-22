@@ -10,6 +10,7 @@ export const porcelain = defineShaderScene({
   tag: "Visage",
   energy: "calm",
   renderScale: 0.75,
+  mask: true,
   description: "Visage de céramique fendu par une lumière intérieure : les basses l'entrouvrent, le drop l'ouvre.",
   params: [
     paletteParam("porcelain"),
@@ -72,7 +73,7 @@ void main() {
   col *= vignette(fc / uRes);
   col += grain(fc) * .03;
   float lb = uCinema > .5 ? letterbox(fc) : 1.;
-  gl_FragColor = vec4(col * lb, 1.);
+  gl_FragColor = vec4(col * lb, step(0., tt));
 }
 `,
 });

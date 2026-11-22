@@ -24,6 +24,7 @@ export const topoHead = defineShaderScene({
   tag: "Visage",
   energy: "medium",
   renderScale: 0.85,
+  mask: true,
   description: "Le visage n'existe que par ses lignes de niveau ; au drop, elles basculent en profondeur.",
   params: [
     paletteParam("mono"),
@@ -60,7 +61,7 @@ void main() {
     col = mix(uBase, uInk, line * light);
   }
   col += grain(fc) * .02;
-  gl_FragColor = vec4(col, 1.);
+  gl_FragColor = vec4(col, step(0., tt)); // alpha = silhouette, keeps the background behind the face
 }
 `,
 });
@@ -71,6 +72,7 @@ export const profileHead = defineShaderScene({
   tag: "Visage",
   energy: "calm",
   renderScale: 0.85,
+  mask: true,
   description: "Seul le contour du profil, éclairé à contre-jour ; un second contour d'accent s'allume à la montée et au drop.",
   params: [
     paletteParam("porcelain"),
@@ -107,7 +109,7 @@ void main() {
     col += uAccent * rimR * (uDrop * 2. + uBuild * .8);
   }
   col += grain(fc) * .02;
-  gl_FragColor = vec4(col, 1.);
+  gl_FragColor = vec4(col, step(0., tt)); // alpha = silhouette, keeps the background behind the face
 }
 `,
 });
@@ -118,6 +120,7 @@ export const halftoneHead = defineShaderScene({
   tag: "Visage",
   energy: "medium",
   renderScale: 0.9,
+  mask: true,
   description: "Visage en demi-teinte de sérigraphie : la lumière tourne, le drop inverse l'image.",
   params: [
     paletteParam("porcelain"),
@@ -156,7 +159,7 @@ void main() {
   float dotm = 1. - smoothstep(r - .07, r + .07, length(local));
   vec3 col = mix(uBase * .5, uInk, dotm);
   if (uDrop > .7) col = uInk - col * .95;
-  gl_FragColor = vec4(col, 1.);
+  gl_FragColor = vec4(col, step(0., tt)); // alpha = silhouette, keeps the background behind the face
 }
 `,
 });

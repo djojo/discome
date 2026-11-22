@@ -5,6 +5,19 @@ import { COMPOSITOR_FRAG, COMPOSITOR_VERT } from "./compositorShader";
 import { blendCode, transitionCode, type LayerSettings, type TransitionSpec } from "./transitions";
 import { NEUTRAL_FX, type FxSettings } from "./fx";
 
+/** How the background (fond) sits behind the main scene. */
+export interface BackgroundLook {
+  /** 0..1 (already modulated by the director). */
+  opacity: number;
+  /** 0..1: recolour into the world's palette (luminance → ink). */
+  tint: number;
+  /** 0..1 extra softness. */
+  blur: number;
+  ink: [number, number, number];
+}
+
+const NO_BACKGROUND: BackgroundLook = { opacity: 0, tint: 0, blur: 0, ink: [1, 1, 1] };
+
 export interface PostFx {
   /** 0..1 build-up tension from the director. */
   tension: number;
@@ -29,8 +42,13 @@ interface Slot {
   canvasTexture?: THREE.CanvasTexture;
   /** WebGL scenes: an offscreen render target. */
   target?: THREE.WebGLRenderTarget;
+  /** Resolution factor: 1 for the main scenes, BG_SCALE for backgrounds (soft and cheap). */
+  scale: number;
   lastUsed: number;
 }
+
+/** Backgrounds render at a fraction of the screen resolution: naturally soft, and cheap. */
+const BG_SCALE = 0.4;
 
 /** Idle instances kept warm, so a scene coming back doesn't recompile its shaders mid-set. */
 const POOL_SIZE = 3;
@@ -45,6 +63,10 @@ export class Compositor {
   private current: Slot | null = null;
   private next: Slot | null = null;
   private layer: Slot | null = null;
+  private bg: Slot | null = null;
+  private bgNext: Slot | null = null;
+  private bgElapsed = 0;
+  private bgDuration = 0;
   private pool: Slot[] = [];
   private transition: TransitionSpec = { type: "cut", duration: 0 };
   private elapsed = 0;
@@ -103,6 +125,16 @@ export class Compositor {
       uPoster: { value: 0 },
       uStrobe: { value: 0 },
       uStrobeMode: { value: 1 },
+      uBg: { value: this.black as THREE.Texture },
+      uBg2: { value: this.black as THREE.Texture },
+      uHasBg: { value: 0 },
+      uBgMix: { value: 0 },
+      uBgOpacity: { value: 0 },
+      uBgTint: { value: 1 },
+      uBgBlur: { value: 0 },
+      uBgInk: { value: new THREE.Vector3(1, 1, 1) },
+      uMaskA: { value: 0 },
+      uMaskB: { value: 0 },
     };
     this.material = new THREE.ShaderMaterial({
       uniforms: this.uniforms,
@@ -133,6 +165,31 @@ export class Compositor {
 
   get inTransition(): boolean {
     return this.next !== null;
+  }
+
+  /** Background shown once its cross-fade (if any) completes. */
+  get backgroundId(): string | null {
+    return (this.bgNext ?? this.bg)?.def.id ?? null;
+  }
+
+  /** Change the background with a slow cross-fade (null removes it at once). */
+  setBackground(id: string | null, fade: number) {
+    if (this.bgNext) this.finishBg();
+    if ((this.bg?.def.id ?? null) === id) return;
+    if (!id) {
+      this.release(this.bg);
+      this.bg = null;
+      return;
+    }
+    const slot = this.acquire(id, BG_SCALE);
+    if (!this.bg || fade <= 0) {
+      this.release(this.bg);
+      this.bg = slot;
+      return;
+    }
+    this.bgNext = slot;
+    this.bgElapsed = 0;
+    this.bgDuration = fade;
   }
 
   setViewport(v: Viewport) {
@@ -182,15 +239,40 @@ export class Compositor {
     dt: number,
     layer: LayerSettings,
     post: PostFx = { tension: 0, fx: NEUTRAL_FX, safeFlash: false },
+    background: BackgroundLook = NO_BACKGROUND,
   ) {
     this.time += dt;
     if (this.next) {
       this.elapsed += dt;
       if (this.elapsed >= this.transition.duration) this.finishTransition();
     }
+    if (this.bgNext) {
+      this.bgElapsed += dt;
+      if (this.bgElapsed >= this.bgDuration) this.finishBg();
+    }
 
     const u = this.uniforms;
+    if (this.bg && background.opacity > 0.002) {
+      u.uBg.value = this.renderSlot(this.bg, frame, paramsFor, dt);
+      if (this.bgNext) {
+        u.uBg2.value = this.renderSlot(this.bgNext, frame, paramsFor, dt);
+        const x = this.bgElapsed / this.bgDuration;
+        u.uBgMix.value = x * x * (3 - 2 * x);
+      } else {
+        u.uBgMix.value = 0;
+      }
+      u.uHasBg.value = 1;
+      u.uBgOpacity.value = background.opacity;
+      u.uBgTint.value = background.tint;
+      u.uBgBlur.value = background.blur * 14 * this.viewport.dpr;
+      u.uBgInk.value.fromArray(background.ink);
+    } else {
+      u.uHasBg.value = 0;
+    }
+
     u.uA.value = this.current ? this.renderSlot(this.current, frame, paramsFor, dt) : this.black;
+    u.uMaskA.value = this.current?.def.mask ? 1 : 0;
+    u.uMaskB.value = this.next?.def.mask ? 1 : 0;
 
     if (this.next) {
       u.uB.value = this.renderSlot(this.next, frame, paramsFor, dt);
@@ -271,7 +353,7 @@ export class Compositor {
   dispose() {
     for (const s of this.slots()) this.destroySlot(s);
     this.pool = [];
-    this.current = this.next = this.layer = null;
+    this.current = this.next = this.layer = this.bg = this.bgNext = null;
     this.material.dispose();
     this.copyMaterial.dispose();
     this.feedback?.forEach((t) => t.dispose());
@@ -282,14 +364,28 @@ export class Compositor {
   // ------------------------------------------------------------------ internals
 
   private slots(): Slot[] {
-    return [this.current, this.next, this.layer, ...this.pool].filter((s): s is Slot => s !== null);
+    return [this.current, this.next, this.layer, this.bg, this.bgNext, ...this.pool].filter(
+      (s): s is Slot => s !== null,
+    );
   }
 
-  private bufferSize() {
+  private bufferSize(scale = 1) {
     return {
-      w: Math.max(1, Math.floor(this.viewport.width * this.viewport.dpr)),
-      h: Math.max(1, Math.floor(this.viewport.height * this.viewport.dpr)),
+      w: Math.max(1, Math.floor(this.viewport.width * scale * this.viewport.dpr)),
+      h: Math.max(1, Math.floor(this.viewport.height * scale * this.viewport.dpr)),
     };
+  }
+
+  /** What a scaled slot believes the screen is (3D composers size themselves from it). */
+  private viewportFor(scale: number): Viewport {
+    if (scale === 1) return this.viewport;
+    return { width: this.viewport.width * scale, height: this.viewport.height * scale, dpr: this.viewport.dpr };
+  }
+
+  private finishBg() {
+    this.release(this.bg);
+    this.bg = this.bgNext;
+    this.bgNext = null;
   }
 
   private finishTransition() {
@@ -298,10 +394,10 @@ export class Compositor {
     this.next = null;
   }
 
-  private acquire(id: string): Slot {
-    const i = this.pool.findIndex((s) => s.def.id === id);
+  private acquire(id: string, scale = 1): Slot {
+    const i = this.pool.findIndex((s) => s.def.id === id && s.scale === scale);
     if (i >= 0) return this.pool.splice(i, 1)[0];
-    return this.createSlot(sceneById(id));
+    return this.createSlot(sceneById(id), scale);
   }
 
   private release(s: Slot | null) {
@@ -314,8 +410,9 @@ export class Compositor {
     }
   }
 
-  private createSlot(def: SceneDef): Slot {
-    const { w, h } = this.bufferSize();
+  private createSlot(def: SceneDef, scale = 1): Slot {
+    const { w, h } = this.bufferSize(scale);
+    const viewport = this.viewportFor(scale);
     if (def.kind === "2d") {
       const canvas = document.createElement("canvas");
       canvas.width = w;
@@ -326,8 +423,8 @@ export class Compositor {
       const canvasTexture = new THREE.CanvasTexture(canvas);
       canvasTexture.generateMipmaps = false;
       canvasTexture.minFilter = THREE.LinearFilter;
-      const instance = def.create({ canvas, ctx, viewport: this.viewport });
-      return { def, instance, canvas, canvasTexture, lastUsed: 0 };
+      const instance = def.create({ canvas, ctx, viewport });
+      return { def, instance, canvas, canvasTexture, scale, lastUsed: 0 };
     }
     // 3D scenes get MSAA (rendering offscreen loses the canvas antialiasing); fullscreen shaders don't need it.
     const is3D = def.tag === "3D";
@@ -336,12 +433,12 @@ export class Compositor {
       samples: is3D ? 4 : 0,
       depthBuffer: is3D,
     });
-    const instance = def.create({ renderer: this.renderer, viewport: this.viewport, target });
-    return { def, instance, target, lastUsed: 0 };
+    const instance = def.create({ renderer: this.renderer, viewport, target });
+    return { def, instance, target, scale, lastUsed: 0 };
   }
 
   private resizeSlot(s: Slot) {
-    const { w, h } = this.bufferSize();
+    const { w, h } = this.bufferSize(s.scale);
     if (s.canvas && (s.canvas.width !== w || s.canvas.height !== h)) {
       s.canvas.width = w;
       s.canvas.height = h;
@@ -349,7 +446,7 @@ export class Compositor {
     }
     const k = s.def.renderScale ?? 1;
     s.target?.setSize(Math.max(1, Math.floor(w * k)), Math.max(1, Math.floor(h * k)));
-    s.instance.resize?.(this.viewport);
+    s.instance.resize?.(this.viewportFor(s.scale));
   }
 
   private renderSlot(s: Slot, frame: AudioFrame, paramsFor: (id: string) => ParamValues, dt: number) {

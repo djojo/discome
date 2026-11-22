@@ -7,7 +7,7 @@ import { BLEND_MODES, TRANSITIONS, type BlendModeId, type TransitionId } from "@
 import { DIRECTOR_MODES } from "@/engine/Director";
 import { FX_SLIDERS, MIRROR_OPTIONS, STROBE_OPTIONS, type FxSettings, type StrobeMode } from "@/engine/fx";
 import { allLooks, findLook, WORLD_RULES, type Quality, type Settings, type WorldRule } from "./settings";
-import { lookScenes } from "@/looks";
+import { lookBackgrounds, lookScenes } from "@/looks";
 
 export const SOURCE_LABELS: Record<SourceKind, string> = {
   mic: "Micro / entrée",
@@ -82,6 +82,9 @@ export function ControlPanel({
   const worldIds = lookScenes(findLook(settings)).map((e) => e.id);
   const worldScenes = worldIds.map((id) => SCENES.find((x) => x.id === id)!).filter(Boolean);
   const otherScenes = SCENES.filter((x) => !worldIds.includes(x.id));
+  const worldBackgrounds = lookBackgrounds(findLook(settings))
+    .map((e) => SCENES.find((x) => x.id === e.id)!)
+    .filter(Boolean);
   return (
     <div className="panel-inner">
       <section>
@@ -262,6 +265,90 @@ export function ControlPanel({
             />
           </label>
         )}
+      </section>
+
+      <section>
+        <h2>Fond</h2>
+        <label className="field field-toggle">
+          <span>Choisi par le réalisateur</span>
+          <input
+            type="checkbox"
+            role="switch"
+            checked={settings.background.auto}
+            onChange={(e) => onSettings({ background: { ...settings.background, auto: e.target.checked } })}
+          />
+        </label>
+        <label className="field">
+          <span className="field-head">
+            <span>Scène de fond</span>
+          </span>
+          <select
+            value={settings.background.sceneId ?? ""}
+            onChange={(e) =>
+              onSettings({ background: { ...settings.background, auto: false, sceneId: e.target.value || null } })
+            }
+          >
+            <option value="">Aucune</option>
+            <optgroup label="Fonds de ce monde">
+              {worldBackgrounds.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="Tout le catalogue">
+              {SCENES.filter((x) => !worldBackgrounds.includes(x)).map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </optgroup>
+          </select>
+        </label>
+        {settings.background.sceneId && (
+          <>
+            <label className="field">
+              <span className="field-head">
+                <span>Présence</span>
+                <span className="field-value">{settings.background.opacity.toFixed(2)}</span>
+              </span>
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.01}
+                value={settings.background.opacity}
+                onChange={(e) =>
+                  onSettings({ background: { ...settings.background, opacity: Number(e.target.value) } })
+                }
+              />
+            </label>
+            <label className="field">
+              <span className="field-head">
+                <span>Flou</span>
+                <span className="field-value">{settings.background.blur.toFixed(2)}</span>
+              </span>
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.01}
+                value={settings.background.blur}
+                onChange={(e) => onSettings({ background: { ...settings.background, blur: Number(e.target.value) } })}
+              />
+            </label>
+            <label className="field field-toggle">
+              <span>Teinte du monde</span>
+              <input
+                type="checkbox"
+                role="switch"
+                checked={settings.background.tint}
+                onChange={(e) => onSettings({ background: { ...settings.background, tint: e.target.checked } })}
+              />
+            </label>
+          </>
+        )}
+        <p className="hint">Le fond n&apos;apparaît que dans les zones sombres de la scène principale.</p>
       </section>
 
       <section>

@@ -15,6 +15,12 @@ npm run dev   # http://localhost:3000
   - Un monde est une direction artistique complète : une sélection de plans (une scène du catalogue et ses réglages pour ce monde), des palettes, des post-effets, des transitions et un rythme de réalisation.
   - Une même scène est réutilisée d'un monde à l'autre avec d'autres réglages : Cathédrale en rouge ou en blanc, Profil en ivoire ou en argent…
   - **Enchaîner les mondes** : ils se succèdent, au breakdown (et au moins toutes les 8 phrases) ou toutes les 4 ou 8 phrases. Le passage se fait par le noir, et les effets glissent vers ceux du nouveau monde.
+- **Fonds** : les premières scènes (Nébuleuse, Halo, Échos, Tunnel, Orbe, Spectro-terrain, Kaléidoscope, Corps de particules) servent de fonds aux mondes.
+  - Elles sont rendues en basse résolution, floutées et teintées dans la palette du monde.
+  - Elles n'apparaissent que dans les zones sombres de la scène principale, jamais à l'intérieur de son sujet : les scènes de visages et d'architecture transmettent leur silhouette au compositeur.
+  - Le réalisateur change de fond toutes les 3 phrases, ou au drop. Il le rend plus présent en breakdown et le fait pulser pendant les rafales.
+  - On peut aussi choisir le fond à la main dans la section « Fond ».
+  - Le monde Classique garde ces scènes en plein écran, avec leurs couleurs d'origine.
 - **Palettes** : 2 à 4 couleurs par palette, avec des rôles fixes (fond, encre, accent) au lieu d'arcs-en-ciel. Les scènes s'en servent pour se recolorer selon le monde.
 - **Réalisateur** (Manuel / Chill / Club / Rave) : fondu au breakdown, tension pendant la montée, impact et rafale de coupes au drop, variation des réglages à chaque coupe.
 - **Transitions** : cut, fondu, punch, glitch, volet lumineux, iris, flash blanc, passage au noir.

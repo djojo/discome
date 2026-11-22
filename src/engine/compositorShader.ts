@@ -44,6 +44,17 @@ uniform float uMirror;
 uniform float uPoster;
 uniform float uStrobe;
 uniform int uStrobeMode;
+// background (fond)
+uniform sampler2D uBg;
+uniform sampler2D uBg2;
+uniform float uHasBg;
+uniform float uBgMix;
+uniform float uBgOpacity;
+uniform float uBgTint;
+uniform float uBgBlur;
+uniform vec3 uBgInk;
+uniform float uMaskA;
+uniform float uMaskB;
 varying vec2 vUv;
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -122,8 +133,31 @@ vec3 blendLayer(vec3 base, vec3 l) {
   return base * smoothstep(0.05, 0.4, luma(l));
 }
 
+vec3 bgTap(vec2 uv) { return mix(texture2D(uBg, uv).rgb, texture2D(uBg2, uv).rgb, uBgMix); }
+
+/** Soft, recoloured background: a small blur on top of the low-res render, then a duotone in the world's ink. */
+vec3 background(vec2 uv) {
+  vec2 px = uBgBlur / uRes;
+  vec3 c = bgTap(uv) * .36;
+  c += (bgTap(uv + vec2(px.x, 0.)) + bgTap(uv - vec2(px.x, 0.)) + bgTap(uv + vec2(0., px.y)) + bgTap(uv - vec2(0., px.y))) * .12;
+  c += (bgTap(uv + px) + bgTap(uv - px) + bgTap(uv + vec2(px.x, -px.y)) + bgTap(uv + vec2(-px.x, px.y))) * .04;
+  float l = luma(c);
+  c = mix(c, uBgInk * l, uBgTint);
+  return c * uBgOpacity;
+}
+
+/** Silhouette of the main scene (scenes that write it in alpha); 0 = free for the background. */
+float cover(vec2 uv) {
+  float a = uMaskA > 0.5 ? texture2D(uA, uv).a : 0.0;
+  if (uHasB < 0.5) return a;
+  float b = uMaskB > 0.5 ? texture2D(uB, uv).a : 0.0;
+  return mix(a, b, smoothstep(0.0, 1.0, clamp(uProgress, 0.0, 1.0)));
+}
+
 vec3 composite(vec2 uv) {
   vec3 col = transition(uv);
+  // The background lives in the dark areas of the main scene, and never inside its subject
+  if (uHasBg > 0.5) col += background(uv) * (1.0 - smoothstep(0.03, 0.35, luma(col))) * (1.0 - cover(uv));
   if (uHasL > 0.5) col = mix(col, blendLayer(col, texture2D(uL, uv).rgb), uLayerOpacity);
   return col;
 }

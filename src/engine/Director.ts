@@ -90,6 +90,8 @@ export interface DirectorContext {
   params: Record<string, ParamValues>;
   /** Worlds take turns: at breakdowns, or every N phrases. */
   worldCycle?: { enabled: boolean; rule: "breakdown" | "phrases4" | "phrases8" };
+  /** Background managed by the director (the world's background shots). */
+  background?: { auto: boolean; currentId: string | null; shots: { id: string; weight?: number }[] };
 }
 
 export interface Decision {
@@ -101,6 +103,9 @@ export interface Decision {
   preload?: string;
   /** Time to move on to the next world. */
   changeWorld?: boolean;
+  /** New background scene, with its cross-fade length in seconds. */
+  background?: string;
+  bgFade?: number;
 }
 
 const pickOne = <T>(xs: readonly T[]): T => xs[Math.floor(Math.random() * xs.length)];
@@ -125,10 +130,14 @@ export class Director {
   private lastCutTime = 0;
   private now = 0;
   private phrasesInWorld = 0;
+  private bgPhrases = 0;
+  /** Background presence multiplier: fuller in breakdowns, pulsing during bursts. */
+  bgLevel = 1;
 
   /** The show just entered a new world. */
   noteWorldChange(id: string) {
     this.phrasesInWorld = 0;
+    this.bgPhrases = 0;
     this.burstUntil = -1;
     this.plannedNext = null;
     this.plannedDrop = null;
@@ -142,6 +151,42 @@ export class Director {
   }
 
   update(f: AudioFrame, ctx: DirectorContext): Decision | null {
+    const dt = Math.max(0, Math.min(0.1, f.time - this.now));
+    const fg = this.decide(f, ctx);
+    const bg = this.decideBackground(f, ctx, dt);
+    return fg || bg ? { ...(fg ?? {}), ...(bg ?? {}) } : null;
+  }
+
+  /** The background changes slowly: every 3 phrases, or with a short fade on the drop. */
+  private decideBackground(f: AudioFrame, ctx: DirectorContext, dt: number): Decision | null {
+    const burst = this.beats < this.burstUntil;
+    const target =
+      f.section === "breakdown" ? 1.4 : f.section === "build" ? 0.8 + 0.4 * f.buildProgress : burst ? 0.6 + 0.6 * f.beatPulse : 1;
+    this.bgLevel += (target - this.bgLevel) * (1 - Math.exp(-dt * 2));
+
+    if (f.downbeat && f.phraseBar === 0) this.bgPhrases++;
+    const bg = ctx.background;
+    if (!bg?.auto || ctx.locked || !f.active || bg.shots.length < 2) return null;
+    const beat = f.bpm > 0 ? 60 / f.bpm : 0.5;
+    const pick = () => {
+      const pool = bg.shots.filter((s) => s.id !== bg.currentId && s.id !== ctx.currentId);
+      let r = Math.random() * pool.reduce((sum, s) => sum + (s.weight ?? 1), 0);
+      return pool.find((s) => (r -= s.weight ?? 1) <= 0)?.id ?? pool[0]?.id;
+    };
+    if (f.drop) {
+      this.bgPhrases = 0;
+      const id = pick();
+      return id ? { background: id, bgFade: 2 * beat } : null;
+    }
+    if (this.bgPhrases >= 3 && f.downbeat && f.phraseBar === 0) {
+      this.bgPhrases = 0;
+      const id = pick();
+      return id ? { background: id, bgFade: 16 * beat } : null;
+    }
+    return null;
+  }
+
+  private decide(f: AudioFrame, ctx: DirectorContext): Decision | null {
     this.now = f.time;
     if (f.tick) this.beats++;
     const target = f.section === "build" ? f.buildProgress : 0;

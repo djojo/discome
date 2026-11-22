@@ -31,6 +31,8 @@ interface ShaderSceneOptions {
   tag?: "Shader" | "Visage";
   /** Render at a fraction of the screen resolution (heavy ray-marched scenes). */
   renderScale?: number;
+  /** The shader writes its subject's silhouette in alpha (keeps the background behind it). */
+  mask?: boolean;
   params: ParamDef[];
   /** Fragment shader body. Has access to the header uniforms above and `pal(t)`. */
   fragment: string;
@@ -48,6 +50,7 @@ export function defineShaderScene(opts: ShaderSceneOptions): SceneGLDef {
     kind: "webgl",
     energy: opts.energy,
     renderScale: opts.renderScale,
+    mask: opts.mask,
     params: opts.params,
     create({ renderer, target }) {
       const scene = new THREE.Scene();

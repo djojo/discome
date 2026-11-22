@@ -19,7 +19,8 @@ import {
   type Settings,
 } from "./settings";
 import { NEUTRAL_FX, type FxSettings } from "@/engine/fx";
-import { lookScenes } from "@/looks";
+import { lookBackgrounds, lookScenes } from "@/looks";
+import { getPalette, ink } from "@/scenes/palettes";
 import { preloadDancer } from "@/scenes/3d/humanoid/dancerAsset";
 import type { DirectorContext } from "@/engine/Director";
 
@@ -150,6 +151,9 @@ export default function Visualizer() {
     // Director pool derived from the active look, rebuilt only when the look changes
     let lookKey = "";
     let lookCtx: Pick<DirectorContext, "scenes" | "weights" | "palettes" | "transitions"> = { scenes: SCENES };
+    let bgShots: { id: string; weight?: number }[] = [];
+    let bgInk: [number, number, number] = [1, 1, 1];
+    let firstBg = true;
     const lookContext = (s: Settings) => {
       const key = `${s.lookId}:${s.customLooks.length}`;
       if (key !== lookKey) {
@@ -162,6 +166,8 @@ export default function Visualizer() {
           palettes: look.palettes,
           transitions: look.transitions,
         };
+        bgShots = lookBackgrounds(look);
+        bgInk = ink(getPalette(look.palettes[0]));
       }
       return lookCtx;
     };
@@ -194,7 +200,15 @@ export default function Visualizer() {
         params: s.params,
         worldCycle: s.worldCycle,
         ...lookContext(s),
+        background: { auto: s.background.auto, currentId: compositor.backgroundId, shots: bgShots },
       });
+      if (decision?.background) {
+        const id = decision.background;
+        s = { ...s, background: { ...s.background, sceneId: id } };
+        settingsRef.current = s;
+        setSettings((cur) => ({ ...cur, background: { ...cur.background, sceneId: id } }));
+        compositor.setBackground(id, decision.bgFade ?? 4);
+      }
       if (decision?.preload) {
         const id = decision.preload;
         compositor.preload(id, frame, s.params[id] ?? defaultParams(sceneById(id)));
@@ -229,6 +243,10 @@ export default function Visualizer() {
         firstShow = false;
       }
       if (s.layer.sceneId !== compositor.layerId) compositor.setLayer(s.layer.sceneId);
+      if (s.background.sceneId !== compositor.backgroundId) {
+        compositor.setBackground(s.background.sceneId, firstBg ? 0 : 3);
+      }
+      firstBg = false;
 
       const params = s.params;
       // Post-effects glide to the new world's values instead of jumping
@@ -241,11 +259,20 @@ export default function Visualizer() {
           (fxShown as unknown as Record<string, unknown>)[key] = target;
         }
       }
-      compositor.render(frame, (id) => params[id] ?? defaultParams(sceneById(id)), dt, s.layer, {
-        tension: director.tension,
-        fx: fxShown,
-        safeFlash: s.safeFlash,
-      });
+      lookContext(s); // keeps the background ink in sync with the world
+      compositor.render(
+        frame,
+        (id) => params[id] ?? defaultParams(sceneById(id)),
+        dt,
+        s.layer,
+        { tension: director.tension, fx: fxShown, safeFlash: s.safeFlash },
+        {
+          opacity: Math.min(1, s.background.opacity * director.bgLevel),
+          tint: s.background.tint ? 1 : 0,
+          blur: s.background.blur,
+          ink: bgInk,
+        },
+      );
 
       // ---- HUD, written straight to the DOM (no React re-render per frame)
       const levels = [frame.bass, frame.mid, frame.treble, frame.volume];
