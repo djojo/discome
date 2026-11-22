@@ -15,6 +15,7 @@ import { faithful } from "./art/faithful";
 import { flux } from "./art/flux";
 import { panopticon } from "./art/panopticon";
 import { warehouse } from "./art/warehouse";
+import { downpour } from "./art/downpour";
 import { topoHead, profileHead, halftoneHead } from "./art/faces";
 import { mercury } from "./art/mercury";
 import { cathedral } from "./art/cathedral";
@@ -45,6 +46,7 @@ export const SCENES: SceneDef[] = [
   faithful,
   monolith,
   panopticon,
+  downpour,
   canyonGorge,
   canyonMesas,
   arcaneArchitect,
