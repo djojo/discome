@@ -35,6 +35,7 @@ import { radiolaria } from "./art/radiolaria";
 import { jellyfish } from "./art/jellyfish";
 import { cactus } from "./art/cactus";
 import { spirit } from "./art/spirit";
+import { vision } from "./art/vision";
 import { grimoire } from "./art/grimoire";
 import { flesh } from "./art/flesh";
 import { signal } from "./art/signal";
@@ -73,6 +74,7 @@ export const SCENES: SceneDef[] = [
   jellyfish,
   cactus,
   spirit,
+  vision,
   grimoire,
   flesh,
   signal,

@@ -3,12 +3,15 @@ import { paletteParam } from "../palettes";
 import { num } from "../utils";
 import { ART_LIB } from "./lib.glsl";
 import { FLIGHT_GLSL, flightParams } from "./flight";
+import { NIGHT_GLSL } from "./night.glsl";
 
 /**
  * Flight through a winding canyon whose sandstone strata are painted with the palette.
  * Two reliefs, published as two shots of the catalogue: a narrow slot ("Gorge", smooth wavy
  * walls and light beams) and an open terraced canyon between mesas ("Mesas", with a mirror river).
  * Skims the floor in the breakdown, climbs out above the plateau on the drop.
+ * At night (the Canyon world's shamanic night): a spiral sky, the seams of the strata glowing like threads of
+ * yarn, petroglyphs lighting up on the walls as the flight passes them.
  */
 function canyonScene(id: string, name: string, relief: "gorge" | "mesas", palette: string, description: string) {
   return defineShaderScene({
@@ -34,6 +37,16 @@ function canyonScene(id: string, name: string, relief: "gorge" | "mesas", palett
       ...flightParams(),
       { type: "range", key: "width", label: "Largeur", min: 0.6, max: 1.6, step: 0.05, default: 1 },
       { type: "range", key: "psy", label: "Psychédélisme", min: 0, max: 2, step: 0.05, default: 1 },
+      {
+        type: "select",
+        key: "moment",
+        label: "Moment",
+        options: [
+          { value: "day", label: "Jour" },
+          { value: "night", label: "Nuit" },
+        ],
+        default: "day",
+      },
     ],
     uniforms: () => ({
       uRelief: { value: relief === "mesas" ? 1 : 0 },
@@ -41,11 +54,17 @@ function canyonScene(id: string, name: string, relief: "gorge" | "mesas", palett
       uPsy: { value: 1 },
       uShift: { value: 0 },
       uShiftTarget: { value: 0 },
+      uNight: { value: 0 },
+      uTwist: { value: 0.3 },
     }),
     update(u, f, p, dt) {
       u.uRelief.value = p.relief === "mesas" ? 1 : 0;
       u.uWidth.value = num(p.width, 1);
       u.uPsy.value = num(p.psy, 1);
+      u.uNight.value = p.moment === "night" ? 1 : 0;
+      // the night sky winds into a spiral through the build
+      const tw = f.section === "build" ? 0.3 + 2 * f.buildProgress : f.section === "drop" ? 2.2 : 0.3;
+      u.uTwist.value = (u.uTwist.value as number) + (tw - (u.uTwist.value as number)) * (1 - Math.exp(-dt * 0.5));
       // Each drop slides the strata colours along the palette
       if (f.drop) u.uShiftTarget.value = (u.uShiftTarget.value as number) + 0.33;
       const s = u.uShift.value as number;
@@ -60,8 +79,11 @@ uniform float uRelief;
 uniform float uWidth;
 uniform float uPsy;
 uniform float uShift;
+uniform float uNight;
+uniform float uTwist;
 ${ART_LIB}
 ${FLIGHT_GLSL}
+${NIGHT_GLSL}
 float gW0;
 float gTop;
 vec3 gL;
@@ -179,6 +201,7 @@ vec3 dryBed(vec3 p) {
 }
 
 vec3 sky(vec3 rd) {
+  if (uNight > .5) return nightSky(rd, uTwist);
   vec3 c = mix(pal(uShift + .4) * .75 + uBase, uBase * 1.4, smoothstep(-.02, .55, rd.y));
   // A ringed sun low over the canyon; over the night it grows and burns
   vec3 sd = normalize(vec3(-.25, .16, -1.));
@@ -189,7 +212,42 @@ vec3 sky(vec3 rd) {
   return c;
 }
 
-vec3 fogCol(vec3 rd) { return mix(uBase * 1.5, pal(uShift + .55) * .55, .55) + uAccent * .08 * max(rd.y, 0.); }
+vec3 fogCol(vec3 rd) {
+  if (uNight > .5) return uBase * 1.2 + yarn(.3) * .04;
+  return mix(uBase * 1.5, pal(uShift + .55) * .55, .55) + uAccent * .08 * max(rd.y, 0.);
+}
+
+/** A petroglyph in its cell (q in [-.5, .5]): a spiral, concentric circles, a sun, or a serpent. fp: a pixel. */
+float glyph(vec2 q, float k, float fp) {
+  float r = length(q), a = atan(q.y, q.x);
+  float d;
+  if (k < 1.) d = abs(fract(r * 6. - a / 6.2831853) - .5) / 6. + max(r - .42, 0.);
+  else if (k < 2.) d = min(abs(fract(r * 7.) - .5) / 7. + max(r - .4, 0.), r - .04);
+  else if (k < 3.) d = min(abs(r - .16), max(abs(sin(a * 4.)) * r, max(.24 - r, r - .42)));
+  else d = abs(q.y - .12 * sin(q.x * 14.)) + max(abs(q.x) - .42, 0.);
+  return 1. - smoothstep(.014, .03 + fp, d);
+}
+
+/** Night: the glowing threads between the strata, and the petroglyphs lighting up as the flight passes. */
+vec3 nightRock(vec3 p, vec3 n, float t) {
+  float s = p.y * 1.6 - uTime * .05 + .1 * sin(p.z * .6 + p.x * .4);
+  float seam = 1. - smoothstep(.0, .09, fract(s));
+  vec3 c = yarn(fract(floor(s) * .17 + uShift)) * seam * (.5 + .5 * (1. - abs(n.y))) * 1.3;
+  if (abs(n.y) < .6) {
+    float side = sign(p.x - pathX(p.z));
+    vec2 cell = vec2(floor(p.z / 2.6), floor(p.y / 1.8));
+    float h = hash12(cell + side * 17.3);
+    if (h > .5) {
+      vec2 q = (vec2(p.z, p.y) - (cell + .5) * vec2(2.6, 1.8)) / 1.15;
+      float fp = t * .004;
+      float g = glyph(q, floor(hash12(cell + 3.1 + side) * 4.), fp);
+      // they light up as we pass, and on the kick
+      float lit = smoothstep(16., 4., t) * (.6 + .8 * uBeat) + .15;
+      c += yarn(fract(h * 3.)) * g * lit * 1.6;
+    }
+  }
+  return c;
+}
 
 void main() {
   vec2 fc = gl_FragCoord.xy;
@@ -235,12 +293,14 @@ void main() {
       float fre = .25 + .75 * pow(1. - max(dot(-rd, wn), 0.), 4.);
       col = sky(r) * fre * (.4 + .6 * occ) + uBase * .3;
     } else {
-      vec3 alb = rockColor(p, n);
+      vec3 alb = rockColor(p, n) * (uNight > .5 ? .35 : 1.);
       // Light bouncing between the walls warms the shadows, more so higher up
       vec3 bounce = alb * (gorge ? (.4 + .6 * smoothstep(0., gTop * .8, p.y)) * 1.5 : .2 + .3 * smoothstep(0., gTop, p.y));
       vec3 skyl = sky(vec3(0., 1., 0.)) * .25 * (.5 + .5 * n.y);
       col = alb * (dif * (vec3(1.) + uAccent * .4) * 1.25 + skyl * occ) + bounce * occ;
     }
+    // night: moonlight on the rock (cold, from above), the glowing threads and glyphs
+    if (uNight > .5 && !water && !dry) col = col * .5 + rockColor(p, n) * .12 * vec3(.6, .72, 1.) * (.4 + .6 * clamp(n.y, 0., 1.)) + nightRock(p, n, t);
     col = mix(col, fogCol(rd), 1. - exp(-t * (gorge ? .045 : .03)));
   }
 
