@@ -44,7 +44,7 @@ ${MARCH}
 vec3 env(vec3 r) {
   float az = atan(r.z, r.x) + uTime * .07;
   float el = r.y;
-  vec3 c = uBase * 1.3 + uInk * .27 * smoothstep(-.05, .95, el) + uAccent * .04 * smoothstep(.1, -.4, el);
+  vec3 c = uBase * 1.3 + uInk * .27 * smoothstep(-.05, .95, el) + uAccent * .04 * (1. - smoothstep(-.4, .1, el));
   float a1 = abs(mod(az - .8 + PI, 2. * PI) - PI);
   c += uAccent * 3.6 * (1. - smoothstep(.015, .04, abs(el - .28))) * (1. - smoothstep(.5, .75, a1));
   float a2 = abs(mod(az + 2.3 + PI, 2. * PI) - PI);

@@ -213,7 +213,7 @@ void main() {
   float alt = .55 + (uDive > 0. ? uDive * uDive * 4.2 : uDive * .38);
   vec3 ro = vec3(uSway * 1.2, alt, -uTravel);
   gRo = ro;
-  float pitch = mix(.55, -2.4, smoothstep(.5, 1.5, uDive)) + .35 * smoothstep(0., -1., uDive);
+  float pitch = mix(.55, -2.4, smoothstep(.5, 1.5, uDive)) + .35 * smoothstep(0., 1., -uDive);
   vec3 ta = ro + vec3(.25 * sin(uTime * .1) + uSway * .3, pitch, -4.);
   vec3 rd = lookAt(ro, ta) * normalize(vec3(uv, flightFocal(1.35)));
 
