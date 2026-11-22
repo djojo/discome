@@ -45,11 +45,11 @@ npm run dev   # http://localhost:3000
 
 | Scène | Ce qu'on voit | Au drop |
 | --- | --- | --- |
-| Porcelaine | Visage de céramique fendu par une lumière intérieure, format 2.39 | Le masque s'ouvre |
+| Porcelaine | Visage de céramique immobile, fissures d'or kintsugi qui se propagent sur plusieurs minutes, format 2.39 | La tête s'ouvre en coquille sur une agate, une géode et un cœur fractal ; elle se referme au breakdown |
 | Topographie | Le visage dessiné uniquement par des lignes de niveau | Les lignes basculent en profondeur |
 | Profil | Seul le contour du profil, éclairé à contre-jour | Un contour d'accent s'allume |
 | Trame | Visage en demi-teinte de sérigraphie | Inversion |
-| Mercure | Masque chromé qui émerge d'un bain de métal liquide | Le bain se soulève |
+| Mercure | Masque chromé immobile dans un bain de métal liquide ; chaque kick lance un anneau | Une lame de lumière balaie le chrome |
 | Cathédrale | Nef d'arches lumineuses, sol miroir, brume ; la forme des arches change à chaque phrase | Vitesse lumière : les arches s'étirent en traînées |
 | Monolithe | Avenue brutaliste en béton banché, soleil rasant, poussière, monolithe à l'horizon | Décollage au-dessus des toits, le soleil change de côté |
 | Gorge | Vol dans une gorge étroite aux parois ondulées, strates colorées, rais de lumière | On sort de la fente, les couleurs des strates basculent |
@@ -59,7 +59,7 @@ npm run dev   # http://localhost:3000
 | Les Trois | Moines rouge, bleu et or traversés par un rayon prismatique (une bande de couleur = une bande de fréquences) | Le rayon s'élargit, les robes s'embrasent |
 | Le Portail | Lac d'anneaux arc-en-ciel, colonne de lumière, minuscule silhouette | Le portail s'ouvre en vortex |
 | Grimoire | HUD de jeu ésotérique (2D) : chapitre, glyphes, orbites, texte japonais, vraies données du morceau | Le chapitre change, l'avertissement clignote |
-| Chair | Matière organique translucide et nacrée | Contraction |
+| Chair | Matière organique translucide qui respire lentement ; la lumière intérieure bat au kick | La lumière éclôt de l'intérieur |
 | Signal | Données en deux couleurs : codes-barres, balayage, onde | Inversion |
 
 **Classiques**, recolorées par les palettes des mondes : Halo, Kaléidoscope, Orbe, Tunnel, Nébuleuse, Spectro-terrain, Échos, Danseuse, Androïde, Corps de particules.
@@ -94,6 +94,7 @@ src/
     types.ts             Contrat d'une scène + paramètres déclaratifs
     art/                 Scènes de direction artistique (visages, Mercure, Cathédrale…)
     art/flight.ts        Vol partagé des travellings (vitesse selon la structure, figures, roulis)
+    art/camera.ts        Cadrages : un plan par phrase, la caméra y glisse en orbite autour du sujet
     art/arcane.glsl.ts   Figure sans visage et robe cosmique du monde Arcanes
     2d/  shader/  3d/    Scènes classiques ; 3d/humanoid/ : danseuse, androïde, particules
   components/            Visualizer (boucle, sources, HUD), ControlPanel, settings
@@ -106,6 +107,15 @@ public/models/           Michelle.glb (personnage Mixamo des exemples three.js)
 - l'horloge (`bpm`, `beatPhase`, `tick`, `downbeat`, `bar`, `phraseBar`) ;
 - la structure (`section`, `drop`, `buildProgress`) ;
 - `energy`, un « temps musical » qui avance plus vite quand la musique est forte.
+
+## Principes de réalisation
+
+- **Le sujet vit à son tempo** : visage, figure, architecture ou paysage bougent lentement et en continu. Ils ne changent d'état que sur les grands moments du morceau (montée, drop, breakdown), avec des transitions de plusieurs mesures.
+- **Les effets portent le rythme** : lumière, couleur, particules, ondes, reflets et post-effets réagissent au kick, aux attaques et aux bandes de fréquences.
+- **On peut regarder une scène longtemps** :
+  - les **cadrages** changent à chaque phrase (`src/scenes/art/camera.ts`) ;
+  - une graine `uSeed` varie les motifs à chaque retour de la scène ;
+  - quelque chose évolue sur plusieurs minutes.
 
 ## Ajouter une scène
 

@@ -2,6 +2,16 @@ import { defineShaderScene } from "../shader/defineShaderScene";
 import { paletteParam } from "../palettes";
 import { ART_LIB } from "./lib.glsl";
 import { ARCANE_GLSL, arcaneParams, arcaneUniforms, updateArcane } from "./arcane.glsl";
+import { CAMERA_GLSL, type Framing } from "./camera";
+
+/** The figure is mirrored in this scene: the orb sits on its left (world -x). */
+const FRAMINGS: Framing[] = [
+  { az: 0.32, el: -0.06, dist: 6.6, target: [-0.3, 0.05, 0], focal: 1.5, weight: 3 },
+  { az: -0.5, el: -0.02, dist: 6, target: [-0.2, 0.1, 0], focal: 1.5, weight: 2 },
+  { az: 0.15, el: 0.02, dist: 2.6, target: [-0.6, 0.5, 0.6], focal: 1.8, weight: 2 },
+  { az: 2.6, el: 0.05, dist: 6, target: [0, 0, 0], focal: 1.5, weight: 1 },
+  { az: 0.9, el: 0.35, dist: 9, target: [0, -0.8, 0], focal: 1.5, weight: 2 },
+];
 
 /**
  * The Nomad: a figure in a conical hat holding a glowing orb, alone in a red desert with mesas on the horizon,
@@ -14,12 +24,12 @@ export const arcaneNomad = defineShaderScene({
   energy: "calm",
   renderScale: 0.75,
   mask: true,
+  camera: { framings: FRAMINGS, glideBars: 2 },
   description:
     "Silhouette au chapeau conique dans un désert martien, un orbe dans la main : il respire sur les basses, crépite sur les kicks et embrase le désert au drop.",
   params: [paletteParam("mars"), ...arcaneParams(14, 0.35)],
   uniforms: () => ({
     ...arcaneUniforms(),
-    uYaw: { value: 0.3 },
     uSunAz: { value: 0 },
     uSunTarget: { value: 0 },
     uOrb: { value: 0 },
@@ -27,7 +37,6 @@ export const arcaneNomad = defineShaderScene({
   }),
   update(u, f, p, dt) {
     updateArcane(u, f, p, dt);
-    u.uYaw.value = 0.32 + 0.12 * Math.sin(f.time * 0.04);
     // The sun swings round on every drop, and the long shadow with it
     if (f.drop) u.uSunTarget.value = (u.uSunTarget.value as number) + 1.1;
     const az = u.uSunAz.value as number;
@@ -39,12 +48,12 @@ export const arcaneNomad = defineShaderScene({
     u.uLift.value = l + (lift - l) * (1 - Math.exp(-dt * 1.5));
   },
   fragment: /* glsl */ `
-uniform float uYaw;
 uniform float uSunAz;
 uniform float uOrb;
 uniform float uLift;
 ${ART_LIB}
 ${ARCANE_GLSL}
+${CAMERA_GLSL}
 
 const vec3 MIRROR = vec3(-1., 1., 1.);
 vec3 gSun;
@@ -115,8 +124,8 @@ void main() {
   gOrb = (gHand + vec3(0., .24, 0.)) * MIRROR;
   gSun = normalize(vec3(-cos(uSunAz + 2.4), .13, -sin(uSunAz + 2.4)));
 
-  vec3 ro = vec3(sin(uYaw) * 6.6, -.35, cos(uYaw) * 6.6);
-  vec3 rd = lookAt(ro, vec3(-.3, .05, 0.)) * normalize(vec3(uv, 1.5));
+  vec3 ro = uCamPos;
+  vec3 rd = lookAt(ro, uCamTarget) * normalize(vec3(uv, uFocal));
 
   vec3 col = sky(rd);
   float solid = 0.;

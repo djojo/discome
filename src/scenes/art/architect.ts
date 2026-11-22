@@ -2,6 +2,15 @@ import { defineShaderScene } from "../shader/defineShaderScene";
 import { paletteParam } from "../palettes";
 import { ART_LIB } from "./lib.glsl";
 import { ARCANE_GLSL, arcaneParams, arcaneUniforms, updateArcane } from "./arcane.glsl";
+import { CAMERA_GLSL, type Framing } from "./camera";
+
+const FRAMINGS: Framing[] = [
+  { az: -0.45, el: 0.04, dist: 6.2, target: [0, 0.05, 0], focal: 1.55, weight: 3 },
+  { az: 0.4, el: 0.08, dist: 5.8, target: [0, 0.05, 0], focal: 1.55, weight: 2 },
+  { az: -0.2, el: -0.12, dist: 4.6, target: [0, 0.5, 0], focal: 1.7, weight: 2 },
+  { az: 0.5, el: 0.1, dist: 2.6, target: [0.45, 0.7, 0.45], focal: 1.9, weight: 2 },
+  { az: -0.6, el: 0.45, dist: 8.5, target: [0, -0.6, 0], focal: 1.6, weight: 1 },
+];
 
 /**
  * The Architect: a pyramid-headed mage in a cosmic robe, holding a red crystal over a lake of rainbow rings.
@@ -13,12 +22,12 @@ export const arcaneArchitect = defineShaderScene({
   energy: "medium",
   renderScale: 0.8,
   mask: true,
+  camera: { framings: FRAMINGS, glideBars: 2 },
   description:
     "Mage à tête de pyramide, robe de lignes et d'étoiles, au-dessus d'un lac d'anneaux arc-en-ciel ; au drop, la pyramide devient un prisme.",
   params: [paletteParam("cosmos"), ...arcaneParams()],
   uniforms: () => ({
     ...arcaneUniforms(),
-    uYaw: { value: -0.45 },
     uRing: { value: 0 },
     uRingTarget: { value: 0 },
     uBeam: { value: 0 },
@@ -26,7 +35,6 @@ export const arcaneArchitect = defineShaderScene({
   }),
   update(u, f, p, dt) {
     updateArcane(u, f, p, dt);
-    u.uYaw.value = -0.45 + 0.25 * Math.sin(f.time * 0.05);
     // Each kick sends the rings a step outward
     if (f.beat) u.uRingTarget.value = (u.uRingTarget.value as number) + 1;
     const r = u.uRing.value as number;
@@ -43,12 +51,12 @@ export const arcaneArchitect = defineShaderScene({
     u.uLift.value = l + (lift - l) * (1 - Math.exp(-dt * 1.5));
   },
   fragment: /* glsl */ `
-uniform float uYaw;
 uniform float uRing;
 uniform float uBeam;
 uniform float uLift;
 ${ART_LIB}
 ${ARCANE_GLSL}
+${CAMERA_GLSL}
 
 vec3 gCrystal;
 
@@ -118,8 +126,8 @@ void main() {
   setupFigure(1., 1., uLift);
   gCrystal = gHand + vec3(0., .3, 0.);
 
-  vec3 ro = vec3(sin(uYaw) * 6.2, .3, cos(uYaw) * 6.2);
-  vec3 rd = lookAt(ro, vec3(0., .05, 0.)) * normalize(vec3(uv, 1.55));
+  vec3 ro = uCamPos;
+  vec3 rd = lookAt(ro, uCamTarget) * normalize(vec3(uv, uFocal));
 
   vec3 col = uBase * .6 + starfield(rd, .2 + .1 * uTreble);
   col += pal(.35 + uShift) * .07 * vnoise(rd * 3. + uTime * .02) * smoothstep(-.1, .5, rd.y);
