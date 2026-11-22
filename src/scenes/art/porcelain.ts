@@ -48,6 +48,16 @@ export const porcelain = defineShaderScene({
     },
     { type: "range", key: "open", label: "Amplitude", min: 0, max: 1.5, step: 0.05, default: 1 },
     { type: "range", key: "kintsugi", label: "Kintsugi", min: 0, max: 1, step: 0.05, default: 0.8 },
+    {
+      type: "select",
+      key: "frame",
+      label: "Cadre",
+      options: [
+        { value: "none", label: "Aucun" },
+        { value: "selfie", label: "Viseur de téléphone" },
+      ],
+      default: "none",
+    },
     { type: "toggle", key: "letterbox", label: "Format cinéma 2.39 (bandes noires)", default: false },
   ],
   uniforms: () => ({
@@ -62,6 +72,7 @@ export const porcelain = defineShaderScene({
     uShift: { value: 0 },
     uShiftTarget: { value: 0 },
     uCinema: { value: 0 },
+    uSelfie: { value: 0 },
     uMode: { value: Math.random() < 0.5 ? 0 : 1 },
     uWasOpen: { value: 0 },
   }),
@@ -83,7 +94,10 @@ export const porcelain = defineShaderScene({
     u.uOpenVel.value = v;
     u.uOpen.value = Math.max(0, o + v * dt);
     const open = u.uOpen.value as number;
-    if (ctx.camera) ctx.camera.allow = (fr) => fr.tag !== "open" || target > 0.5 || open > 0.5;
+    // (through the phone's viewfinder, the face is filmed from the front)
+    const selfie = p.frame === "selfie";
+    if (ctx.camera)
+      ctx.camera.allow = (fr) => (fr.tag !== "open" || target > 0.5 || open > 0.5) && (!selfie || Math.abs(fr.az) < 0.6);
     // Shell or shards: the style only changes while the head is closed
     if (open > 0.5) u.uWasOpen.value = 1;
     if (open < 0.02) {
@@ -104,6 +118,7 @@ export const porcelain = defineShaderScene({
     u.uShift.value = s + ((u.uShiftTarget.value as number) - s) * (1 - Math.exp(-dt * 2));
     u.uAmp.value = num(p.open, 1);
     u.uCinema.value = p.letterbox === true ? 1 : 0;
+    u.uSelfie.value = p.frame === "selfie" ? 1 : 0;
   },
   fragment: /* glsl */ `
 uniform float uOpen;
@@ -114,6 +129,7 @@ uniform float uKinMax;
 uniform float uWave;
 uniform float uShift;
 uniform float uCinema;
+uniform float uSelfie;  // the face seen through a phone's viewfinder
 uniform float uMode;   // 0: opens like a shell, 1: breaks into floating shards
 ${ART_LIB}
 ${HEAD_GLSL}
@@ -422,9 +438,39 @@ void main() {
 
   col = aces(col * 1.05);
   col *= vignette(fc / uRes);
+  float alpha = step(0., tt);
+  if (uSelfie > .5) {
+    // A phone held up to the face: a portrait screen, its grid, a focus square that follows the face,
+    // the recording dot blinking on the beat. The drop is the shutter.
+    vec2 fsz = vec2(.43 * 9. / 19.5, .43);
+    vec2 dq = abs(uv) - fsz + .05;
+    float frame = length(max(dq, 0.)) + min(max(dq.x, dq.y), 0.) - .05;
+    vec3 ui = vec3(1., .96, .88);
+    if (frame > 0.) {
+      col = uBase * .08 + ui * .5 * (1. - smoothstep(0., .004, abs(frame - .012)));
+      alpha = 1.;
+    } else {
+      vec2 g = abs(fract((uv + fsz) / (fsz * 2.) * 3.) - .5) * 2.;
+      col += ui * .05 * step(.985, max(g.x, g.y));
+      // where the head is on screen
+      mat3 cam = lookAt(uCamPos, uCamTarget);
+      vec3 hv = vec3(0., -.05, .1) - uCamPos;
+      vec3 hc = vec3(dot(hv, cam[0]), dot(hv, cam[1]), dot(hv, cam[2]));
+      vec2 hu = clamp(hc.xy / hc.z * uFocal, -fsz + .12, fsz - .12);
+      float bs = .11 * (1. + .06 * exp(-uWave * 8.));
+      vec2 bq = abs(uv - hu);
+      float corner = step(bs - .006, max(bq.x, bq.y)) * step(max(bq.x, bq.y), bs) * step(bs * .6, min(bq.x, bq.y));
+      col = mix(col, vec3(1., .85, .35), corner * .9);
+      // recording dot
+      col = mix(col, vec3(1., .2, .15), (1. - smoothstep(.008, .012, length(uv - vec2(0., fsz.y - .045)))) * (.35 + .65 * uBeat));
+      // the shutter
+      col += vec3(1.) * pow(uDrop, 3.) * .7;
+      alpha = 1.;
+    }
+  }
   float lb = uCinema > .5 ? letterbox(fc) : 1.;
   // Letterbox bars stay opaque: the background never shows through them
-  gl_FragColor = vec4(col * lb, max(step(0., tt), 1. - lb));
+  gl_FragColor = vec4(col * lb, max(alpha, 1. - lb));
 }
 `,
 });

@@ -36,17 +36,24 @@ export const cathedral = defineShaderScene({
     uFigD: { value: 16 },
     uFigVis: { value: 1 },
     uCinema: { value: 0 },
+    uPhone: { value: 0.4 },
   }),
   update(u, f, p, dt) {
     u.uHaze.value = num(p.haze, 1);
     u.uCinema.value = p.letterbox === true ? 1 : 0;
     u.uBeatPhase.value = f.bpm > 0 ? f.beatPhase : (f.time * 2) % 1;
-    // A new arch style on every phrase (ogive, round, portico), morphing over a bar
+    // A new arch style on every phrase (ogive, round, portico… or a screen), morphing over a bar.
+    // As the night drifts, the nave is more and more often made of screens.
     if ((f.downbeat && f.phraseBar === 0) || f.drop) {
-      u.uShapeA.value = u.uShapeB.value;
-      u.uShapeB.value = ((u.uShapeB.value as number) + 1 + Math.floor(Math.random() * 2)) % 3;
+      const cur = u.uShapeB.value as number;
+      const others = [0, 1, 2].filter((v) => v !== cur);
+      u.uShapeA.value = cur;
+      u.uShapeB.value =
+        cur !== 3 && Math.random() < 0.15 + 0.6 * f.drift ? 3 : others[Math.floor(Math.random() * others.length)];
       u.uShapeMix.value = 0;
     }
+    // The silhouette holds a screen up to its face; it glows brighter as the night drifts
+    u.uPhone.value = 0.4 + 0.6 * Math.min(1, f.drift * 1.5);
     const bar = f.bpm > 0 ? (60 / f.bpm) * 4 : 2;
     u.uShapeMix.value = Math.min(1, (u.uShapeMix.value as number) + dt / bar);
     // The silhouette: approaches only through the build, gone in the drop, back far away afterwards
@@ -67,6 +74,7 @@ uniform float uShapeB;
 uniform float uShapeMix;
 uniform float uFigD;
 uniform float uFigVis;
+uniform float uPhone;
 ${ART_LIB}
 ${FLIGHT_GLSL}
 ${ARCANE_GLSL}
@@ -97,6 +105,15 @@ float arch(vec2 q, float shape) {
     vec2 v = vec2(x, q.y - h);
     float arc = v.y > 0. ? abs(length(v) - w) : length(vec2(x - w, v.y));
     return min(arc, pil);
+  }
+  if (shape > 2.5) {
+    // Screen: a rounded rectangle standing on the floor, with a little pill at the top, like a phone
+    float top = h + w * 1.25;
+    vec2 d = abs(q - vec2(0., (top - 1.) * .5)) - vec2(w, (top + 1.) * .5) + w * .32;
+    float rr = length(max(d, 0.)) + min(max(d.x, d.y), 0.) - w * .32;
+    vec2 pq = q - vec2(0., top - w * .2);
+    float pill = length(vec2(max(abs(pq.x) - w * .12, 0.), pq.y)) - w * .035;
+    return min(abs(rr), abs(pill));
   }
   // Portico: straight lintel, taller pillars
   float top = h + w * .95;
@@ -148,6 +165,11 @@ void main() {
     if (tf > 0.) tf *= FIG_S;
   }
   vec3 accFig = vec3(0.);
+  vec3 ro0 = ro, rd0 = rd;
+  // The screen in its hands (figure space), a cold light in a one-colour world; it flickers on the hats
+  const vec3 PH = vec3(0., .12, .44);
+  const vec3 SCREEN = vec3(.75, .86, 1.);
+  float phone = uPhone * (.85 + .5 * uHat);
   bool reflected = false, blocked = false;
   vec3 acc = vec3(0.);
   float atten = 1.;
@@ -180,12 +202,26 @@ void main() {
   if (tf > 0. && !blocked) { accFig = acc; blocked = true; }
   if (blocked) {
     // A black cut-out, back-lit: a thin rim in the light colour that flares on the kick
-    vec3 n = figNormal(rof + rd * (tf / FIG_S));
-    float rim = pow(1. - abs(dot(n, -rd)), 3.);
+    vec3 hp = rof + rd0 * (tf / FIG_S);
+    vec3 n = figNormal(hp);
+    float rim = pow(1. - abs(dot(n, -rd0)), 3.);
     accFig += uInk * rim * (.5 + 1.3 * uBeat);
+    // the screen lights the inside of the hood and the hands from below
+    vec3 toPh = PH - hp;
+    accFig += SCREEN * phone * clamp(dot(n, normalize(toPh)), 0., 1.) * exp(-length(toPh) * 3.5) * 1.6;
     acc = mix(acc, accFig, uFigVis);
   } else {
     acc += uInk * exp(-dmin * 30.) * .25 * uFigVis * (1. + uBeat);
+  }
+  // the screen itself, a small glowing rectangle
+  if (uFigVis > .01) {
+    vec3 P = figPos + PH * FIG_S;
+    float s = dot(P - ro0, rd0);
+    if (s > 0. && (tf < 0. || s < tf + .05)) {
+      vec3 dd = P - ro0 - rd0 * s;
+      float r = length(max(abs(dd.xy) - vec2(.012, .02), 0.));
+      acc += SCREEN * phone * uFigVis * (exp(-r * 1400.) * 1.6 + exp(-r * 90.) * .2);
+    }
   }
   vec3 col = acc;
   float lum = dot(col, vec3(.3, .59, .11));

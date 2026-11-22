@@ -11,6 +11,8 @@ import { android } from "./3d/humanoid/android";
 import { particleBody } from "./3d/humanoid/particleBody";
 import { porcelain } from "./art/porcelain";
 import { metamorphosis } from "./art/metamorphosis";
+import { faithful } from "./art/faithful";
+import { flux } from "./art/flux";
 import { topoHead, profileHead, halftoneHead } from "./art/faces";
 import { mercury } from "./art/mercury";
 import { cathedral } from "./art/cathedral";
@@ -37,6 +39,7 @@ export const SCENES: SceneDef[] = [
   halftoneHead,
   mercury,
   cathedral,
+  faithful,
   monolith,
   canyonGorge,
   canyonMesas,
@@ -47,6 +50,7 @@ export const SCENES: SceneDef[] = [
   grimoire,
   flesh,
   signal,
+  flux,
   // Classics, recoloured by the worlds' palettes
   halo,
   kaleido,

@@ -94,6 +94,7 @@ export function defineShaderScene(opts: ShaderSceneOptions): SceneGLDef {
         uHat: { value: 0 },
         uDrop: { value: 0 },
         uBuild: { value: 0 },
+        uDrift: { value: 0 },
         uBands: { value: new Array<number>(8).fill(0) },
         ...pal,
         uSeed: { value: Math.random() * 100 },
