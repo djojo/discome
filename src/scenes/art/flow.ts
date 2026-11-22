@@ -4,9 +4,10 @@ import { ART_LIB } from "./lib.glsl";
 import { STUDIO_GLSL } from "./studio.glsl";
 
 /**
- * Coulée: a wall of liquid metal, seen flat. Mercury and gold run down it slowly, in streams that fold into each
- * other without ever quite mixing; heavy drips slide down at their own pace. The kick catches the crests of the
- * streams; on the drop a gush of gold pours from the top and the whole wall runs faster for a few bars.
+ * Coulée: a wall of liquid metal, seen flat. Mercury and gold run down it very slowly and mix as they go: broad
+ * separate streams at the top, curling round each other lower down, finer and finer, until near the bottom they
+ * melt into one alloy. Heavy drips slide down at their own pace. The kick catches the crests of the streams; on the
+ * drop a pour of gold comes down from the top and the wall runs a little faster for a few bars.
  */
 export const flow = defineShaderScene({
   id: "mercury-flow",
@@ -14,7 +15,7 @@ export const flow = defineShaderScene({
   energy: "calm",
   renderScale: 0.85,
   description:
-    "Un mur de métal liquide vu de face : le mercure et l'or y coulent lentement en filets qui se replient l'un dans l'autre, de lourdes gouttes glissent ; au drop, une coulée d'or tombe du haut.",
+    "Un mur de métal liquide vu de face : le mercure et l'or y coulent très lentement et se mélangent en descendant, en filets qui s'enroulent jusqu'à se fondre ; au drop, une coulée d'or descend du haut.",
   params: [
     paletteParam("mercury"),
     {
@@ -45,8 +46,8 @@ export const flow = defineShaderScene({
       u.uRush.value = 1;
     } else u.uGush.value = (u.uGush.value as number) + dt;
     u.uRush.value = (u.uRush.value as number) * Math.exp(-dt / (bar * 2));
-    // slow and heavy
-    u.uFlow.value = (u.uFlow.value as number) + dt * (0.025 + 0.015 * f.energy) * (1 + 2 * (u.uRush.value as number));
+    // very slow and heavy: a stream takes well over a minute to cross the wall
+    u.uFlow.value = (u.uFlow.value as number) + dt * (0.006 + 0.004 * f.energy) * (1 + (u.uRush.value as number));
     u.uGlint.value = f.beat ? 1 : (u.uGlint.value as number) * Math.exp(-dt * 3);
   },
   fragment: /* glsl */ `
@@ -57,23 +58,30 @@ uniform float uCobalt;
 ${ART_LIB}
 ${STUDIO_GLSL}
 
-/** The two fields of the wall at p (screen units): height of the liquid (x), share of the second metal (y). */
+/**
+ * The two fields of the wall at p (screen units): height of the liquid (x), share of the second metal (y).
+ * The metals mix as they run down: the lower, the stronger the folding, the finer the streams, the softer their
+ * edges, until they blend.
+ */
 vec2 wall(vec2 p) {
-  // everything runs down: sample higher up as the wall flows
-  vec2 q = vec2(p.x * 2.2, p.y * .9 + uFlow);
-  // a warp stretched downward: streams, not blobs
-  vec2 w = vec2(fbm3(vec3(q * vec2(1., .5), 1.3)), fbm3(vec3(q * vec2(1., .5) + 4.1, 2.7)));
-  vec2 s = q + (w - .5) * vec2(1.6, .6);
-  float f = vnoise(vec3(s * vec2(1.4, .7), 7.)) + .4 * vnoise(vec3(s * vec2(2.9, 1.3), 3.));
-  // the second metal: thin streams folded into the first
-  float m = .5 + .5 * sin(f * 21. + s.x * 2.);
-  float g = smoothstep(.56, .62, m);
-  // the drop's gush: a sheet of gold falling from the top
-  // (its front runs down in fingers, never as a straight line)
-  float gy = 1. - uGush * .35 + .28 * vnoise(vec3(p.x * 7., 1.7, uGush * .3)) + .12 * sin(p.x * 23. + 1.3);
-  if (uGush < 6.) g = max(g, smoothstep(gy - .03, gy + .03, p.y) * smoothstep(.6, .4, abs(p.x + .15 * sin(p.y * 4. + uTime * .3)) - .2 * vnoise(vec3(p * 3., uTime * .2))));
-  // the relief: ridges where the streams meet, a slow swell, the gold a little proud
-  float seam = exp(-pow((m - .59) / .06, 2.));
+  float down = smoothstep(.55, -.6, p.y);
+  // everything runs down (sample higher up as the wall flows); the folds keep turning slowly on top of that
+  vec2 q = vec2(p.x * 2., p.y * .8 + uFlow);
+  float tm = uTime * .01;
+  vec2 w = vec2(fbm3(vec3(q * vec2(1., .45), 1.3 + tm)), fbm3(vec3(q * vec2(1., .45) + 4.1, 2.7 - tm)));
+  vec2 s = q + (w - .5) * vec2(1.6, .7) * mix(.5, 2.1, down);
+  // lower down, the streams are pulled round each other
+  s += down * .35 * vec2(sin(s.y * 2.1 + tm * 3.), cos(s.x * 1.7 - tm * 2.));
+  float f = vnoise(vec3(s * vec2(1.3, .7), 7. + tm)) + .4 * vnoise(vec3(s * vec2(2.7, 1.3), 3.));
+  // streams of the second metal: broad at the top, finer and finer as they mix
+  float m = .5 + .5 * sin(f * mix(8., 26., down) + s.x * 2.);
+  float soft = mix(.03, .24, down * down);
+  float g = smoothstep(.58 - soft, .58 + soft, m);
+  // the drop's pour: gold coming down from the top, its front in fingers
+  float gy = 1. - uGush * .11 + .28 * vnoise(vec3(p.x * 7., 1.7, uGush * .1)) + .12 * sin(p.x * 23. + 1.3);
+  if (uGush < 18.) g = max(g, smoothstep(gy - .03, gy + .03, p.y) * smoothstep(.6, .4, abs(p.x + .15 * sin(p.y * 4. + uTime * .1)) - .2 * vnoise(vec3(p * 3., uTime * .06))) * (1. - smoothstep(12., 18., uGush)));
+  // the relief: ridges where the streams meet (fading as they blend), a slow swell, the gold a little proud
+  float seam = exp(-pow((m - .58) / (.06 + soft), 2.)) * (1. - .6 * down);
   float h = .5 * f + .25 * g + .35 * seam;
   return vec2(h, g);
 }
@@ -85,7 +93,7 @@ float drips(vec2 p) {
   float h = hash12(vec2(col, 4.4));
   if (h < .55) return 0.;
   float x = p.x - (col + .5) * C - (h - .7) * .05;
-  float speed = .05 + .08 * hash12(vec2(col, 9.1));
+  float speed = .012 + .02 * hash12(vec2(col, 9.1));
   float y = 1.2 - fract(uTime * speed + h) * 2.6;
   float dy = p.y - y;
   // a head and a thin trail above it
