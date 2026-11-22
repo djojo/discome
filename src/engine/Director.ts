@@ -9,7 +9,7 @@ export interface DirectorPlan {
   weight: number;
   /** The plan's own settings: variations stay around them instead of drifting away. */
   defaults: ParamValues;
-  vary?: { palettes?: string[]; ranges?: Record<string, [number, number]> };
+  vary?: { palettes?: string[]; ranges?: Record<string, [number, number]>; choices?: Record<string, string[]> };
 }
 import { paletteOptions } from "@/scenes/palettes";
 import type { TransitionId, TransitionSpec } from "./transitions";
@@ -349,8 +349,9 @@ export class Director {
 }
 
 /**
- * A variation that stays in the plan's style: a palette among the plan's (or the world's), and a couple of
- * sliders moved within the plan's ranges, or close to the plan's own value (it never drifts away over time).
+ * A variation that stays in the plan's style: a palette among the plan's (or the world's), the plan's choices
+ * (another head…), and a couple of sliders moved within the plan's ranges, or close to the plan's own value
+ * (it never drifts away over time).
  */
 function mutate(plan: DirectorPlan, current: ParamValues | undefined, palettes?: string[]): ParamValues {
   const out: ParamValues = { ...(current ?? plan.defaults) };
@@ -359,6 +360,11 @@ function mutate(plan: DirectorPlan, current: ParamValues | undefined, palettes?:
   if (def.params.some((p) => p.key === "palette") && allowed.length > 1) {
     const others = allowed.filter((v) => v !== out.palette);
     out.palette = others.length ? pickOne(others) : allowed[0];
+  }
+  // Choices (a head among a few…): a different one on every return
+  for (const [key, options] of Object.entries(plan.vary?.choices ?? {})) {
+    const others = options.filter((v) => v !== out[key]);
+    if (others.length) out[key] = pickOne(others);
   }
   const ranges = def.params.filter((p) => p.type === "range" && p.key !== "speed" && p.key !== "dynamics");
   for (let n = 0; n < 2 && ranges.length; n++) {

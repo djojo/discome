@@ -10,6 +10,7 @@ import { dancer } from "./3d/humanoid/dancer";
 import { android } from "./3d/humanoid/android";
 import { particleBody } from "./3d/humanoid/particleBody";
 import { porcelain } from "./art/porcelain";
+import { metamorphosis } from "./art/metamorphosis";
 import { topoHead, profileHead, halftoneHead } from "./art/faces";
 import { mercury } from "./art/mercury";
 import { cathedral } from "./art/cathedral";
@@ -30,6 +31,7 @@ import { signal } from "./art/signal";
 export const SCENES: SceneDef[] = [
   // Art direction (worlds)
   porcelain,
+  metamorphosis,
   topoHead,
   profileHead,
   halftoneHead,

@@ -26,8 +26,11 @@ export interface Shot {
   params?: ParamValues;
   /** Overrides the scene's own energy for the director. */
   role?: Role;
-  /** Bounds of the director's variation for this plan (palettes, slider ranges). */
-  vary?: { palettes?: string[]; ranges?: Record<string, [number, number]> };
+  /**
+   * Bounds of the director's variation for this plan: palettes, slider ranges, and choices for select params
+   * (`{ head: ["tigre", "loup"] }`: another head on every return).
+   */
+  vary?: { palettes?: string[]; ranges?: Record<string, [number, number]>; choices?: Record<string, string[]> };
   /** Backgrounds only: recolour into the world's palette (default true). */
   tint?: boolean;
 }

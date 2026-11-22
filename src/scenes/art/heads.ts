@@ -181,10 +181,12 @@ float bakedHead(highp sampler3D tex, vec3 bmin, vec3 bsize, vec3 p) {
   return d + length((uvw - c) * bsize);
 }
 float headColumn(vec3 p) { return sdCapsule(p, vec3(0., -.55, -.12), vec3(0., -1.6, -.2), .23); }
-float headD(vec3 p) {
-  if (uHeadOn < .5) return sdHead(p);
-  return smin(bakedHead(uHeadTex, uHeadMin, uHeadSize, p), headColumn(p), .15);
+/** A head slot: the sculpted head (on = 0) or a baked one on the same column. */
+float headSlot(highp sampler3D tex, float on, vec3 bmin, vec3 bsize, vec3 p) {
+  if (on < .5) return sdHead(p);
+  return smin(bakedHead(tex, bmin, bsize, p), headColumn(p), .15);
 }
+float headD(vec3 p) { return headSlot(uHeadTex, uHeadOn, uHeadMin, uHeadSize, p); }
 float headBound(vec3 p) {
   if (uHeadOn < .5) return sdEllipsoid(p - vec3(0., -.05, -.02), vec3(.56, .95, .75));
   return min(sdBox(p - uHeadMin - uHeadSize * .5, uHeadSize * .5), headColumn(p));

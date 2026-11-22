@@ -22,6 +22,7 @@ import {
 } from "./settings";
 import { NEUTRAL_FX, type FxSettings } from "@/engine/fx";
 import { findPlan, lookBackgrounds, lookPlans, planDefaults, sceneForKey } from "@/looks";
+import { preloadHeads } from "@/scenes/art/heads";
 import { getPalette, ink } from "@/scenes/palettes";
 import { preloadDancer } from "@/scenes/3d/humanoid/dancerAsset";
 import type { DirectorContext } from "@/engine/Director";
@@ -177,6 +178,10 @@ export default function Visualizer() {
           palettes: look.palettes,
           transitions: look.transitions,
         };
+        // the world's heads load now, so none pops in late when its plan comes up
+        preloadHeads(
+          lookPlans(look).flatMap((p) => [planDefaults(p).head, s.params[p.key]?.head, ...(p.shot.vary?.choices?.head ?? [])]),
+        );
         bgShots = lookBackgrounds(look);
         bgInk = ink(getPalette(look.palettes[0]));
       }
