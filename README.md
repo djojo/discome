@@ -13,7 +13,8 @@ npm run dev   # http://localhost:3000
 - **Horloge musicale** : BPM, temps, mesures et phrases de 8 mesures, avec tap tempo. Les sections (groove → breakdown → montée → drop) sont détectées automatiquement.
 - **Mondes** : Porcelaine, Signal, Mercure, Cathédrale, Monolithe, Canyon, Arcanes, Chair, et Classique (les premières scènes).
   - Un monde est une direction artistique complète : une sélection de plans (une scène du catalogue et ses réglages pour ce monde), des palettes, des post-effets, des transitions et un rythme de réalisation.
-  - Une même scène est réutilisée d'un monde à l'autre avec d'autres réglages : Cathédrale en rouge ou en blanc, Profil en ivoire ou en argent…
+  - **Les plans** : une même scène peut apparaître plusieurs fois, dans un monde ou d'un monde à l'autre, avec d'autres réglages (Porcelaine « Coquille » et « Éclats », Cathédrale « Rouge » et « Blanche », Profil chrome ou béton…). Chaque plan a sa propre instance, son rôle pour le réalisateur (calme, montée, drop) et ses limites de variation.
+  - Tes retouches sont gardées par plan et par monde ; « Réinitialiser le plan » revient aux réglages du monde.
   - **Enchaîner les mondes** : ils se succèdent, au breakdown (et au moins toutes les 8 phrases) ou toutes les 4 ou 8 phrases. Le passage se fait par le noir, et les effets glissent vers ceux du nouveau monde.
 - **Vol** : Monolithe, Cathédrale et Canyon sont des travellings. Leur vitesse suit la structure du morceau, avec de l'inertie :
 
@@ -46,9 +47,9 @@ npm run dev   # http://localhost:3000
 | Scène | Ce qu'on voit | Au drop |
 | --- | --- | --- |
 | Porcelaine | Visage de céramique immobile, fissures d'or kintsugi qui se propagent sur plusieurs minutes, format 2.39 | La tête s'ouvre en coquille ou se brise en éclats flottants (en alternance) sur une agate, une géode et un cœur fractal ; elle se referme au breakdown |
-| Topographie | Le visage dessiné uniquement par des lignes de niveau | Les lignes basculent en profondeur |
-| Profil | Seul le contour du profil, éclairé à contre-jour | Un contour d'accent s'allume |
-| Trame | Visage en demi-teinte de sérigraphie | Inversion |
+| Topographie | Le visage dessiné par des lignes de niveau qui changent lentement d'orientation ; une ligne de lumière le traverse à chaque kick | Les lignes basculent en profondeur |
+| Profil | Le profil en contre-jour, brume et rais de lumière ; le contour s'allume en vague à chaque kick | Un contour d'accent s'allume |
+| Trame | Trois trames de couleur, chacune éclairée d'un côté, qui tournent lentement | Inversion |
 | Mercure | Masque chromé immobile dans un bain de métal liquide ; chaque kick lance un anneau | Une lame de lumière balaie le chrome |
 | Cathédrale | Nef d'arches lumineuses, sol miroir, brume ; la forme des arches change à chaque phrase. Une silhouette encapuchonnée au bout de la nef ne s'approche que pendant les montées | Vitesse lumière : les arches s'étirent en traînées, la silhouette disparaît |
 | Monolithe | Avenue brutaliste en béton banché, soleil rasant, poussière, monolithe à l'horizon | Décollage au-dessus des toits, le soleil change de côté |
@@ -59,8 +60,8 @@ npm run dev   # http://localhost:3000
 | Les Trois | Moines rouge, bleu et or traversés par un rayon prismatique (une bande de couleur = une bande de fréquences) | Le rayon s'élargit, les robes s'embrasent |
 | Le Portail | Lac d'anneaux arc-en-ciel, colonne de lumière, minuscule silhouette | Le portail s'ouvre en vortex |
 | Grimoire | HUD de jeu ésotérique (2D) : chapitre, glyphes, orbites, texte japonais, vraies données du morceau | Le chapitre change, l'avertissement clignote |
-| Chair | Matière organique translucide qui respire lentement ; la lumière intérieure bat au kick | La lumière éclôt de l'intérieur |
-| Signal | Données en deux couleurs : codes-barres, balayage, onde | Inversion |
+| Chair | Créature entre l'anémone et le corail, tentacules lents, veines bioluminescentes où une impulsion monte à chaque kick ; variante Abysses | Spores lumineuses |
+| Signal | Données sur une grille suisse : spectrogramme qui défile, grands chiffres, code-barres, onde ; la mise en page change à chaque phrase | Inversion |
 
 **Classiques**, recolorées par les palettes des mondes : Halo, Kaléidoscope, Orbe, Tunnel, Nébuleuse, Spectro-terrain, Échos, Danseuse, Androïde, Corps de particules.
 
