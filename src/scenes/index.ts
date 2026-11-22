@@ -13,6 +13,7 @@ import { porcelain } from "./art/porcelain";
 import { metamorphosis } from "./art/metamorphosis";
 import { faithful } from "./art/faithful";
 import { flux } from "./art/flux";
+import { panopticon } from "./art/panopticon";
 import { topoHead, profileHead, halftoneHead } from "./art/faces";
 import { mercury } from "./art/mercury";
 import { cathedral } from "./art/cathedral";
@@ -41,6 +42,7 @@ export const SCENES: SceneDef[] = [
   cathedral,
   faithful,
   monolith,
+  panopticon,
   canyonGorge,
   canyonMesas,
   arcaneArchitect,
