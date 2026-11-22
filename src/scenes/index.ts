@@ -30,6 +30,7 @@ import { arcaneRoad } from "./art/road";
 import { beads } from "./art/beads";
 import { wave } from "./art/wave";
 import { blend } from "./art/blend";
+import { morphose } from "./art/morphose";
 import { grimoire } from "./art/grimoire";
 import { flesh } from "./art/flesh";
 import { signal } from "./art/signal";
@@ -63,6 +64,7 @@ export const SCENES: SceneDef[] = [
   beads,
   wave,
   blend,
+  morphose,
   grimoire,
   flesh,
   signal,
