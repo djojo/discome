@@ -41,6 +41,8 @@ export const PALETTES: Record<string, Palette> = {
   cobalt: P("Cobalt", "#03050C", ["#3E6BFF", "#9DB4FF", "#FFFFFF"]),
   sodium: P("Sodium", "#0A0603", ["#FF8A3D", "#FFC58F", "#FFF1E0"]),
   bone: P("Os", "#0E0D0C", ["#E8E2D6", "#A39C90"]),
+  desert: P("Désert", "#140A22", ["#E9A86C", "#C4532F", "#7B3FB0", "#FF3D8B"]),
+  peyote: P("Peyote", "#060A20", ["#3FD9C8", "#7A4CFF", "#FF8A1F"]),
   // ---- legacy, vivid (kept for the "Classique" world)
   acid: P("Acide", "#000000", ["#B6FF00", "#FF00E1", "#00F0FF"], "vivid"),
   neon: P("Néon", "#05000A", ["#FF2A6D", "#D300C5", "#05D9E8"], "vivid"),

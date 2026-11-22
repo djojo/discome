@@ -14,6 +14,7 @@ import { topoHead, profileHead, halftoneHead } from "./art/faces";
 import { mercury } from "./art/mercury";
 import { cathedral } from "./art/cathedral";
 import { monolith } from "./art/monolith";
+import { canyonGorge, canyonMesas } from "./art/canyon";
 import { flesh } from "./art/flesh";
 import { signal } from "./art/signal";
 
@@ -30,6 +31,8 @@ export const SCENES: SceneDef[] = [
   mercury,
   cathedral,
   monolith,
+  canyonGorge,
+  canyonMesas,
   flesh,
   signal,
   // Classics, recoloured by the worlds' palettes

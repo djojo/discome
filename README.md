@@ -1,6 +1,6 @@
 # Discome
 
-Visualiseur audio psychédélique dans le navigateur, pensé comme un VJ automatique. Une entrée audio est analysée en temps réel ; elle pilote 10 scènes (2D, shader, 3D, humanoïdes), un réalisateur qui enchaîne les scènes en suivant la structure du morceau, et des esthétiques prêtes à l'emploi.
+Visualiseur audio psychédélique dans le navigateur, pensé comme un VJ automatique. Une entrée audio est analysée en temps réel ; elle pilote une vingtaine de scènes (2D, shader, 3D, humanoïdes, raymarching), un réalisateur qui enchaîne les scènes en suivant la structure du morceau, et des esthétiques prêtes à l'emploi.
 
 ```bash
 npm install
@@ -11,10 +11,22 @@ npm run dev   # http://localhost:3000
 
 - **Sources** : micro / entrée, son d'un onglet, fichier (glisser-déposer), démo (un morceau de 32 mesures synthétisé en direct).
 - **Horloge musicale** : BPM, temps, mesures et phrases de 8 mesures, avec tap tempo. Les sections (groove → breakdown → montée → drop) sont détectées automatiquement.
-- **Mondes** : Porcelaine, Signal, Mercure, Cathédrale, Monolithe, Chair, et Classique (les premières scènes).
+- **Mondes** : Porcelaine, Signal, Mercure, Cathédrale, Monolithe, Canyon, Chair, et Classique (les premières scènes).
   - Un monde est une direction artistique complète : une sélection de plans (une scène du catalogue et ses réglages pour ce monde), des palettes, des post-effets, des transitions et un rythme de réalisation.
   - Une même scène est réutilisée d'un monde à l'autre avec d'autres réglages : Cathédrale en rouge ou en blanc, Profil en ivoire ou en argent…
   - **Enchaîner les mondes** : ils se succèdent, au breakdown (et au moins toutes les 8 phrases) ou toutes les 4 ou 8 phrases. Le passage se fait par le noir, et les effets glissent vers ceux du nouveau monde.
+- **Vol** : Monolithe, Cathédrale et Canyon sont des travellings. Leur vitesse suit la structure du morceau, avec de l'inertie :
+
+  | Moment | Vitesse |
+  | --- | --- |
+  | Groove | Croisière, une poussée à chaque kick |
+  | Breakdown | On plane (×0,25), au ras du sol |
+  | Montée | Accélération jusqu'à ×3, la caméra s'élève |
+  | Drop | Boost ×6 et décollage, puis retour à ×1,8 en deux mesures |
+
+  - À chaque phrase, une figure : croisière, slalom, piqué, remontée, tonneau.
+  - Le champ de vision s'ouvre avec la vitesse, et le compositeur ajoute un flou de vitesse radial.
+  - Réglages par scène : « Vitesse de croisière » et « Dynamique » (0 = vitesse constante).
 - **Fonds** : les premières scènes (Nébuleuse, Halo, Échos, Tunnel, Orbe, Spectro-terrain, Kaléidoscope, Corps de particules) servent de fonds aux mondes.
   - Elles sont rendues en basse résolution, floutées et teintées dans la palette du monde.
   - Elles n'apparaissent que dans les zones sombres de la scène principale, jamais à l'intérieur de son sujet : les scènes de visages et d'architecture transmettent leur silhouette au compositeur.
@@ -25,7 +37,7 @@ npm run dev   # http://localhost:3000
 - **Réalisateur** (Manuel / Chill / Club / Rave) : fondu au breakdown, tension pendant la montée, impact et rafale de coupes au drop, variation des réglages à chaque coupe.
 - **Transitions** : cut, fondu, punch, glitch, volet lumineux, iris, flash blanc, passage au noir.
 - **Calque** : une 2e scène superposée, avec mode de fusion, opacité et option « pulse au beat ».
-- **Post-FX** : aberration chromatique, traînées, scanlines, CRT, VHS, grain, étalonnage, miroir, postérisation, strobo (option « Limiter les flashs »).
+- **Post-FX** : aberration chromatique, traînées, flou de vitesse, scanlines, CRT, VHS, grain, étalonnage, miroir, postérisation, strobo (option « Limiter les flashs »).
 
 ## Scènes
 
@@ -38,8 +50,10 @@ npm run dev   # http://localhost:3000
 | Profil | Seul le contour du profil, éclairé à contre-jour | Un contour d'accent s'allume |
 | Trame | Visage en demi-teinte de sérigraphie | Inversion |
 | Mercure | Masque chromé qui émerge d'un bain de métal liquide | Le bain se soulève |
-| Cathédrale | Nef d'arches lumineuses, sol miroir, brume | Toute la nef s'allume |
-| Monolithe | Tours de béton brutalistes, soleil rasant | Le soleil change de côté |
+| Cathédrale | Nef d'arches lumineuses, sol miroir, brume ; la forme des arches change à chaque phrase | Vitesse lumière : les arches s'étirent en traînées |
+| Monolithe | Avenue brutaliste en béton banché, soleil rasant, poussière, monolithe à l'horizon | Décollage au-dessus des toits, le soleil change de côté |
+| Gorge | Vol dans une gorge étroite aux parois ondulées, strates colorées, rais de lumière | On sort de la fente, les couleurs des strates basculent |
+| Mesas | Vol au ras d'une rivière miroir entre des falaises en gradins, soleil en anneau | On monte au-dessus des mesas |
 | Chair | Matière organique translucide et nacrée | Contraction |
 | Signal | Données en deux couleurs : codes-barres, balayage, onde | Inversion |
 
@@ -74,6 +88,7 @@ src/
   scenes/
     types.ts             Contrat d'une scène + paramètres déclaratifs
     art/                 Scènes de direction artistique (visages, Mercure, Cathédrale…)
+    art/flight.ts        Vol partagé des travellings (vitesse selon la structure, figures, roulis)
     2d/  shader/  3d/    Scènes classiques ; 3d/humanoid/ : danseuse, androïde, particules
   components/            Visualizer (boucle, sources, HUD), ControlPanel, settings
 public/models/           Michelle.glb (personnage Mixamo des exemples three.js)
