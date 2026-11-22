@@ -98,7 +98,7 @@ export const LOOKS: Look[] = [
       { id: "flux", weight: 2, role: "build", params: { palette: "mono" } },
       { id: "downpour", weight: 2, role: "after", params: { palette: "mono" } },
       { id: "halftone-head", label: "Fine", weight: 2, role: "drop", params: { palette: "mono", cells: 90 } },
-      { id: "grimoire", weight: 1, role: "build", params: { palette: "mono" } },
+      { id: "race", weight: 2, role: "build", params: { palette: "mono" } },
     ],
     backgrounds: [
       { id: "halo", weight: 2, params: { palette: "mono", trail: 0.3, symmetry: 2 } },
@@ -359,7 +359,7 @@ export const LOOKS: Look[] = [
     description: "Les premières scènes et leurs couleurs vives, hors rotation des mondes.",
     swatch: ["#ff3cac", "#a855f7", "#22d3ee"],
     palettes: ["acid", "neon", "sunset", "ocean", "ice", "fire", "chrome", "vhs"],
-    scenes: SCENES.filter((s) => !["porcelain", "metamorphosis", "faithful", "flux", "panopticon", "warehouse", "downpour", "topo-head", "profile-head", "halftone-head", "mercury", "cathedral", "monolith", "canyon-gorge", "canyon-mesas", "arcane-architect", "arcane-nomad", "arcane-prism", "arcane-portal", "grimoire", "flesh", "signal"].includes(s.id)).map((s) => ({ id: s.id, weight: 1 })),
+    scenes: SCENES.filter((s) => !["porcelain", "metamorphosis", "faithful", "flux", "panopticon", "warehouse", "downpour", "race", "topo-head", "profile-head", "halftone-head", "mercury", "cathedral", "monolith", "canyon-gorge", "canyon-mesas", "arcane-architect", "arcane-nomad", "arcane-prism", "arcane-portal", "grimoire", "flesh", "signal"].includes(s.id)).map((s) => ({ id: s.id, weight: 1 })),
     fx: {},
     classic: true,
   },

@@ -16,6 +16,7 @@ import { flux } from "./art/flux";
 import { panopticon } from "./art/panopticon";
 import { warehouse } from "./art/warehouse";
 import { downpour } from "./art/downpour";
+import { race } from "./art/race";
 import { topoHead, profileHead, halftoneHead } from "./art/faces";
 import { mercury } from "./art/mercury";
 import { cathedral } from "./art/cathedral";
@@ -47,6 +48,7 @@ export const SCENES: SceneDef[] = [
   monolith,
   panopticon,
   downpour,
+  race,
   canyonGorge,
   canyonMesas,
   arcaneArchitect,
