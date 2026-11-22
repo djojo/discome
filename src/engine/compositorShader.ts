@@ -141,6 +141,22 @@ vec3 transition(vec2 uv) {
     return mix(a, b, inside) + vec3(1.0, 0.9, 0.8) * (rim * 1.4 + crack * 0.8);
   }
 
+  if (uTransition == 9) {
+    // Screen: a small glowing rectangle, a phone, lights up in the middle of A; we dive into it and come out
+    // in B (we always end up inside a screen)
+    float aspect = uRes.x / uRes.y;
+    vec3 a = A(0.5 + (uv - 0.5) / (1.0 + 4.0 * p * p));
+    float g = smoothstep(0.15, 1.0, p);
+    vec2 hs = mix(vec2(0.05, 0.09), vec2(0.5 * aspect, 0.5) + 0.02, g * g);
+    float r = mix(0.015, 0.0, g);
+    vec2 d = abs((uv - 0.5) * vec2(aspect, 1.0)) - hs + r;
+    float box = length(max(d, 0.0)) + min(max(d.x, d.y), 0.0) - r;
+    float inside = 1.0 - smoothstep(-0.002, 0.002, box);
+    vec3 b = B(0.5 + (uv - 0.5) * (0.5 / hs.y));
+    float glow = (exp(-abs(box) * 120.0) + exp(-max(box, 0.0) * 18.0) * 0.25) * (1.0 - g) * smoothstep(0.0, 0.12, p);
+    return mix(a * (1.0 - 0.6 * smoothstep(0.0, 0.4, p)), b, inside) + vec3(0.85, 0.92, 1.0) * glow;
+  }
+
   float w = 1.0 - abs(p * 2.0 - 1.0);
   vec3 base = p < 0.5 ? A(uv) : B(uv);
   // Dip: A fades to black, B rises out of it (used between worlds)
