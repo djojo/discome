@@ -1,18 +1,33 @@
 import { NEUTRAL_FX, type FxSettings } from "@/engine/fx";
 import type { DirectorMode } from "@/engine/Director";
 import type { BlendModeId, TransitionId } from "@/engine/transitions";
-import { SCENES, type ParamValues } from "@/scenes";
+import { defaultParams, SCENES, sceneById, type Energy, type ParamValues, type SceneDef } from "@/scenes";
 
 /**
  * A world ("monde") is a complete art direction: which shots the director uses (a shot = a scene from
  * the catalogue + its settings for this world), palettes, post-effects, transitions and pacing.
  * The same scene shows up in several worlds with different settings (a red or a white Cathedral…).
  */
-/** A shot: a scene of the catalogue with its settings for this world. */
+/** What a plan is for: the director takes calm plans in calm passages and drop plans on drops. */
+export type Role = "calm" | "build" | "drop";
+
+/**
+ * A plan ("shot"): a scene of the catalogue with its settings for this world. The same scene may appear
+ * several times in a world under different keys (Porcelaine « Coquille » and « Éclats »).
+ */
 export interface Shot {
+  /** Scene id. */
   id: string;
+  /** Unique within the world (defaults to the scene id). */
+  key?: string;
+  /** Shown after the scene name: « Porcelaine · Éclats ». */
+  label?: string;
   weight?: number;
   params?: ParamValues;
+  /** Overrides the scene's own energy for the director. */
+  role?: Role;
+  /** Bounds of the director's variation for this plan (palettes, slider ranges). */
+  vary?: { palettes?: string[]; ranges?: Record<string, [number, number]> };
   /** Backgrounds only: recolour into the world's palette (default true). */
   tint?: boolean;
 }
@@ -230,6 +245,61 @@ export const lookFx = (look: Look): FxSettings => ({ ...NEUTRAL_FX, ...look.fx }
 export const lookScenes = (look: Look) => look.scenes.filter((s) => SCENES.some((d) => d.id === s.id));
 
 export const lookBackgrounds = (look: Look) => (look.backgrounds ?? []).filter((s) => SCENES.some((d) => d.id === s.id));
+
+/** A world's plan, resolved: its key ("world:plan"), its scene, its name and its energy for the director. */
+export interface Plan {
+  key: string;
+  shot: Shot;
+  look: Look;
+  scene: SceneDef;
+  label: string;
+  energy: Energy;
+}
+
+const ROLE_ENERGY: Record<Role, Energy> = { calm: "calm", build: "medium", drop: "intense" };
+
+export const shotKey = (s: Shot) => s.key ?? s.id;
+
+export const planKey = (look: Look, s: Shot) => `${look.id}:${shotKey(s)}`;
+
+export function lookPlans(look: Look): Plan[] {
+  return lookScenes(look).map((shot) => {
+    const scene = sceneById(shot.id);
+    return {
+      key: planKey(look, shot),
+      shot,
+      look,
+      scene,
+      label: shot.label ? `${scene.name} · ${shot.label}` : scene.name,
+      energy: shot.role ? ROLE_ENERGY[shot.role] : scene.energy,
+    };
+  });
+}
+
+/** The world plan behind a key "world:plan" (null for a plain scene id or an unknown plan). */
+export function findPlan(key: string, looks: Look[]): Plan | null {
+  const i = key.indexOf(":");
+  if (i < 0) return null;
+  const look = looks.find((l) => l.id === key.slice(0, i));
+  return look ? (lookPlans(look).find((p) => p.key === key) ?? null) : null;
+}
+
+/** Scene behind a key: a world plan or a plain scene id of the catalogue. */
+export function sceneForKey(key: string, looks: Look[]): SceneDef | null {
+  return findPlan(key, looks)?.scene ?? SCENES.find((s) => s.id === key) ?? null;
+}
+
+/** Signature of a plan's definition: when a world changes a plan, saved tweaks of that plan are dropped. */
+export const PLAN_SIGNATURE = "__plan";
+
+/** A plan's starting settings: the scene's defaults, the world's settings for it, a palette of the world. */
+export function planDefaults(plan: Plan): ParamValues {
+  const p: ParamValues = { ...defaultParams(plan.scene), ...(plan.shot.params ?? {}) };
+  const palettes = plan.look.palettes;
+  if (palettes.length && !palettes.includes(String(p.palette))) p.palette = palettes[0];
+  p[PLAN_SIGNATURE] = JSON.stringify(plan.shot.params ?? {});
+  return p;
+}
 
 /** Scenes that some world lays as its layer: they go away when leaving that world. */
 export const WORLD_LAYER_IDS = new Set(LOOKS.flatMap((l) => (l.layer ? [l.layer.id] : [])));

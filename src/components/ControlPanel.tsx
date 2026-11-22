@@ -7,7 +7,7 @@ import { BLEND_MODES, TRANSITIONS, type BlendModeId, type TransitionId } from "@
 import { DIRECTOR_MODES } from "@/engine/Director";
 import { FX_SLIDERS, MIRROR_OPTIONS, STROBE_OPTIONS, type FxSettings, type StrobeMode } from "@/engine/fx";
 import { allLooks, findLook, WORLD_RULES, type Quality, type Settings, type WorldRule } from "./settings";
-import { lookBackgrounds, lookScenes } from "@/looks";
+import { lookBackgrounds, lookPlans, type Plan } from "@/looks";
 
 export const SOURCE_LABELS: Record<SourceKind, string> = {
   mic: "Micro / entrée",
@@ -18,6 +18,8 @@ export const SOURCE_LABELS: Record<SourceKind, string> = {
 
 interface Props {
   scene: SceneDef;
+  /** Name of what is on screen: « Porcelaine · Éclats » for a world plan, the scene's name otherwise. */
+  planLabel: string;
   params: ParamValues;
   settings: Settings;
   source: SourceKind | null;
@@ -59,8 +61,23 @@ function SceneButton({
   );
 }
 
+/** A plan of the current world: the scene with this world's settings. */
+function PlanButton({ p, active, hotkey, onScene }: { p: Plan; active: boolean; hotkey?: number; onScene: (id: string) => void }) {
+  return (
+    <button
+      className={`scene-card ${active ? "scene-card-active" : ""}`}
+      onClick={() => onScene(p.key)}
+      title={hotkey ? `${p.scene.description} (touche ${hotkey})` : p.scene.description}
+    >
+      <span className="scene-name">{p.label}</span>
+      <span className={`tag tag-${p.scene.tag.toLowerCase()}`}>{p.scene.tag}</span>
+    </button>
+  );
+}
+
 export function ControlPanel({
   scene,
+  planLabel,
   params,
   settings,
   source,
@@ -79,9 +96,8 @@ export function ControlPanel({
   onResetFx,
 }: Props) {
   const mode = DIRECTOR_MODES.find((m) => m.id === settings.director) ?? DIRECTOR_MODES[0];
-  const worldIds = lookScenes(findLook(settings)).map((e) => e.id);
-  const worldScenes = worldIds.map((id) => SCENES.find((x) => x.id === id)!).filter(Boolean);
-  const otherScenes = SCENES.filter((x) => !worldIds.includes(x.id));
+  const plans = lookPlans(findLook(settings));
+  const otherScenes = SCENES.filter((x) => !plans.some((p) => p.scene.id === x.id));
   const worldBackgrounds = lookBackgrounds(findLook(settings))
     .map((e) => SCENES.find((x) => x.id === e.id)!)
     .filter(Boolean);
@@ -205,8 +221,8 @@ export function ControlPanel({
       <section>
         <h2>Plans de ce monde</h2>
         <div className="scene-grid">
-          {worldScenes.map((s, i) => (
-            <SceneButton key={s.id} s={s} active={s.id === scene.id} hotkey={i < 9 ? i + 1 : undefined} onScene={onScene} />
+          {plans.map((p, i) => (
+            <PlanButton key={p.key} p={p} active={p.key === settings.sceneId} hotkey={i < 9 ? i + 1 : undefined} onScene={onScene} />
           ))}
         </div>
         <p className="hint">{scene.description}</p>
@@ -214,7 +230,7 @@ export function ControlPanel({
           <summary className="link">Tout le catalogue ({SCENES.length} scènes)</summary>
           <div className="scene-grid">
             {otherScenes.map((s) => (
-              <SceneButton key={s.id} s={s} active={s.id === scene.id} onScene={onScene} />
+              <SceneButton key={s.id} s={s} active={s.id === settings.sceneId} onScene={onScene} />
             ))}
           </div>
         </details>
@@ -222,9 +238,9 @@ export function ControlPanel({
 
       <section>
         <div className="section-head">
-          <h2>Réglages · {scene.name}</h2>
-          <button className="link" onClick={onResetParams}>
-            Réinitialiser
+          <h2>Réglages · {planLabel}</h2>
+          <button className="link" onClick={onResetParams} title="Revenir aux réglages de ce plan dans ce monde">
+            Réinitialiser le plan
           </button>
         </div>
         {scene.params.map((def) => (

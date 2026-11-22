@@ -8,18 +8,20 @@ import { Director } from "@/engine/Director";
 import type { Section } from "@/lib/audio/MusicAnalyzer";
 import { ControlPanel, SOURCE_LABELS } from "./ControlPanel";
 import {
+  allLooks,
   applyLook,
   enterWorld,
   findLook,
   loadSettings,
   nextWorldId,
   QUALITY_DPR,
+  resetPlan,
   saveCurrentLook,
   saveSettings,
   type Settings,
 } from "./settings";
 import { NEUTRAL_FX, type FxSettings } from "@/engine/fx";
-import { lookBackgrounds, lookScenes } from "@/looks";
+import { findPlan, lookBackgrounds, lookPlans, planDefaults, sceneForKey } from "@/looks";
 import { getPalette, ink } from "@/scenes/palettes";
 import { preloadDancer } from "@/scenes/3d/humanoid/dancerAsset";
 import type { DirectorContext } from "@/engine/Director";
@@ -42,11 +44,14 @@ function describeError(e: unknown): string {
   return e instanceof Error ? e.message : "Impossible de démarrer l'audio.";
 }
 
-/** Scenes of the current world (arrows and digits move through them). */
+/** Plans of the current world (arrows and digits move through them). */
 function worldOrder(s: Settings) {
-  const own = lookScenes(findLook(s)).map((e) => e.id);
+  const own = lookPlans(findLook(s)).map((p) => p.key);
   return own.length ? own : SCENES.map((x) => x.id);
 }
+
+/** Scene behind a plan key (or a plain scene id). */
+const sceneOf = (s: Settings, key: string) => sceneForKey(key, allLooks(s)) ?? sceneById(key);
 
 export default function Visualizer() {
   const [engine] = useState(() => new AudioEngine());
@@ -72,8 +77,9 @@ export default function Visualizer() {
   const settingsRef = useRef(settings);
   const overPanelRef = useRef(false);
 
-  const scene = sceneById(settings.sceneId);
-  const params = settings.params[scene.id] ?? defaultParams(scene);
+  const scene = sceneOf(settings, settings.sceneId);
+  const params = settings.params[settings.sceneId] ?? defaultParams(scene);
+  const planLabel = findPlan(settings.sceneId, allLooks(settings))?.label ?? scene.name;
 
   useEffect(() => {
     settingsRef.current = settings;
@@ -96,7 +102,7 @@ export default function Visualizer() {
   // ---------------------------------------------------------------- render loop
   useEffect(() => {
     const stage = stageRef.current!;
-    const compositor = new Compositor(canvasRef.current!);
+    const compositor = new Compositor(canvasRef.current!, (key) => sceneOf(settingsRef.current, key));
     let viewport: Viewport = { width: 1, height: 1, dpr: 1 };
     let raf = 0;
     let last = performance.now();
@@ -150,7 +156,7 @@ export default function Visualizer() {
     const fxShown: FxSettings = { ...NEUTRAL_FX, ...settingsRef.current.fx };
     // Director pool derived from the active look, rebuilt only when the look changes
     let lookKey = "";
-    let lookCtx: Pick<DirectorContext, "scenes" | "weights" | "palettes" | "transitions"> = { scenes: SCENES };
+    let lookCtx: Pick<DirectorContext, "plans" | "palettes" | "transitions"> = { plans: [] };
     let bgShots: { id: string; weight?: number }[] = [];
     let bgInk: [number, number, number] = [1, 1, 1];
     let firstBg = true;
@@ -159,10 +165,15 @@ export default function Visualizer() {
       if (key !== lookKey) {
         lookKey = key;
         const look = findLook(s);
-        const pool = lookScenes(look);
         lookCtx = {
-          scenes: pool.length ? pool.map((e) => sceneById(e.id)) : SCENES,
-          weights: Object.fromEntries(pool.map((e) => [e.id, e.weight ?? 1])),
+          plans: lookPlans(look).map((p) => ({
+            key: p.key,
+            scene: p.scene,
+            energy: p.energy,
+            weight: p.shot.weight ?? 1,
+            defaults: planDefaults(p),
+            vary: p.shot.vary,
+          })),
           palettes: look.palettes,
           transitions: look.transitions,
         };
@@ -211,7 +222,7 @@ export default function Visualizer() {
       }
       if (decision?.preload) {
         const id = decision.preload;
-        compositor.preload(id, frame, s.params[id] ?? defaultParams(sceneById(id)));
+        compositor.preload(id, frame, s.params[id] ?? defaultParams(sceneOf(s, id)));
       }
       if (decision?.changeWorld) {
         // Next world: its look, its shots, and a dip to black between the two
@@ -262,7 +273,7 @@ export default function Visualizer() {
       lookContext(s); // keeps the background ink in sync with the world
       compositor.render(
         frame,
-        (id) => params[id] ?? defaultParams(sceneById(id)),
+        (id) => params[id] ?? defaultParams(sceneOf(s, id)),
         dt,
         s.layer,
         { tension: director.tension, fx: fxShown, safeFlash: s.safeFlash },
@@ -462,7 +473,7 @@ export default function Visualizer() {
               <button className="icon-btn" onClick={() => stepScene(-1)} aria-label="Scène précédente">
                 ‹
               </button>
-              {scene.name}
+              {planLabel}
               <button className="icon-btn" onClick={() => stepScene(1)} aria-label="Scène suivante">
                 ›
               </button>
@@ -485,6 +496,7 @@ export default function Visualizer() {
             >
               <ControlPanel
                 scene={scene}
+                planLabel={planLabel}
                 params={params}
                 settings={settings}
                 source={source}
@@ -493,12 +505,10 @@ export default function Visualizer() {
                 onParam={(key: string, value: ParamValue) =>
                   setSettings((s) => ({
                     ...s,
-                    params: { ...s.params, [scene.id]: { ...s.params[scene.id], [key]: value } },
+                    params: { ...s.params, [s.sceneId]: { ...s.params[s.sceneId], [key]: value } },
                   }))
                 }
-                onResetParams={() =>
-                  setSettings((s) => ({ ...s, params: { ...s.params, [scene.id]: defaultParams(scene) } }))
-                }
+                onResetParams={() => setSettings((s) => resetPlan(s, s.sceneId))}
                 onSettings={patchSettings}
                 onSource={(k) => startSource(k)}
                 onTap={() => engine.tap()}

@@ -1,5 +1,16 @@
 import type { AudioFrame } from "@/lib/audio/AudioEngine";
 import type { Energy, ParamValues, SceneDef } from "@/scenes";
+
+/** A plan the director may cut to: its key, scene, energy, odds and variation bounds. */
+export interface DirectorPlan {
+  key: string;
+  scene: SceneDef;
+  energy: Energy;
+  weight: number;
+  /** The plan's own settings: variations stay around them instead of drifting away. */
+  defaults: ParamValues;
+  vary?: { palettes?: string[]; ranges?: Record<string, [number, number]> };
+}
 import { paletteOptions } from "@/scenes/palettes";
 import type { TransitionId, TransitionSpec } from "./transitions";
 
@@ -76,13 +87,13 @@ export interface DirectorContext {
   mode: DirectorMode;
   locked: boolean;
   vary: boolean;
+  /** Plan key on screen. */
   currentId: string | null;
+  /** Scene id of the layer (never cut to a plan of that scene). */
   layerId: string | null;
   inTransition: boolean;
-  /** Scenes the director may use (the active look's selection). */
-  scenes: SceneDef[];
-  /** Relative odds per scene id (default 1). */
-  weights?: Record<string, number>;
+  /** Plans the director may use (the active world's). */
+  plans: DirectorPlan[];
   /** Palettes allowed by the look. */
   palettes?: string[];
   /** Look-specific transition sets. */
@@ -95,6 +106,7 @@ export interface DirectorContext {
 }
 
 export interface Decision {
+  /** Plan key to cut to. */
   sceneId?: string;
   transition?: TransitionSpec;
   /** New params for the target scene (colour / setting variation). */
@@ -169,7 +181,8 @@ export class Director {
     if (!bg?.auto || ctx.locked || !f.active || bg.shots.length < 2) return null;
     const beat = f.bpm > 0 ? 60 / f.bpm : 0.5;
     const pick = () => {
-      const pool = bg.shots.filter((s) => s.id !== bg.currentId && s.id !== ctx.currentId);
+      const onScreen = ctx.plans.find((p) => p.key === ctx.currentId)?.scene.id;
+      const pool = bg.shots.filter((s) => s.id !== bg.currentId && s.id !== onScreen);
       let r = Math.random() * pool.reduce((sum, s) => sum + (s.weight ?? 1), 0);
       return pool.find((s) => (r -= s.weight ?? 1) <= 0)?.id ?? pool[0]?.id;
     };
@@ -304,8 +317,8 @@ export class Director {
     this.lastCutBeat = this.beats;
     this.lastCutTime = this.now;
     this.remember(id);
-    const def = ctx.scenes.find((s) => s.id === id);
-    const params = ctx.vary && def ? mutate(def, ctx.params[id], ctx.palettes) : undefined;
+    const plan = ctx.plans.find((p) => p.key === id);
+    const params = ctx.vary && plan ? mutate(plan, ctx.params[id], ctx.palettes) : undefined;
     return { sceneId: id, transition, params };
   }
 
@@ -314,45 +327,47 @@ export class Director {
     if (this.history.length > 6) this.history.shift();
   }
 
-  /** Random scene of the wanted energy, avoiding what's on screen and the last few shots. */
+  /** Random plan of the wanted energy, avoiding what's on screen and the last few plans. */
   private pick(ctx: DirectorContext, energies: Energy[]): string {
-    const free = ctx.scenes.filter((s) => s.id !== ctx.currentId && s.id !== ctx.layerId);
+    const free = ctx.plans.filter((p) => p.key !== ctx.currentId && p.scene.id !== ctx.layerId);
     const recent = this.history.slice(-3);
     const tiers = [
-      free.filter((s) => energies.includes(s.energy) && !recent.includes(s.id)),
-      free.filter((s) => energies.includes(s.energy)),
-      free.filter((s) => !recent.includes(s.id)),
+      free.filter((p) => energies.includes(p.energy) && !recent.includes(p.key)),
+      free.filter((p) => energies.includes(p.energy)),
+      free.filter((p) => !recent.includes(p.key)),
       free,
     ];
-    const pool = tiers.find((t) => t.length > 0) ?? ctx.scenes;
-    // Weighted draw: a look can favour some scenes
-    const w = (id: string) => ctx.weights?.[id] ?? 1;
-    let r = Math.random() * pool.reduce((sum, s) => sum + w(s.id), 0);
-    for (const s of pool) {
-      r -= w(s.id);
-      if (r <= 0) return s.id;
+    const pool = tiers.find((t) => t.length > 0) ?? ctx.plans;
+    // Weighted draw: a world can favour some plans
+    let r = Math.random() * pool.reduce((sum, p) => sum + p.weight, 0);
+    for (const p of pool) {
+      r -= p.weight;
+      if (r <= 0) return p.key;
     }
-    return pool[pool.length - 1].id;
+    return pool[pool.length - 1].key;
   }
 }
 
-/** Fresh palette + small nudges on a couple of sliders, so a returning scene never looks identical. */
-function mutate(def: SceneDef, current: ParamValues | undefined, palettes?: string[]): ParamValues {
-  const out: ParamValues = { ...(current ?? {}) };
-  const ranges = def.params.filter((p) => p.type === "range");
-  for (const p of def.params) {
-    if (p.type === "select" && p.key === "palette") {
-      const allowed = palettes?.length ? palettes : paletteOptions.map((o) => o.value);
-      const others = allowed.filter((v) => v !== out.palette);
-      out.palette = others.length ? pickOne(others) : allowed[0];
-    }
+/**
+ * A variation that stays in the plan's style: a palette among the plan's (or the world's), and a couple of
+ * sliders moved within the plan's ranges, or close to the plan's own value (it never drifts away over time).
+ */
+function mutate(plan: DirectorPlan, current: ParamValues | undefined, palettes?: string[]): ParamValues {
+  const out: ParamValues = { ...(current ?? plan.defaults) };
+  const def = plan.scene;
+  const allowed = plan.vary?.palettes ?? (palettes?.length ? palettes : paletteOptions.map((o) => o.value));
+  if (def.params.some((p) => p.key === "palette") && allowed.length > 1) {
+    const others = allowed.filter((v) => v !== out.palette);
+    out.palette = others.length ? pickOne(others) : allowed[0];
   }
+  const ranges = def.params.filter((p) => p.type === "range" && p.key !== "speed" && p.key !== "dynamics");
   for (let n = 0; n < 2 && ranges.length; n++) {
     const p = pickOne(ranges);
     if (p.type !== "range") continue;
-    const cur = typeof out[p.key] === "number" ? (out[p.key] as number) : p.default;
+    const own = plan.vary?.ranges?.[p.key];
+    const base = typeof plan.defaults[p.key] === "number" ? (plan.defaults[p.key] as number) : p.default;
     const span = p.max - p.min;
-    let v = cur + (Math.random() * 2 - 1) * 0.2 * span;
+    let v = own ? own[0] + Math.random() * (own[1] - own[0]) : base + (Math.random() * 2 - 1) * 0.12 * span;
     v = Math.min(p.max, Math.max(p.min, v));
     const step = p.step ?? 0.01;
     out[p.key] = Math.round(v / step) * step;

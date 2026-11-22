@@ -35,6 +35,8 @@ void main() { gl_FragColor = vec4(texture2D(tMap, vUv).rgb, 1.0); }
 
 /** A live scene instance plus the surface it draws into. */
 interface Slot {
+  /** What the slot shows: a world plan key ("world:plan") or a plain scene id. */
+  key: string;
   def: SceneDef;
   instance: SceneInstance;
   /** 2D scenes: their own canvas, uploaded as a texture each frame. */
@@ -85,7 +87,14 @@ export class Compositor {
   private readonly material: THREE.ShaderMaterial;
   private readonly uniforms;
 
-  constructor(canvas: HTMLCanvasElement) {
+  /**
+   * `resolve` maps a key (a world plan "world:plan", or a plain scene id) to its scene: two plans of the same
+   * scene get two instances, each with its own settings, seed and camera.
+   */
+  constructor(
+    canvas: HTMLCanvasElement,
+    private readonly resolve: (key: string) => SceneDef = sceneById,
+  ) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: "high-performance" });
     this.renderer.setClearColor(0x000000, 1);
     // Scene colours are authored as final display values (like the 2D canvas): no sRGB encode at the end.
@@ -159,11 +168,11 @@ export class Compositor {
 
   /** Scene shown once the current transition (if any) completes. */
   get sceneId(): string | null {
-    return (this.next ?? this.current)?.def.id ?? null;
+    return (this.next ?? this.current)?.key ?? null;
   }
 
   get layerId(): string | null {
-    return this.layer?.def.id ?? null;
+    return this.layer?.key ?? null;
   }
 
   get inTransition(): boolean {
@@ -177,13 +186,13 @@ export class Compositor {
 
   /** Background shown once its cross-fade (if any) completes. */
   get backgroundId(): string | null {
-    return (this.bgNext ?? this.bg)?.def.id ?? null;
+    return (this.bgNext ?? this.bg)?.key ?? null;
   }
 
   /** Change the background with a slow cross-fade (null removes it at once). */
   setBackground(id: string | null, fade: number) {
     if (this.bgNext) this.finishBg();
-    if ((this.bg?.def.id ?? null) === id) return;
+    if ((this.bg?.key ?? null) === id) return;
     if (!id) {
       this.release(this.bg);
       this.bg = null;
@@ -212,7 +221,7 @@ export class Compositor {
   /** Switch to a scene. A transition already running is completed first. */
   show(id: string, t: TransitionSpec) {
     if (this.next) this.finishTransition();
-    if (this.current?.def.id === id) return;
+    if (this.current?.key === id) return;
     const slot = this.acquire(id);
     if (!this.current || t.type === "cut" || t.duration <= 0) {
       this.release(this.current);
@@ -229,14 +238,14 @@ export class Compositor {
    * so a later cut to it lands exactly on the beat without a hitch.
    */
   preload(id: string, frame: AudioFrame, params: ParamValues) {
-    if (this.slots().some((s) => s.def.id === id)) return;
-    const slot = this.createSlot(sceneById(id));
+    if (this.slots().some((s) => s.key === id)) return;
+    const slot = this.createSlot(id);
     this.renderSlot(slot, frame, () => params, 0);
     this.release(slot);
   }
 
   setLayer(id: string | null) {
-    if ((this.layer?.def.id ?? null) === id) return;
+    if ((this.layer?.key ?? null) === id) return;
     this.release(this.layer);
     this.layer = id ? this.acquire(id) : null;
   }
@@ -409,9 +418,9 @@ export class Compositor {
   }
 
   private acquire(id: string, scale = 1): Slot {
-    const i = this.pool.findIndex((s) => s.def.id === id && s.scale === scale);
+    const i = this.pool.findIndex((s) => s.key === id && s.scale === scale);
     if (i >= 0) return this.pool.splice(i, 1)[0];
-    return this.createSlot(sceneById(id), scale);
+    return this.createSlot(id, scale);
   }
 
   private release(s: Slot | null) {
@@ -424,7 +433,8 @@ export class Compositor {
     }
   }
 
-  private createSlot(def: SceneDef, scale = 1): Slot {
+  private createSlot(key: string, scale = 1): Slot {
+    const def = this.resolve(key);
     const { w, h } = this.bufferSize(scale);
     const viewport = this.viewportFor(scale);
     if (def.kind === "2d") {
@@ -438,7 +448,7 @@ export class Compositor {
       canvasTexture.generateMipmaps = false;
       canvasTexture.minFilter = THREE.LinearFilter;
       const instance = def.create({ canvas, ctx, viewport });
-      return { def, instance, canvas, canvasTexture, scale, lastUsed: 0 };
+      return { key, def, instance, canvas, canvasTexture, scale, lastUsed: 0 };
     }
     // 3D scenes get MSAA (rendering offscreen loses the canvas antialiasing); fullscreen shaders don't need it.
     const is3D = def.tag === "3D";
@@ -448,7 +458,7 @@ export class Compositor {
       depthBuffer: is3D,
     });
     const instance = def.create({ renderer: this.renderer, viewport, target });
-    return { def, instance, target, scale, lastUsed: 0 };
+    return { key, def, instance, target, scale, lastUsed: 0 };
   }
 
   private resizeSlot(s: Slot) {
@@ -464,7 +474,7 @@ export class Compositor {
   }
 
   private renderSlot(s: Slot, frame: AudioFrame, paramsFor: (id: string) => ParamValues, dt: number) {
-    const params = paramsFor(s.def.id);
+    const params = paramsFor(s.key);
     if (s.canvas) {
       s.instance.render(frame, params, dt);
       s.canvasTexture!.needsUpdate = true;
