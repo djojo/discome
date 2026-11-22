@@ -86,7 +86,7 @@ export const morphose = defineShaderScene({
     u.uWave.value = f.beat ? 0 : (u.uWave.value as number) + dt;
     const g = u.uGlow.value as number;
     u.uGlow.value = g + (f.bass - g) * (1 - Math.exp(-dt * (f.bass > g ? 8 : 2)));
-    u.uSpin.value = (u.uSpin.value as number) + dt * (0.05 + 0.1 * f.energy);
+    u.uSpin.value = (u.uSpin.value as number) + dt * 0.08;
   },
   fragment: /* glsl */ `
 uniform float uArm[8];   // the eight bands, smoothed: the branches' lengths

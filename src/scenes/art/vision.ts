@@ -21,8 +21,8 @@ export const vision = defineShaderScene({
   }),
   update(u, f, p, dt) {
     u.uK.value = Number(p.symmetry ?? 8);
-    // the dive: its own slow pace, a little quicker when the music swells
-    u.uZoom.value = (u.uZoom.value as number) + dt * (0.22 + 0.25 * f.energy);
+    // the dive: its own slow, steady pace (a trance does not hurry)
+    u.uZoom.value = (u.uZoom.value as number) + dt * 0.3;
   },
   fragment: /* glsl */ `
 uniform float uZoom;

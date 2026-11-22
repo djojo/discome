@@ -333,9 +333,9 @@ export const arcaneUniforms = () => ({
   uShiftTarget: { value: 0 },
 });
 
-/** Shared per-frame update: the contour lines flow with the energy, each drop shifts the colours. */
+/** Shared per-frame update: the contour lines of the robes flow at their own slow pace, each drop shifts the colours. */
 export function updateArcane(u: Record<string, THREE.IUniform>, f: AudioFrame, p: ParamValues, dt: number) {
-  u.uFlow.value = (u.uFlow.value as number) + dt * (0.06 + 0.35 * f.volume + 0.4 * f.dropPulse);
+  u.uFlow.value = (u.uFlow.value as number) + dt * 0.14;
   u.uLines.value = num(p.lines, 10);
   u.uRainbow.value = num(p.rainbow, 0.5);
   u.uNeon.value = num(p.neon, 1);

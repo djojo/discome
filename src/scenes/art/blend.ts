@@ -39,7 +39,7 @@ export const blend = defineShaderScene({
   update(u, f, _p, dt) {
     // The volutes flow at their own pace, a little faster when the music is full
     // (slow, heavy: a liquid metal, not a swirl of smoke)
-    u.uFlow.value = (u.uFlow.value as number) + dt * (0.0035 + 0.004 * f.energy);
+    u.uFlow.value = (u.uFlow.value as number) + dt * 0.005;
     // The drop: a whirl that stirs everything, then slowly settles
     let spin = (u.uSpin.value as number) * Math.exp(-dt * 0.35);
     if (f.drop) spin = 0.9;

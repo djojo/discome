@@ -68,7 +68,7 @@ export const cactus = defineShaderScene({
     const tw = f.section === "build" ? 0.3 + 2.2 * f.buildProgress : f.section === "drop" ? 2.5 : 0.3;
     const t = u.uTwist.value as number;
     u.uTwist.value = t + (tw - t) * (1 - Math.exp(-dt * 0.6));
-    u.uBreath.value = (u.uBreath.value as number) + dt * (0.2 + 0.25 * f.energy);
+    u.uBreath.value = (u.uBreath.value as number) + dt * 0.28;
   },
   fragment: /* glsl */ `
 uniform float uButton;

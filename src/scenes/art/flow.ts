@@ -33,7 +33,7 @@ export const flow = defineShaderScene({
     } else u.uGush.value = (u.uGush.value as number) + dt;
     u.uRush.value = (u.uRush.value as number) * Math.exp(-dt / (bar * 2));
     // very slow and heavy: a stream takes well over a minute to cross the wall
-    u.uFlow.value = (u.uFlow.value as number) + dt * (0.006 + 0.004 * f.energy) * (1 + (u.uRush.value as number));
+    u.uFlow.value = (u.uFlow.value as number) + dt * 0.008 * (1 + (u.uRush.value as number));
     u.uGlint.value = f.beat ? 1 : (u.uGlint.value as number) * Math.exp(-dt * 3);
   },
   fragment: /* glsl */ `

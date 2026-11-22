@@ -47,7 +47,7 @@ export const radiolaria = defineShaderScene({
     u.uSpineT.value = f.beat ? 0 : (u.uSpineT.value as number) + dt;
     const g = u.uGlow.value as number;
     u.uGlow.value = g + (f.bass - g) * (1 - Math.exp(-dt * (f.bass > g ? 8 : 2)));
-    u.uMesh.value = (u.uMesh.value as number) + dt * (0.03 + 0.05 * f.energy);
+    u.uMesh.value = (u.uMesh.value as number) + dt * 0.045;
   },
   fragment: /* glsl */ `
 uniform float uOpenR;    // the drop: the outer shell opens in two
