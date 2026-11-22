@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# head models (sources of public/heads, downloaded from Printables)
+/assets/heads-src/

@@ -3,6 +3,7 @@ import { paletteParam } from "../palettes";
 import { num } from "../utils";
 import { ART_LIB, MARCH } from "./lib.glsl";
 import { CAMERA_GLSL, type Framing } from "./camera";
+import { HEAD_GLSL, headParam, headUniforms, setHead } from "./heads";
 
 /** Framings around the head (world space: the head centre sits near y = 0). "open" ones need the head open. */
 const FRAMINGS: Framing[] = [
@@ -33,6 +34,7 @@ export const porcelain = defineShaderScene({
     "Visage de céramique qui s'ouvre au drop, en coquille ou en éclats flottants, sur une géode et un cœur fractal ; des fissures d'or se propagent lentement.",
   params: [
     paletteParam("porcelain"),
+    headParam(),
     {
       type: "select",
       key: "style",
@@ -49,6 +51,7 @@ export const porcelain = defineShaderScene({
     { type: "toggle", key: "cinema", label: "Format cinéma 2.39", default: true },
   ],
   uniforms: () => ({
+    ...headUniforms(),
     uOpen: { value: 0 },
     uOpenVel: { value: 0 },
     uAmp: { value: 1 },
@@ -63,6 +66,7 @@ export const porcelain = defineShaderScene({
     uWasOpen: { value: 0 },
   }),
   update(u, f, p, dt, ctx) {
+    setHead(u, p.head);
     const bar = f.bpm > 0 ? (60 / f.bpm) * 4 : 2;
     // The story: closed, pried open by the build, swung open on the drop, closing through the breakdown
     let target = f.section === "build" ? 0.1 * f.buildProgress : f.section === "drop" ? 1 : 0;
@@ -112,6 +116,7 @@ uniform float uShift;
 uniform float uCinema;
 uniform float uMode;   // 0: opens like a shell, 1: breaks into floating shards
 ${ART_LIB}
+${HEAD_GLSL}
 ${CAMERA_GLSL}
 
 const float TH = .1;                    // shell thickness
@@ -133,9 +138,9 @@ vec3 halfFrame(vec3 h, float s) {
 
 float shell(vec3 q) {
   // the sculpted head is costly: away from it, a simple enclosing ellipsoid is enough
-  float be = sdEllipsoid(q - vec3(0., -.05, -.02), vec3(.56, .95, .75));
+  float be = headBound(q);
   if (be > .08) return be;
-  float d = sdHead(q);
+  float d = headD(q);
   return max(d, -(d + TH));
 }
 
@@ -148,7 +153,8 @@ float halfD(vec3 h, float s) {
 float neckD(vec3 h) {
   float b = sdCapsule(h, vec3(0., NECK, -.15), vec3(0., -1.65, -.2), .3);
   if (b > .08) return b;
-  return max(sdHead(h), h.y - NECK);
+  // the neck below the cut stays within the column (busts widen into shoulders)
+  return max(max(headD(h), h.y - NECK), b);
 }
 
 // ---- shards: the head breaks into NS segments (like an orange) that drift out and float around the core
@@ -231,7 +237,7 @@ float coreFractal(vec3 h, out float trap) {
 float map(vec3 p) {
   vec3 h = toHead(p);
   // Cheap bound: far from the head (and its drifting shards), no need to evaluate anything
-  float bound = sdCapsule(h, vec3(0., -1.5, -.1), vec3(0., .3, -.1), .85 + .6 * uOpen);
+  float bound = sdCapsule(h, vec3(0., -1.5, -.1), vec3(0., .3, -.1), .85 + .3 * uHeadOn + .6 * uOpen);
   gCoreD = 1e3;
   if (bound > .3) return bound;
   float d;
@@ -251,7 +257,7 @@ float map(vec3 p) {
     if (cb < d) {
       float tr;
       // the fractal fills the cavity of the head, like a brain made of patterns
-      gCoreD = max(max(cb, sdHead(h) + TH + .015), coreFractal(h, tr));
+      gCoreD = max(max(cb, headD(h) + TH + .015), coreFractal(h, tr));
       d = min(d, gCoreD);
     }
   }
@@ -336,7 +342,7 @@ void main() {
         cutPlane = abs(q.x);
       }
       if (dn < dPiece) q = h;
-      float sd = sdHead(q);
+      float sd = headD(q);
       float dOut = abs(sd), dIn = abs(sd + TH);
       float dCut = dn < dPiece ? abs(q.y - NECK) : min(cutPlane, abs(q.y - NECK));
       if (dOut <= dIn && dOut <= dCut) {
@@ -388,7 +394,7 @@ void main() {
     float acc = 0.;
     for (int i = 0; i < 8; i++) {
       vec3 h = toHead(ro + rd * tEnd * (float(i) + j) / 8.);
-      float sd = sdHead(h);
+      float sd = headD(h);
       if (sd < 0.) continue;
       float g = uMode > .5 ? gapDist(h) : abs(h.x);
       float sheet = exp(-g * (40. - 25. * uOpen)) * exp(-sd * 2.2) * step(NECK, h.y);

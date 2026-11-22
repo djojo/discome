@@ -4,6 +4,7 @@ import { paletteParam } from "../palettes";
 import { num } from "../utils";
 import { ART_LIB, MARCH } from "./lib.glsl";
 import { CAMERA_GLSL, type Framing } from "./camera";
+import { HEAD_GLSL, headParam, headUniforms, setHead } from "./heads";
 
 const FRAMINGS: Framing[] = [
   { az: 0, el: 0.12, dist: 3.6, target: [0, -0.05, 0], focal: 2.1, weight: 2 },
@@ -28,13 +29,15 @@ export const mercury = defineShaderScene({
   mask: true,
   camera: { framings: FRAMINGS, glideBars: 2 },
   description: "Masque chromé immobile dans un bain de métal liquide : chaque kick lance un anneau, le drop fait passer une lame de lumière.",
-  params: [paletteParam("mercury"), { type: "range", key: "swell", label: "Houle", min: 0, max: 2, step: 0.05, default: 1 }],
+  params: [paletteParam("mercury"), headParam(), { type: "range", key: "swell", label: "Houle", min: 0, max: 2, step: 0.05, default: 1 }],
   uniforms: () => ({
+    ...headUniforms(),
     uSwell: { value: 1 },
     uKicks: { value: new THREE.Vector4(9, 9, 9, 9) },
     uSweep: { value: 9 },
   }),
   update(u, f, p, dt) {
+    setHead(u, p.head);
     u.uSwell.value = num(p.swell, 1);
     // Ages of the last four kicks: each one is a ring travelling outward
     const k = u.uKicks.value as THREE.Vector4;
@@ -48,6 +51,7 @@ uniform float uSwell;
 uniform vec4 uKicks;
 uniform float uSweep;
 ${ART_LIB}
+${HEAD_GLSL}
 ${CAMERA_GLSL}
 float ring(float r, float age) {
   float R = .45 + age * 1.5;
@@ -65,7 +69,7 @@ float map(vec3 p) {
   vec3 h = p - vec3(0., .02 + .04 * sin(uTime * .3), 0.);
   h.xz *= rot(sin(uTime * .1 + uSeed) * .35);
   h.yz *= rot(.5);
-  return smin(lq, sdHead(h), .16);
+  return smin(lq, headD(h), .16);
 }
 ${MARCH}
 vec3 env(vec3 r) {

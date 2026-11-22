@@ -3,15 +3,17 @@ import { paletteParam } from "../palettes";
 import { num } from "../utils";
 import { ART_LIB, MARCH } from "./lib.glsl";
 import { CAMERA_GLSL, type Framing } from "./camera";
+import { HEAD_GLSL, headParam, headUniforms, setHead } from "./heads";
 
 /**
  * The sculpted head, nearly still: only a very slow drift (`turn` scales it). The framings move instead.
  * World space: the head centre sits near the origin, facing +z.
  */
 const HEAD_MAP = /* glsl */ `
+${HEAD_GLSL}
 float gYaw;
 vec3 toHead(vec3 p) { p.y += .1; p.xz *= rot(gYaw); return p; }
-float map(vec3 p) { return sdHead(toHead(p)); }
+float map(vec3 p) { return headD(toHead(p)); }
 ${MARCH}
 `;
 
@@ -47,11 +49,13 @@ export const topoHead = defineShaderScene({
     "Le visage n'existe que par ses lignes de niveau, qui changent lentement d'orientation ; une ligne s'allume et le traverse à chaque kick, au drop elles basculent en profondeur.",
   params: [
     paletteParam("mono"),
+    headParam(),
     { type: "range", key: "density", label: "Densité des lignes", min: 10, max: 60, step: 1, default: 26 },
     { type: "range", key: "turn", label: "Dérive du visage", min: 0, max: 1.5, step: 0.05, default: 1 },
   ],
-  uniforms: () => ({ uDensity: { value: 26 }, uTurn: { value: 1 }, ...kickTimer() }),
+  uniforms: () => ({ uDensity: { value: 26 }, uTurn: { value: 1 }, ...kickTimer(), ...headUniforms() }),
   update(u, f, p, dt) {
+    setHead(u, p.head);
     u.uDensity.value = num(p.density, 26);
     u.uTurn.value = num(p.turn, 1);
     u.uWave.value = f.beat ? 0 : (u.uWave.value as number) + dt;
@@ -107,10 +111,12 @@ export const profileHead = defineShaderScene({
     "Le profil en contre-jour, dans la brume et les rais de lumière ; le contour s'allume en vague à chaque kick, un second contour d'accent à la montée et au drop.",
   params: [
     paletteParam("porcelain"),
+    headParam(),
     { type: "range", key: "sweep", label: "Balayage de la lumière", min: 0, max: 2, step: 0.05, default: 1 },
   ],
-  uniforms: () => ({ uSweep: { value: 1 }, ...kickTimer() }),
+  uniforms: () => ({ uSweep: { value: 1 }, ...kickTimer(), ...headUniforms() }),
   update(u, f, p, dt) {
+    setHead(u, p.head);
     u.uSweep.value = num(p.sweep, 1);
     u.uWave.value = f.beat ? 0 : (u.uWave.value as number) + dt;
   },
@@ -170,11 +176,13 @@ export const halftoneHead = defineShaderScene({
     "Visage en trois trames de couleur, chacune éclairée d'un côté, qui tournent lentement ; des points s'allument sur les kicks, le drop inverse l'image.",
   params: [
     paletteParam("porcelain"),
+    headParam(),
     { type: "range", key: "cells", label: "Finesse de la trame", min: 30, max: 120, step: 1, default: 62 },
     { type: "range", key: "turn", label: "Dérive du visage", min: 0, max: 1.5, step: 0.05, default: 1 },
   ],
-  uniforms: () => ({ uCells: { value: 62 }, uTurn: { value: 1 }, ...kickTimer() }),
+  uniforms: () => ({ uCells: { value: 62 }, uTurn: { value: 1 }, ...kickTimer(), ...headUniforms() }),
   update(u, f, p, dt) {
+    setHead(u, p.head);
     u.uCells.value = num(p.cells, 62);
     u.uTurn.value = num(p.turn, 1);
     u.uWave.value = f.beat ? 0 : (u.uWave.value as number) + dt;

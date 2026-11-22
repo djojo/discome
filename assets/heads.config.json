@@ -1,0 +1,122 @@
+{
+  "box": {
+    "min": [
+      -0.8,
+      -0.95,
+      -0.88
+    ],
+    "max": [
+      0.8,
+      1,
+      0.88
+    ]
+  },
+  "voxel": 0.0125,
+  "heads": {
+    "tigre": {
+      "label": "Tigre",
+      "file": "tigre.stl",
+      "rot": [
+        -90,
+        0,
+        0
+      ],
+      "chin": 0.6,
+      "source": "https://www.printables.com/model/1342710-fantasy-tiger-bust",
+      "scale": 0.78
+    },
+    "loup": {
+      "label": "Loup",
+      "file": "loup.stl",
+      "rot": [
+        -90,
+        0,
+        0
+      ],
+      "chin": 0.62,
+      "source": "https://www.printables.com/model/1275550-wolf-bust-decor",
+      "scale": 0.92
+    },
+    "faucon": {
+      "label": "Faucon",
+      "file": "faucon.stl",
+      "rot": [
+        -90,
+        0,
+        0
+      ],
+      "chin": 0.45,
+      "source": "https://www.printables.com/model/1572054-ancient-egyptian-horus-bust-stl-falcon-god-3d-prin",
+      "top": 0.25,
+      "scale": 0.85,
+      "offset": [
+        0,
+        -0.05,
+        0
+      ]
+    },
+    "lion": {
+      "label": "Lion",
+      "file": "lion.stl",
+      "rot": [
+        -90,
+        0,
+        0
+      ],
+      "chin": 0.62,
+      "source": "https://www.printables.com/model/1262368-marble-lion-bust-2",
+      "scale": 0.85
+    },
+    "hibou": {
+      "label": "Hibou",
+      "file": "hibou.stl",
+      "rot": [
+        -90,
+        0,
+        0
+      ],
+      "chin": 0.85,
+      "source": "https://www.printables.com/model/325499-great-horned-owl-bust"
+    },
+    "belier": {
+      "label": "Bélier",
+      "file": "belier.stl",
+      "rot": [
+        -45,
+        0,
+        0
+      ],
+      "chin": 0.9,
+      "source": "https://www.printables.com/model/99006-sculpted-ram-head",
+      "seal": [
+        "back"
+      ],
+      "scale": 0.9
+    },
+    "moai": {
+      "label": "Moai",
+      "file": "moai.3mf",
+      "object": 1,
+      "rot": [
+        -90,
+        0,
+        0
+      ],
+      "chin": 0.55,
+      "source": "https://www.printables.com/model/31513-moai-statue-3mf-ready-to-print-by-tixen"
+    },
+    "nefertiti": {
+      "label": "Néfertiti",
+      "file": "nefertiti.3mf",
+      "rot": [
+        -90,
+        0,
+        0
+      ],
+      "chin": 0.62,
+      "source": "https://www.printables.com/model/3112-nefertiti",
+      "top": 0.12,
+      "scale": 0.85
+    }
+  }
+}
