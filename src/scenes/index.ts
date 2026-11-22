@@ -26,6 +26,7 @@ import { arcaneArchitect } from "./art/architect";
 import { arcaneNomad } from "./art/nomad";
 import { arcanePrism } from "./art/prism";
 import { arcanePortal } from "./art/portal";
+import { arcaneRoad } from "./art/road";
 import { grimoire } from "./art/grimoire";
 import { flesh } from "./art/flesh";
 import { signal } from "./art/signal";
@@ -55,6 +56,7 @@ export const SCENES: SceneDef[] = [
   arcaneNomad,
   arcanePrism,
   arcanePortal,
+  arcaneRoad,
   grimoire,
   flesh,
   signal,

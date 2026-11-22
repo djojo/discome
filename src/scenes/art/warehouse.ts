@@ -134,7 +134,7 @@ vec3 calcN(vec3 p) {
 void main() {
   vec2 fc = gl_FragCoord.xy;
   vec2 uv = (fc - .5 * uRes) / uRes.y;
-  uv *= rot(uBank * .5);
+  uv *= rot(uBank);
   uv += flightShake();
   float alt = 1.6 + (uDive > 0. ? uDive * 2.6 : uDive * .5);
   vec3 ro = vec3(uSway * .5, alt, -uTravel);

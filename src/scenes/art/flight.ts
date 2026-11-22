@@ -173,8 +173,9 @@ export class Flight {
     this.sway = approach(this.sway, sway * amp, 1.6, dt);
     this.dive = approach(this.dive, clamp(lift * Math.max(0.3, amp), -1, 1.5), this.air > 0.5 ? 2.2 : 1.2, dt);
     this.bankBase = approach(this.bankBase, bank * amp, 2, dt);
-    // The barrel roll is added unsmoothed so it completes a whole turn
-    this.bank = this.bankBase + this.roll * Math.min(1, amp);
+    // The barrel roll is added unsmoothed and never scaled, so it always completes a whole turn (a partial
+    // one would leave the picture tilted); with very low dynamics there is no roll at all
+    this.bank = this.bankBase + (amp >= 0.5 ? this.roll : 0);
   }
 
   private bankBase = 0;
