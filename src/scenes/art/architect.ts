@@ -41,6 +41,16 @@ export const arcaneArchitect = defineShaderScene({
       ],
       default: "pyramide",
     },
+    {
+      type: "select",
+      key: "relic",
+      label: "Dans sa main",
+      options: [
+        { value: "crystal", label: "Cristal" },
+        { value: "slab", label: "Dalle lumineuse" },
+      ],
+      default: "crystal",
+    },
     ...arcaneParams(),
   ],
   uniforms: () => ({
@@ -51,11 +61,13 @@ export const arcaneArchitect = defineShaderScene({
     uLift: { value: 0.2 },
     uCloak: { value: 0 },
     uFigHead: { value: 1 },
+    uRelic: { value: 0 },
     ...headUniforms(),
   }),
   update(u, f, p, dt) {
     updateArcane(u, f, p, dt);
     // a statue head once it is loaded, the pyramid until then
+    u.uRelic.value = p.relic === "slab" ? 1 : 0;
     const head = p.head ?? "pyramide";
     u.uFigHead.value = setHead(u, head) && head !== "pyramide" ? 3 : 1;
     // Each kick sends the rings a step outward
@@ -83,6 +95,7 @@ uniform float uBeam;
 uniform float uLift;
 uniform float uCloak;
 uniform float uFigHead;
+uniform float uRelic;  // the crystal becomes a black slab with a glowing face, held up like a relic
 ${ART_LIB}
 #define FIG_BAKED_HEAD
 ${HEAD_GLSL}
@@ -94,6 +107,10 @@ vec3 gCrystal;
 float crystalD(vec3 p) {
   vec3 q = p - gCrystal;
   q.xz *= rot(uTime * .6);
+  if (uRelic > .5) {
+    q.yz *= rot(.25);
+    return sdBox(q, vec3(.1, .18, .012)) - .008;
+  }
   q.y = -q.y;
   return sdPyramid(q / .26, 1.) * .26;
 }
@@ -183,12 +200,21 @@ void main() {
   }
 
   // The crystal and its glow
-  vec3 red = vec3(1., .16, .22);
+  vec3 red = uRelic > .5 ? vec3(.75, .86, 1.) : vec3(1., .16, .22);
   float tc = crystalMarch(ro, rd);
   if (tc > 0. && (tf < 0. || tc < tf)) {
     vec3 p = ro + rd * tc;
-    float s = fract(p.y * 60.);
-    col = red * (.35 + 1.4 * smoothstep(.4, .5, s) * (1. - smoothstep(.85, .95, s))) * (1. + uBeat);
+    if (uRelic > .5) {
+      // the glowing face inside a thin black bezel
+      vec3 q = p - gCrystal;
+      q.xz *= rot(uTime * .6);
+      q.yz *= rot(.25);
+      float screen = step(abs(q.x), .088) * step(abs(q.y), .166);
+      col = mix(vec3(.015), red * (1. + uBeat) * (.75 + .25 * sin(q.y * 40. - uTime * 3.)), screen);
+    } else {
+      float s = fract(p.y * 60.);
+      col = red * (.35 + 1.4 * smoothstep(.4, .5, s) * (1. - smoothstep(.85, .95, s))) * (1. + uBeat);
+    }
     solid = 1.;
   }
   float dc = length(cross(rd, gCrystal - ro));

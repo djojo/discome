@@ -35,6 +35,8 @@ export const mercury = defineShaderScene({
     uSwell: { value: 1 },
     uKicks: { value: new THREE.Vector4(9, 9, 9, 9) },
     uSweep: { value: 9 },
+    uChart: { value: 0.15 },
+    uCrash: { value: 0 },
   }),
   update(u, f, p, dt) {
     setHead(u, p.head);
@@ -45,11 +47,21 @@ export const mercury = defineShaderScene({
     if (f.beat) k.set(0, k.x, k.y, k.z);
     const bar = f.bpm > 0 ? (60 / f.bpm) * 4 : 2;
     u.uSweep.value = f.drop ? 0 : (u.uSweep.value as number) + dt / bar;
+    // The chart on the horizon: it climbs on its own (faster as the night drifts), soars through the build,
+    // crashes on the drop and only slowly recovers. The mask sinks as it climbs.
+    if (f.drop) u.uCrash.value = 1;
+    const crash = (u.uCrash.value = (u.uCrash.value as number) * Math.exp(-dt / (bar * 1.5)));
+    let level = u.uChart.value as number;
+    if (crash > 0.2) level -= level * (1 - Math.exp(-dt / (bar * 0.35)));
+    else level += dt * (f.section === "build" ? 0.03 + 0.08 * f.buildProgress : f.section === "breakdown" ? 0.002 : 0.012 * (1 + f.drift));
+    u.uChart.value = Math.min(1, Math.max(0.05, level));
   },
   fragment: /* glsl */ `
 uniform float uSwell;
 uniform vec4 uKicks;
 uniform float uSweep;
+uniform float uChart;  // level of the price chart, 0..1 (the mask sinks as it climbs)
+uniform float uCrash;  // 1 on the drop: the chart collapses
 ${ART_LIB}
 ${HEAD_GLSL}
 ${CAMERA_GLSL}
@@ -66,12 +78,29 @@ float liquidH(vec2 xz) {
 }
 float map(vec3 p) {
   float lq = (p.y - liquidH(p.xz)) * .75;
-  vec3 h = p - vec3(0., .02 + .04 * sin(uTime * .3), 0.);
+  vec3 h = p - vec3(0., .02 + .04 * sin(uTime * .3) - uChart * .4, 0.);
   h.xz *= rot(sin(uTime * .1 + uSeed) * .35);
   h.yz *= rot(.5);
   return smin(lq, headD(h), .16);
 }
 ${MARCH}
+/** The price at x (0..1 around the horizon): a steady climb with the chart's level, a cliff where it wraps. */
+float price(float x) {
+  return clamp(.08 + uChart * .8 * (.3 + .7 * fract(x)) + (vnoise(vec3(x * 40., uSeed, 0.)) - .5) * .1
+               + (vnoise(vec3(x * 160., 1.3, 0.)) - .5) * .03, 0., 1.1);
+}
+/** A price chart glowing all around the horizon: its line and the area below it; the accent colour when it crashes. */
+vec3 chart(vec3 r) {
+  float y = (r.y - .02) / .3;
+  if (y < -.05 || y > 1.2) return vec3(0.);
+  float x = (atan(r.z, r.x) + PI) / (2. * PI) + uTime * .004;
+  float v = price(x);
+  float w = max(fwidth(y), .004);
+  float line = 1. - smoothstep(w, w * 2.5, abs(y - v));
+  float area = step(y, v) * smoothstep(0., v + .001, y) * .18;
+  vec3 up = mix(uInk, vec3(.4, 1., .6), .35);
+  return mix(up, uAccent * 1.3, step(.2, uCrash)) * (line * 1.6 + area);
+}
 vec3 env(vec3 r) {
   float az = atan(r.z, r.x) + uTime * .05;
   float el = r.y;
@@ -81,6 +110,7 @@ vec3 env(vec3 r) {
   float a2 = abs(mod(az + 2.3 + PI, 2. * PI) - PI);
   c += uPal1 * 3. * (1. - smoothstep(.02, .05, abs(el - .08))) * (1. - smoothstep(.7, .95, a2));
   c += vec3(1.) * 1.1 * smoothstep(.9, .98, el);
+  c += chart(r);
   // The drop: a vertical blade of light sweeping once around the room
   if (uSweep < 1.3) {
     float as = abs(mod(az - (uSweep * 2. * PI - PI) + PI, 2. * PI) - PI);
@@ -94,7 +124,8 @@ void main() {
   vec3 ro = uCamPos;
   vec3 rd = lookAt(ro, uCamTarget) * normalize(vec3(uv, uFocal));
   vec3 bg = uBase;
-  vec3 col = bg;
+  // the chart also stands on the horizon itself, glowing in the dark
+  vec3 col = bg + chart(rd) * .7;
   float tt = march(ro, rd, 14.);
   if (tt > 0.) {
     vec3 p = ro + rd * tt;
