@@ -41,6 +41,8 @@ export class Cadrage {
   private k = 1;
   private seed = Math.random() * 100;
   private pending: string | null = null;
+  /** Seconds since the last new framing. */
+  private held = 0;
 
   constructor(
     private readonly framings: Framing[],
@@ -54,6 +56,7 @@ export class Cadrage {
     this.seed = seed;
     this.to = this.from = this.draw(null) ?? this.framings[0];
     this.k = 1;
+    this.held = 0;
   }
 
   /** Glide to a framing with this tag as soon as possible (e.g. "open" on the drop). */
@@ -63,8 +66,11 @@ export class Cadrage {
 
   update(f: AudioFrame, dt: number) {
     const bar = f.bpm > 0 ? (60 / f.bpm) * 4 : 2;
-    const phrase = f.downbeat && f.phraseBar === 0;
+    this.held += dt;
+    // A new framing on every phrase; without a tempo (quiet passages, no clear beat) every ~16 s anyway
+    const phrase = (f.downbeat && f.phraseBar === 0) || this.held > (f.bpm > 0 ? 12 * bar : 16);
     if (this.pending || phrase || !this.allow(this.to)) {
+      if (phrase) this.held = 0;
       const next = this.draw(this.pending) ?? this.draw(null);
       this.pending = null;
       if (next && next !== this.to) {
@@ -75,11 +81,11 @@ export class Cadrage {
     }
     this.k = Math.min(1, this.k + dt / (bar * this.glideBars));
     const c = this.current();
-    // A slow drift on top, so even a held framing keeps breathing
+    // A slow orbit on top (about ±10°, over a minute), so even a held framing keeps moving
     const t = f.time;
-    const az = c.az + 0.05 * Math.sin(t * 0.07 + this.seed);
-    const el = c.el + 0.025 * Math.sin(t * 0.05 + this.seed * 2);
-    const dist = c.dist * (1 + 0.03 * Math.sin(t * 0.06 + this.seed * 3));
+    const az = c.az + 0.13 * Math.sin(t * 0.09 + this.seed) + 0.05 * Math.sin(t * 0.23 + this.seed * 1.7);
+    const el = c.el + 0.05 * Math.sin(t * 0.07 + this.seed * 2);
+    const dist = c.dist * (1 + 0.06 * Math.sin(t * 0.08 + this.seed * 3));
     this.target.set(c.target[0], c.target[1], c.target[2]);
     this.pos.set(
       this.target.x + Math.sin(az) * Math.cos(el) * dist,

@@ -157,9 +157,10 @@ ${HEAD_GLSL}
 ${CAMERA_GLSL}
 const float K = .16;    // half width of the transformation front
 float gYaw;
+float gPitch = 0.;
 float gFront;           // height of the front: below it, head B
-vec3 toHead(vec3 p) { p.y += .1; p.xz *= rot(gYaw); return p; }
-vec3 fromHead(vec3 h) { h.xz *= rot(-gYaw); h.y -= .1; return h; }
+vec3 toHead(vec3 p) { p.y += .1; p.xz *= rot(gYaw); p.yz *= rot(gPitch); return p; }
+vec3 fromHead(vec3 h) { h.yz *= rot(-gPitch); h.xz *= rot(-gYaw); h.y -= .1; return h; }
 float frontY(vec3 h) { return h.y + (vnoise(h * 2.6 + uSeed) - .5) * .35; }
 
 float map(vec3 p) {
@@ -190,7 +191,8 @@ vec3 env(vec3 r) {
 void main() {
   vec2 fc = gl_FragCoord.xy;
   vec2 uv = (fc - .5 * uRes) / uRes.y;
-  gYaw = sin(uTime * .05 + uSeed) * .15;
+  gYaw = .3 * sin(uTime * .045 + uSeed) + .07 * sin(uTime * .11 + uSeed * 2.);
+  gPitch = .05 * sin(uTime * .06 + uSeed * 3.);
   gFront = mix(-1.25, 1.3, uMorph);
   vec3 ro = uCamPos;
   vec3 rd = lookAt(ro, uCamTarget) * normalize(vec3(uv, uFocal));

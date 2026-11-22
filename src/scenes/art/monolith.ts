@@ -34,6 +34,7 @@ export const monolith = defineShaderScene({
       default: "slab",
     },
     headParam("moai"),
+    { type: "toggle", key: "letterbox", label: "Format cinéma 2.39 (bandes noires)", default: false },
   ],
   uniforms: () => ({
     uSunAz: { value: 0.7 },
@@ -43,6 +44,7 @@ export const monolith = defineShaderScene({
     uRise: { value: 1 },
     uDust: { value: 1 },
     uMonument: { value: 0 },
+    uCinema: { value: 0 },
     ...headUniforms(),
   }),
   update(u, f, p, dt) {
@@ -56,6 +58,7 @@ export const monolith = defineShaderScene({
     const r = u.uRise.value as number;
     u.uRise.value = r + (rise - r) * (1 - Math.exp(-dt * 0.3));
     u.uDust.value = num(p.dust, 1);
+    u.uCinema.value = p.letterbox === true ? 1 : 0;
     // the colossal head once it is loaded, the slab until then
     u.uMonument.value = p.monument === "head" && setHead(u, p.head ?? "moai") ? 1 : 0;
   },
@@ -65,6 +68,7 @@ uniform float uSunEl;
 uniform float uBarPos;
 uniform float uRise;
 uniform float uDust;
+uniform float uCinema;
 uniform float uMonument;  // 0: the black slab, 1: a colossal head
 ${ART_LIB}
 ${HEAD_GLSL}
@@ -361,7 +365,7 @@ void main() {
   col = mix(col * vec3(.92, .96, 1.06), col * vec3(1.06, 1., .92), smoothstep(.1, .7, l));
   col = aces(col * .95);
   col *= vignette(fc / uRes);
-  float lb = letterbox(fc);
+  float lb = uCinema > .5 ? letterbox(fc) : 1.;
   // Letterbox bars stay opaque: the background never shows through them
   gl_FragColor = vec4(col * lb, max(solid, 1. - lb));
 }

@@ -48,7 +48,7 @@ export const porcelain = defineShaderScene({
     },
     { type: "range", key: "open", label: "Amplitude", min: 0, max: 1.5, step: 0.05, default: 1 },
     { type: "range", key: "kintsugi", label: "Kintsugi", min: 0, max: 1, step: 0.05, default: 0.8 },
-    { type: "toggle", key: "cinema", label: "Format cinéma 2.39", default: true },
+    { type: "toggle", key: "letterbox", label: "Format cinéma 2.39 (bandes noires)", default: false },
   ],
   uniforms: () => ({
     ...headUniforms(),
@@ -61,7 +61,7 @@ export const porcelain = defineShaderScene({
     uWave: { value: 9 },
     uShift: { value: 0 },
     uShiftTarget: { value: 0 },
-    uCinema: { value: 1 },
+    uCinema: { value: 0 },
     uMode: { value: Math.random() < 0.5 ? 0 : 1 },
     uWasOpen: { value: 0 },
   }),
@@ -103,7 +103,7 @@ export const porcelain = defineShaderScene({
     const s = u.uShift.value as number;
     u.uShift.value = s + ((u.uShiftTarget.value as number) - s) * (1 - Math.exp(-dt * 2));
     u.uAmp.value = num(p.open, 1);
-    u.uCinema.value = p.cinema === false ? 0 : 1;
+    u.uCinema.value = p.letterbox === true ? 1 : 0;
   },
   fragment: /* glsl */ `
 uniform float uOpen;
@@ -127,7 +127,9 @@ const float NECK = -.85;                // the halves open above this cut
 float gAng;
 float gCoreD;
 
-vec3 toHead(vec3 p) { p.y += .12; return p; }
+/** The head turns very slowly on its own (the hinge, shards and core turn with it). */
+float gYaw = 0.;
+vec3 toHead(vec3 p) { p.y += .12; p.xz *= rot(gYaw); return p; }
 
 /** Undo the rotation of one half (s = -1 left, +1 right). */
 vec3 halfFrame(vec3 h, float s) {
@@ -287,6 +289,7 @@ void main() {
   vec2 fc = gl_FragCoord.xy;
   vec2 uv = (fc - .5 * uRes) / uRes.y;
   gAng = uOpen * .62 * uAmp;
+  gYaw = .22 * sin(uTime * .04 + uSeed) + .06 * sin(uTime * .1 + uSeed * 2.);
   vec3 ro = uCamPos;
   vec3 rd = lookAt(ro, uCamTarget) * normalize(vec3(uv, uFocal));
 

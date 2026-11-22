@@ -12,7 +12,8 @@ import { HEAD_GLSL, headParam, headUniforms, setHead } from "./heads";
 const HEAD_MAP = /* glsl */ `
 ${HEAD_GLSL}
 float gYaw;
-vec3 toHead(vec3 p) { p.y += .1; p.xz *= rot(gYaw); return p; }
+float gPitch = 0.;
+vec3 toHead(vec3 p) { p.y += .1; p.xz *= rot(gYaw); p.yz *= rot(gPitch); return p; }
 float map(vec3 p) { return headD(toHead(p)); }
 ${MARCH}
 `;
@@ -70,7 +71,8 @@ ${HEAD_MAP}
 void main() {
   vec2 fc = gl_FragCoord.xy;
   vec2 uv = (fc - .5 * uRes) / uRes.y;
-  gYaw = sin(uTime * .05 + uSeed) * .15 * uTurn;
+  gYaw = (.3 * sin(uTime * .045 + uSeed) + .07 * sin(uTime * .11 + uSeed * 2.)) * uTurn;
+  gPitch = .05 * sin(uTime * .06 + uSeed * 3.) * uTurn;
   vec3 ro = uCamPos;
   vec3 rd = lookAt(ro, uCamTarget) * normalize(vec3(uv, uFocal));
   vec3 col = uBase;
@@ -129,7 +131,8 @@ ${HEAD_MAP}
 void main() {
   vec2 fc = gl_FragCoord.xy;
   vec2 uv = (fc - .5 * uRes) / uRes.y;
-  gYaw = sin(uTime * .04 + uSeed) * .1;
+  gYaw = .18 * sin(uTime * .04 + uSeed) + .05 * sin(uTime * .1 + uSeed * 2.);
+  gPitch = .05 * sin(uTime * .06 + uSeed * 3.);
   vec3 ro = uCamPos;
   vec3 rd = lookAt(ro, uCamTarget) * normalize(vec3(uv, uFocal));
   // Lights follow the framing: the key light sits behind the head
@@ -206,7 +209,8 @@ float plate(vec2 fc, float cell, float ang, vec2 off, float v, out vec2 id) {
 void main() {
   vec2 fc = gl_FragCoord.xy;
   vec2 uv = (fc - .5 * uRes) / uRes.y;
-  gYaw = sin(uTime * .05 + uSeed) * .15 * uTurn;
+  gYaw = (.3 * sin(uTime * .045 + uSeed) + .07 * sin(uTime * .11 + uSeed * 2.)) * uTurn;
+  gPitch = .05 * sin(uTime * .06 + uSeed * 3.) * uTurn;
   vec3 ro = uCamPos;
   vec3 rd = lookAt(ro, uCamTarget) * normalize(vec3(uv, uFocal));
   float tt = march(ro, rd, 9.);

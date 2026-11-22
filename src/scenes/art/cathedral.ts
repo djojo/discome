@@ -16,7 +16,7 @@ export const cathedral = defineShaderScene({
   name: "Cathédrale",
   energy: "intense",
   renderScale: 0.85,
-  // Alpha only marks the letterbox bars: the background may live in the dark nave, never in the bars
+  // Alpha only marks the letterbox bars (option): the background may live in the dark nave, never in the bars
   mask: true,
   flight: { cruise: 1.1 },
   description:
@@ -25,6 +25,7 @@ export const cathedral = defineShaderScene({
     paletteParam("signalRed"),
     ...flightParams(),
     { type: "range", key: "haze", label: "Brume", min: 0, max: 2, step: 0.05, default: 1 },
+    { type: "toggle", key: "letterbox", label: "Format cinéma 2.39 (bandes noires)", default: false },
   ],
   uniforms: () => ({
     uHaze: { value: 1 },
@@ -34,9 +35,11 @@ export const cathedral = defineShaderScene({
     uShapeMix: { value: 1 },
     uFigD: { value: 16 },
     uFigVis: { value: 1 },
+    uCinema: { value: 0 },
   }),
   update(u, f, p, dt) {
     u.uHaze.value = num(p.haze, 1);
+    u.uCinema.value = p.letterbox === true ? 1 : 0;
     u.uBeatPhase.value = f.bpm > 0 ? f.beatPhase : (f.time * 2) % 1;
     // A new arch style on every phrase (ogive, round, portico), morphing over a bar
     if ((f.downbeat && f.phraseBar === 0) || f.drop) {
@@ -57,6 +60,7 @@ export const cathedral = defineShaderScene({
   },
   fragment: /* glsl */ `
 uniform float uHaze;
+uniform float uCinema;
 uniform float uBeatPhase;
 uniform float uShapeA;
 uniform float uShapeB;
@@ -189,7 +193,7 @@ void main() {
   col += uInk * .02 * uHaze * (1. + 2. * uDrop + 2. * gWarp) * (1. - abs(uv.y) * 1.2);
   col = 1. - exp(-col * 1.3);
   col *= vignette(fc / uRes);
-  float lb = letterbox(fc);
+  float lb = uCinema > .5 ? letterbox(fc) : 1.;
   gl_FragColor = vec4(col * lb, 1. - lb);
 }
 `,

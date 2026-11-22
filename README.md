@@ -50,7 +50,7 @@ npm run dev   # http://localhost:3000
 
 | Scène | Ce qu'on voit | Au drop |
 | --- | --- | --- |
-| Porcelaine | Visage de céramique immobile, fissures d'or kintsugi qui se propagent sur plusieurs minutes, format 2.39 | La tête s'ouvre en coquille ou se brise en éclats flottants (en alternance) sur une agate, une géode et un cœur fractal ; elle se referme au breakdown |
+| Porcelaine | Visage de céramique immobile, fissures d'or kintsugi qui se propagent sur plusieurs minutes | La tête s'ouvre en coquille ou se brise en éclats flottants (en alternance) sur une agate, une géode et un cœur fractal ; elle se referme au breakdown |
 | Métamorphose | Buste de musée en marbre ou en obsidienne qui se transforme lentement d'une tête en une autre, du cou vers le sommet ; la couture d'or du front flashe au kick | La transformation démarre ou s'accélère, la couture s'embrase et lâche des étincelles |
 | Topographie | Le visage dessiné par des lignes de niveau qui changent lentement d'orientation ; une ligne de lumière le traverse à chaque kick | Les lignes basculent en profondeur |
 | Profil | Le profil en contre-jour, brume et rais de lumière ; le contour s'allume en vague à chaque kick | Un contour d'accent s'allume |
@@ -122,7 +122,7 @@ scripts/bake-heads.mjs   Conversion des bustes (STL/3MF de assets/heads-src/, ca
 - **Le sujet vit à son tempo** : visage, figure, architecture ou paysage bougent lentement et en continu. Ils ne changent d'état que sur les grands moments du morceau (montée, drop, breakdown), avec des transitions de plusieurs mesures.
 - **Les effets portent le rythme** : lumière, couleur, particules, ondes, reflets et post-effets réagissent au kick, aux attaques et aux bandes de fréquences.
 - **On peut regarder une scène longtemps** :
-  - les **cadrages** changent à chaque phrase (`src/scenes/art/camera.ts`) ;
+  - les **cadrages** changent à chaque phrase, ou toutes les 16 s quand aucun tempo n'est détecté, et la caméra orbite lentement entre deux (`src/scenes/art/camera.ts`) ;
   - une graine `uSeed` varie les motifs à chaque retour de la scène ;
   - quelque chose évolue sur plusieurs minutes.
 
