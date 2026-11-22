@@ -2,8 +2,25 @@ import { defineShaderScene } from "../shader/defineShaderScene";
 import { paletteParam } from "../palettes";
 import { num } from "../utils";
 import { ART_LIB, MARCH } from "./lib.glsl";
+import { CAMERA_GLSL, type Framing } from "./camera";
 
-/** A white ceramic head, split by an inner light that opens on the bass and bursts on the drop. */
+/** Framings around the head (world space: the head centre sits near y = 0). "open" ones need the head open. */
+const FRAMINGS: Framing[] = [
+  { az: 0.5, el: 0.06, dist: 4.4, target: [0, -0.15, 0], focal: 1.95, weight: 3 },
+  { az: 1.45, el: 0.03, dist: 4.2, target: [0, -0.12, 0], focal: 2.1, weight: 2 },
+  { az: 0.32, el: 0.05, dist: 2.3, target: [0.1, -0.06, 0.32], focal: 2.2, weight: 2 },
+  { az: -0.5, el: 0.12, dist: 6.2, target: [0, -0.35, 0], focal: 1.8, weight: 1 },
+  { az: 0.15, el: 0.62, dist: 3.4, target: [0, 0.02, 0.05], focal: 1.9, weight: 3, tag: "open" },
+  { az: 0.02, el: 0.1, dist: 3.8, target: [0, -0.05, 0], focal: 1.95, weight: 2, tag: "open" },
+  { az: -0.7, el: 0.3, dist: 3.2, target: [0, 0, 0], focal: 1.9, weight: 2, tag: "open" },
+];
+
+/**
+ * Porcelain: a ceramic head that stays still while the story happens to it. Gold kintsugi cracks spread over
+ * minutes; the build pries the seam open and light leaks out; on the drop the two halves swing open like a
+ * shell (hinged at the back of the skull) onto a geode lining and a kaleidoscopic fractal core; it closes again
+ * through the breakdown. The beat only drives light: the seam, a wave through the core, glints on the shards.
+ */
 export const porcelain = defineShaderScene({
   id: "porcelain",
   name: "Porcelaine",
@@ -11,46 +28,188 @@ export const porcelain = defineShaderScene({
   energy: "calm",
   renderScale: 0.75,
   mask: true,
-  description: "Visage de céramique fendu par une lumière intérieure : les basses l'entrouvrent, le drop l'ouvre.",
+  camera: { framings: FRAMINGS, glideBars: 2 },
+  description:
+    "Visage de céramique qui s'ouvre comme une coquille au drop, sur une géode et un cœur fractal ; des fissures d'or se propagent lentement.",
   params: [
     paletteParam("porcelain"),
-    { type: "range", key: "open", label: "Ouverture", min: 0, max: 2, step: 0.05, default: 1 },
-    { type: "range", key: "turn", label: "Rotation du visage", min: 0, max: 1.5, step: 0.05, default: 1 },
+    { type: "range", key: "open", label: "Ouverture", min: 0, max: 1.5, step: 0.05, default: 1 },
+    { type: "range", key: "kintsugi", label: "Kintsugi", min: 0, max: 1, step: 0.05, default: 0.8 },
     { type: "toggle", key: "cinema", label: "Format cinéma 2.39", default: true },
   ],
-  uniforms: () => ({ uOpen: { value: 1 }, uTurn: { value: 1 }, uCinema: { value: 1 } }),
-  update(u, _f, p) {
-    u.uOpen.value = num(p.open, 1);
-    u.uTurn.value = num(p.turn, 1);
+  uniforms: () => ({
+    uOpen: { value: 0 },
+    uOpenVel: { value: 0 },
+    uAmp: { value: 1 },
+    uLeak: { value: 0 },
+    uKin: { value: 0.18 },
+    uKinMax: { value: 0.8 },
+    uWave: { value: 9 },
+    uShift: { value: 0 },
+    uShiftTarget: { value: 0 },
+    uCinema: { value: 1 },
+  }),
+  update(u, f, p, dt, ctx) {
+    const bar = f.bpm > 0 ? (60 / f.bpm) * 4 : 2;
+    // The story: closed, pried open by the build, swung open on the drop, closing through the breakdown
+    let target = f.section === "build" ? 0.1 * f.buildProgress : f.section === "drop" ? 1 : 0;
+    if (f.drop) {
+      target = 1;
+      ctx.camera?.request("open");
+      u.uShiftTarget.value = (u.uShiftTarget.value as number) + 0.37;
+    }
+    const o = u.uOpen.value as number;
+    // Critically damped: ~2 bars to open, ~4 bars to close
+    const w = target > o ? 4 / (bar * 2) : 4 / (bar * 4);
+    let v = u.uOpenVel.value as number;
+    v += (-w * w * (o - target) - 2 * w * v) * dt;
+    u.uOpenVel.value = v;
+    u.uOpen.value = Math.max(0, o + v * dt);
+    const open = u.uOpen.value as number;
+    if (ctx.camera) ctx.camera.allow = (fr) => fr.tag !== "open" || target > 0.5 || open > 0.5;
+
+    const leak = Math.min(1, (f.section === "build" ? f.buildProgress : 0) + open * 0.6);
+    const l = u.uLeak.value as number;
+    u.uLeak.value = l + (leak - l) * (1 - Math.exp(-dt * 2));
+    // Kintsugi grows over minutes and never goes back
+    u.uKinMax.value = num(p.kintsugi, 0.8);
+    u.uKin.value = Math.min(1, (u.uKin.value as number) + dt / 240);
+    u.uWave.value = f.beat ? 0 : (u.uWave.value as number) + dt;
+    const s = u.uShift.value as number;
+    u.uShift.value = s + ((u.uShiftTarget.value as number) - s) * (1 - Math.exp(-dt * 2));
+    u.uAmp.value = num(p.open, 1);
     u.uCinema.value = p.cinema === false ? 0 : 1;
   },
   fragment: /* glsl */ `
 uniform float uOpen;
-uniform float uTurn;
+uniform float uAmp;
+uniform float uLeak;
+uniform float uKin;
+uniform float uKinMax;
+uniform float uWave;
+uniform float uShift;
 uniform float uCinema;
 ${ART_LIB}
-float gGap, gYaw, gPitch;
-vec3 toHead(vec3 p) { p.y += .12; p.yz *= rot(gPitch); p.xz *= rot(gYaw); return p; }
+${CAMERA_GLSL}
+
+const float TH = .1;                    // shell thickness
+const vec3 HINGE = vec3(0., 0., -.58);  // back of the skull
+const vec3 CORE = vec3(0., .1, -.03);
+const float CORE_R = .4;
+const float NECK = -.85;                // the halves open above this cut
+float gAng;
+float gCoreD;
+
+vec3 toHead(vec3 p) { p.y += .12; return p; }
+
+/** Undo the rotation of one half (s = -1 left, +1 right). */
+vec3 halfFrame(vec3 h, float s) {
+  vec3 q = h - HINGE;
+  q.xz *= rot(s * gAng);
+  return q + HINGE;
+}
+
+float shell(vec3 q) { float d = sdHead(q); return max(d, -(d + TH)); }
+
+float halfD(vec3 h, float s) {
+  vec3 q = halfFrame(h, s);
+  float d = max(shell(q), s > 0. ? -q.x : q.x);
+  return max(d, NECK - q.y);
+}
+
+float neckD(vec3 h) { return max(sdHead(h), h.y - NECK); }
+
+/**
+ * Kaleidoscopic folds with a spherical inversion: a symmetrical, organic jewel filling the inside of the head.
+ * It drifts very slowly (the structure morphs over minutes); it never moves to the beat. trap: orbit trap.
+ */
+float coreFractal(vec3 h, out float trap) {
+  vec3 p = (h - CORE) / CORE_R * 1.2;
+  p.xz *= rot(uTime * .025 + uSeed);
+  p.xy *= rot(uTime * .017 + uSeed * .7);
+  float s = 1.;
+  trap = 1e3;
+  for (int i = 0; i < 4; i++) {
+    p = abs(p);
+    if (p.x < p.y) p.xy = p.yx;
+    if (p.x < p.z) p.xz = p.zx;
+    if (p.y < p.z) p.yz = p.zy;
+    p.xy *= rot(.25 + .08 * sin(uTime * .02 + uSeed));
+    p.yz *= rot(.15 + .05 * sin(uTime * .015));
+    p = p * 2. - vec3(1., .7, .45);
+    s *= 2.;
+    // spherical inversion: rounds everything into petals and bubbles
+    float r2 = dot(p, p);
+    float k = clamp(1.1 / r2, 1., 2.2);
+    p *= k;
+    s *= k;
+    trap = min(trap, r2);
+  }
+  return (length(p) - .8) / s * CORE_R / 1.2;
+}
+
 float map(vec3 p) {
   vec3 h = toHead(p);
-  float dl = max(sdHead(h + vec3(gGap, 0., 0.)), h.x + gGap);
-  float dr = max(sdHead(h - vec3(gGap, 0., 0.)), gGap - h.x);
-  return min(dl, dr);
+  float d = halfD(h, -1.);
+  // The right half and the neck are only evaluated when they can be the closest
+  if (-halfFrame(h, 1.).x < d) d = min(d, halfD(h, 1.));
+  if (h.y - NECK < d) d = min(d, neckD(h));
+  gCoreD = 1e3;
+  if (uOpen > .01) {
+    float cb = length(h - CORE) - CORE_R;
+    if (cb < d) {
+      float tr;
+      // the fractal fills the cavity of the head, like a brain made of patterns
+      gCoreD = max(max(cb, sdHead(h) + TH + .015), coreFractal(h, tr));
+      d = min(d, gCoreD);
+    }
+  }
+  return d;
 }
 ${MARCH}
+
+/** 3D cells: x = distance to the nearest seed, y = to the second, z = id of the nearest. */
+vec3 cells(vec3 x) {
+  vec3 i = floor(x), f = fract(x);
+  float d1 = 8., d2 = 8., id = 0.;
+  for (int a = -1; a <= 1; a++)
+    for (int b = -1; b <= 1; b++)
+      for (int c = -1; c <= 1; c++) {
+        vec3 o = vec3(float(a), float(b), float(c));
+        vec3 r = o + vec3(hash13(i + o), hash13(i + o + 7.1), hash13(i + o + 3.3)) - f;
+        float d = dot(r, r);
+        if (d < d1) { d2 = d1; d1 = d; id = hash13(i + o + 1.9); }
+        else if (d < d2) d2 = d;
+      }
+  return vec3(sqrt(d1), sqrt(d2), id);
+}
+
+vec3 iri(float t) { return .5 + .5 * cos(6.2831 * (t + vec3(0., .33, .67))); }
+
 void main() {
   vec2 fc = gl_FragCoord.xy;
   vec2 uv = (fc - .5 * uRes) / uRes.y;
-  float t = uTime;
-  gGap = .002 + (.012 * uBass * uBass + .07 * uDrop) * uOpen;
-  gYaw = sin(t * .21) * .55 * uTurn;
-  gPitch = -.06 + sin(t * .13) * .06;
-  vec3 ro = vec3(.35, .1, 4.6);
-  vec3 rd = lookAt(ro, vec3(0., -.22, 0.)) * normalize(vec3(uv, 1.95));
-  vec3 col = uBase * .9 + uInk * .07 * exp(-2.4 * length(uv - vec2(.3, .12)));
-  float tt = march(ro, rd, 8.);
+  gAng = uOpen * .62 * uAmp;
+  vec3 ro = uCamPos;
+  vec3 rd = lookAt(ro, uCamTarget) * normalize(vec3(uv, uFocal));
+
+  vec3 col = uBase * .9 + uInk * .06 * exp(-2.4 * length(uv - vec2(.3, .12)));
+  // March, gathering the glow of the core along the way
+  float t = .05, tt = -1., glow = 0.;
+  for (int i = 0; i < 130; i++) {
+    float d = map(ro + rd * t);
+    if (gCoreD < .4) glow += exp(-max(gCoreD, 0.) * 45.) * .008;
+    if (abs(d) < .0007 * t) { tt = t; break; }
+    t += d * .9;
+    if (t > 12.) break;
+  }
+  float coreLight = (.5 + .9 * uBass) * (1. + 2.5 * uDrop);
+  float waveR = uWave * .9;
+
   if (tt > 0.) {
     vec3 p = ro + rd * tt;
+    map(p);
+    bool onCore = gCoreD < .003 && uOpen > .01; // (map sets gCoreD; normals and AO below overwrite it)
     vec3 n = calcNormal(p);
     vec3 h = toHead(p);
     float ao = calcAO(p, n);
@@ -59,16 +218,96 @@ void main() {
     dif *= dif * (3. - 2. * dif);
     float spe = pow(clamp(dot(reflect(-L, n), -rd), 0., 1.), 48.);
     float fre = pow(1. - clamp(dot(n, -rd), 0., 1.), 5.);
-    col = uInk * (dif * vec3(1.1, 1.04, .96) + vec3(.06, .065, .08) * (.5 + .5 * n.y)) * ao;
-    col += spe * .3 + fre * vec3(.22, .24, .28) * ao;
-    col += pow(clamp(dot(n, normalize(vec3(.9, .25, -.5))), 0., 1.), 3.) * .15;
-    float seam = abs(abs(h.x) - gGap);
-    float cutFace = (1. - smoothstep(0., .003, seam)) * step(.004, gGap);
-    float depth = max(0., -sdHead(vec3(0., h.yz)));
-    vec3 inner = uAccent * (.25 + 2.2 * exp(-depth * 9.)) * (1. + 2. * uDrop) + mix(uAccent, vec3(1.), .7) * exp(-depth * 40.) * uDrop;
-    col = mix(col, inner, cutFace);
-    col += uAccent * exp(-seam * 110.) * (.35 + 1.6 * uBeat * uBass + 3. * uDrop);
+
+    if (onCore) {
+      // ---- the fractal core: iridescent, lit from within, a wave of light on every kick
+      float tr;
+      coreFractal(h, tr);
+      float r = length(h - CORE) / CORE_R;
+      float wave = exp(-pow(r - waveR, 2.) * 60.) * exp(-uWave * 1.5);
+      vec3 c = mix(pal(tr * .3 + uShift), iri(r * .8 + tr * .15 + uShift), .7);
+      float lit = .55 + .45 * clamp(dot(n, normalize(vec3(.3, .8, .5))), 0., 1.);
+      col = c * (.25 + .75 * ao) * lit * coreLight + iri(r + uShift) * wave * 1.8;
+      col += spe * .4 + fre * iri(uShift + .5) * .3;
+    } else {
+      // ---- which piece, and where on it
+      float dl = halfD(h, -1.), dr = halfD(h, 1.), dn = neckD(h);
+      float s = dl < dr ? -1. : 1.;
+      vec3 q = dn < min(dl, dr) ? h : halfFrame(h, s);
+      float sd = sdHead(q);
+      float dOut = abs(sd), dIn = abs(sd + TH);
+      float dCut = dn < min(dl, dr) ? abs(q.y - NECK) : min(abs(q.x), abs(q.y - NECK));
+      if (dOut <= dIn && dOut <= dCut) {
+        // Porcelain, with gold kintsugi cracks spreading over minutes
+        col = uInk * (dif * vec3(1.1, 1.04, .96) + vec3(.06, .065, .08) * (.5 + .5 * n.y)) * ao;
+        // soft fill from the camera, so every framing keeps the porcelain readable
+        col += uInk * .22 * clamp(dot(n, -rd), 0., 1.) * ao;
+        col += spe * .3 + fre * vec3(.22, .24, .28) * ao;
+        col += pow(clamp(dot(n, normalize(vec3(.9, .25, -.5))), 0., 1.), 3.) * .15;
+        vec3 cv = cells(q * 3. + uSeed);
+        float edge = cv.y - cv.x;
+        float fw = fwidth(edge);
+        float crack = 1. - smoothstep(.012, .012 + fw * 1.2, edge);
+        // cracks only along some cell edges, spreading from where the noise is lowest
+        float front = vnoise(q * 1.4 + uSeed) * .8 + .1 + .5 * step(.45, hash13(floor(vec3(cv.z * 97.))));
+        crack *= smoothstep(front - .06, front, uKin * uKinMax) * (1. - smoothstep(.15, .4, fw));
+        vec3 gold = vec3(1., .76, .34);
+        col = mix(col, gold * (.35 + dif * 1.1) + gold * spe * 2. + gold * uBeat * .5, crack);
+        // The seam: a thread of light that pulses on the kick
+        float seam = abs(q.x);
+        col += uAccent * exp(-seam * 120.) * (.3 + 1.4 * uBeat + 2. * uLeak) * step(NECK, q.y);
+      } else if (dIn < dCut) {
+        // Geode lining: crystal facets, iridescent, lit by the core
+        vec3 cv = cells(q * 16.);
+        vec3 nf = normalize(n + (vec3(hash13(vec3(cv.z, 1., 2.)), hash13(vec3(cv.z, 3., 4.)), hash13(vec3(cv.z, 5., 6.))) - .5) * 1.1);
+        vec3 Lc = normalize(CORE - h);
+        float lc = clamp(dot(nf, Lc), 0., 1.);
+        vec3 c = mix(pal(cv.z + uShift) , iri(cv.z + dot(nf, rd) * .8 + uShift), .7);
+        col = c * (.3 + lc * .9 * coreLight) * pow(ao, .3);
+        // facets catch the light of the core; some glint on the attacks
+        col += c * pow(clamp(dot(reflect(rd, nf), Lc), 0., 1.), 30.) * (.5 + 2.5 * uHat * step(.6, hash13(vec3(cv.z, floor(uTime * 10.), 0.))));
+      } else {
+        // Cut faces: agate bands from the white porcelain skin to the crystals
+        float depth = clamp(-sd / TH, 0., 1.);
+        float bands = depth * 5. + (vnoise(q * 9.) - .5) * .8;
+        vec3 ag = mix(pal(floor(bands) * .21 + uShift), iri(bands * .2 + uShift), .6) * (.7 + .3 * sin(bands * 6.2831)) * 1.15;
+        col = mix(uInk * .95, ag, smoothstep(.08, .25, depth)) * (.35 + .65 * dif) + spe * .25;
+        col += ag * .3 * uLeak;
+      }
+    }
   }
+  // The glow of the core around the fractal
+  col += iri(uShift + .2) * glow * coreLight * (uOpen + .05);
+
+  // Sheet of light escaping the seam (build, open)
+  if (uLeak > .01) {
+    float tEnd = tt > 0. ? tt : 9.;
+    float j = hash12(fc + fract(uTime) * 37.);
+    float acc = 0.;
+    for (int i = 0; i < 8; i++) {
+      vec3 h = toHead(ro + rd * tEnd * (float(i) + j) / 8.);
+      float sd = sdHead(h);
+      if (sd < 0.) continue;
+      float sheet = exp(-abs(h.x) * (40. - 25. * uOpen)) * exp(-sd * 2.2) * step(NECK, h.y);
+      acc += sheet * (.55 + .45 * vnoise(vec3(h.yz * 6., uTime * .8)));
+    }
+    col += uAccent * acc / 8. * uLeak * (.7 + .9 * uHat) * 1.6;
+  }
+
+  // Porcelain shards floating around, glinting on the attacks
+  for (int i = 0; i < 18; i++) {
+    float fi = float(i);
+    vec3 c = vec3(hash12(vec2(fi, 1.)), hash12(vec2(fi, 2.)), hash12(vec2(fi, 3.))) - .5;
+    vec3 pp = normalize(c) * (1. + .6 * hash12(vec2(fi, 4.)));
+    pp.xz *= rot(uTime * .03 + fi);
+    pp.y += .1 * sin(uTime * .2 + fi) - .12;
+    float s = dot(pp - ro, rd);
+    if (s < 0. || (tt > 0. && s > tt)) continue;
+    float d = length(pp - ro - rd * s);
+    float glint = .12 + 2.5 * uHat * pow(hash12(vec2(fi, floor(uTime * 8.))), 4.) + uDrop * 1.5;
+    col += vec3(1., .97, .9) * exp(-d * 380.) * glint;
+  }
+
   col = aces(col * 1.05);
   col *= vignette(fc / uRes);
   float lb = uCinema > .5 ? letterbox(fc) : 1.;

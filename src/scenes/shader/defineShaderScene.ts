@@ -3,6 +3,7 @@ import type { AudioFrame } from "@/lib/audio/AudioEngine";
 import type { Energy, ParamDef, ParamValues, SceneGLDef } from "../types";
 import { applyPalette, PALETTE_GLSL, paletteUniforms } from "../palettes";
 import { Flight, flightUniforms } from "../art/flight";
+import { Cadrage, cameraUniforms, type Framing } from "../art/camera";
 import { num } from "../utils";
 
 /** Uniforms every fullscreen shader gets for free. */
@@ -21,6 +22,8 @@ uniform float uDrop;
 uniform float uBuild;
 /** 8 frequency bands, bass (0) to treble (7), 0..1. */
 uniform float uBands[8];
+/** Random, redrawn each time the scene comes back on screen: vary patterns so it never repeats exactly. */
+uniform float uSeed;
 ${PALETTE_GLSL}
 mat2 rot(float a) { float c = cos(a), s = sin(a); return mat2(c, -s, s, c); }
 `;
@@ -47,7 +50,18 @@ interface ShaderSceneOptions {
    * `speed` and `dynamics` params scale it (see flightParams).
    */
   flight?: { cruise: number };
-  update?: (u: Uniforms, frame: AudioFrame, params: ParamValues, dt: number, flight: Flight | null) => void;
+  /**
+   * Scene built around a subject: a Cadrage draws a new framing on every phrase and writes
+   * uCamPos, uCamTarget and uFocal (include CAMERA_GLSL in the fragment).
+   */
+  camera?: { framings: Framing[]; glideBars?: number };
+  update?: (u: Uniforms, frame: AudioFrame, params: ParamValues, dt: number, ctx: SceneCtx) => void;
+}
+
+/** Per-instance helpers handed to a scene's update. */
+export interface SceneCtx {
+  flight: Flight | null;
+  camera: Cadrage | null;
 }
 
 /** Fullscreen-quad scene: write a fragment shader, get audio uniforms + palette wired up. */
@@ -80,10 +94,15 @@ export function defineShaderScene(opts: ShaderSceneOptions): SceneGLDef {
         uBuild: { value: 0 },
         uBands: { value: new Array<number>(8).fill(0) },
         ...pal,
+        uSeed: { value: Math.random() * 100 },
         ...(opts.flight ? flightUniforms() : {}),
+        ...(opts.camera ? cameraUniforms() : {}),
         ...(opts.uniforms?.() ?? {}),
       };
       const flight = opts.flight ? new Flight() : null;
+      const cadrage = opts.camera ? new Cadrage(opts.camera.framings, opts.camera.glideBars) : null;
+      const ctx: SceneCtx = { flight, camera: cadrage };
+      let lastSeen = -1e9;
       const material = new THREE.ShaderMaterial({
         uniforms,
         vertexShader: "void main() { gl_Position = vec4(position.xy, 0.0, 1.0); }",
@@ -125,7 +144,19 @@ export function defineShaderScene(opts: ShaderSceneOptions): SceneGLDef {
             uniforms.uSway.value = flight.sway;
             uniforms.uDive.value = flight.dive;
           }
-          opts.update?.(uniforms, f, params, dt, flight);
+          // Back on screen after a while: new seed, new starting framing
+          if (f.time - lastSeen > 1.5) {
+            uniforms.uSeed.value = Math.random() * 100;
+            cadrage?.reset(uniforms.uSeed.value as number);
+          }
+          lastSeen = f.time;
+          opts.update?.(uniforms, f, params, dt, ctx);
+          if (cadrage) {
+            cadrage.update(f, dt);
+            (uniforms.uCamPos.value as THREE.Vector3).copy(cadrage.pos);
+            (uniforms.uCamTarget.value as THREE.Vector3).copy(cadrage.target);
+            uniforms.uFocal.value = cadrage.focal;
+          }
           renderer.setRenderTarget(target);
           renderer.render(scene, camera);
         },

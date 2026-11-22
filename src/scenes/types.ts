@@ -1,6 +1,16 @@
 import type * as THREE from "three";
 import type { AudioFrame } from "@/lib/audio/AudioEngine";
 
+/*
+ * How a scene should react to the music (the "Discome principle"):
+ * - The subject (face, figure, architecture, landscape) lives at its own pace: slow, continuous, organic.
+ *   It only changes state on the big moments of the track (build, drop, breakdown), like a story event,
+ *   with transitions lasting bars, never on every kick.
+ * - The effects carry the rhythm: light, colour, particles, waves, glints, post-effects react to the kick,
+ *   the attacks and the frequency bands.
+ * - Something keeps evolving over minutes (and uSeed varies each comeback), so a scene can be watched for long.
+ */
+
 /** Declarative scene settings: the control panel builds its UI from these. */
 export type ParamDef =
   | { type: "range"; key: string; label: string; min: number; max: number; step?: number; default: number }
