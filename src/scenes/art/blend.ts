@@ -59,14 +59,15 @@ export const blend = defineShaderScene({
   update(u, f, p, dt) {
     (u.uMetal.value as THREE.Vector3).set(...(METALS[String(p.metal)] ?? METALS.or));
     // The volutes flow at their own pace, a little faster when the music is full
-    u.uFlow.value = (u.uFlow.value as number) + dt * (0.035 + 0.08 * f.energy);
+    // (slow, heavy: a liquid metal, not a swirl of smoke)
+    u.uFlow.value = (u.uFlow.value as number) + dt * (0.009 + 0.012 * f.energy);
     // The drop: a whirl that stirs everything, then slowly settles
-    let spin = (u.uSpin.value as number) * Math.exp(-dt * 0.9);
-    if (f.drop) spin = 7;
+    let spin = (u.uSpin.value as number) * Math.exp(-dt * 0.5);
+    if (f.drop) spin = 2.2;
     u.uSpin.value = spin;
     u.uTwist.value = ((u.uTwist.value as number) + spin * dt) * Math.exp(-dt * 0.04);
     // The seams light up on the kick
-    u.uSeam.value = f.beat ? 1 : (u.uSeam.value as number) * Math.exp(-dt * 4);
+    u.uSeam.value = f.beat ? 1 : (u.uSeam.value as number) * Math.exp(-dt * 2.5);
     const b = u.uBulge.value as number;
     u.uBulge.value = b + (f.bass - b) * (1 - Math.exp(-dt * (f.bass > b ? 8 : 2)));
     // Over the night, the gold wins
@@ -87,13 +88,13 @@ const float R = 1.35;
 /** The sphere's own slow turn, and the whirl (stronger near the equator, like a stirred liquid). */
 vec3 toLocal(vec3 p) {
   vec3 q = p;
-  q.xz *= rot(uTime * .06);
+  q.xz *= rot(uTime * .018);
   q.xz *= rot(uTwist * (1. - q.y * q.y / (R * R)));
   return q;
 }
 
 float disp(vec3 q) {
-  return (.012 + .03 * uBulge) * sin(q.x * 3.1 + uTime * .7) * sin(q.y * 2.7 - uTime * .5) * sin(q.z * 3.3 + uTime * .6);
+  return (.012 + .025 * uBulge) * sin(q.x * 3.1 + uTime * .22) * sin(q.y * 2.7 - uTime * .17) * sin(q.z * 3.3 + uTime * .2);
 }
 
 float sdBlob(vec3 p) { return length(p) - R - disp(toLocal(p)); }
@@ -127,8 +128,8 @@ vec2 marble(vec3 q) {
   // a second fold of the flow: the volutes curl into each other
   vec3 s2 = q * .9 + w * 2.6;
   // combed like marbled paper: long waves drag the streams sideways
-  s2.x += .35 * sin(s2.y * 2.3 + uFlow * 2.);
-  s2.y += .25 * sin(s2.z * 1.9 - uFlow * 1.5);
+  s2.x += .35 * sin(s2.y * 2.3 + uFlow * 1.2);
+  s2.y += .25 * sin(s2.z * 1.9 - uFlow);
   float f = vnoise(s2 + uSeed) + .35 * vnoise(s2 * 1.9 + 4.);
   // folded into many thin streams
   float m = .5 + .5 * sin(f * 30. + q.y * 2.);
@@ -161,7 +162,17 @@ void main() {
   if (t > 0.) {
     vec3 p = ro + rd * t;
     vec3 n = blobN(p);
-    col = metals(n, rd, marble(toLocal(p)));
+    vec3 q = toLocal(p);
+    vec2 mb = marble(q);
+    // the two metals stand in relief where they meet: a meniscus along each seam, the gold a little proud
+    vec3 t1 = normalize(cross(n, vec3(0., 1., .1)));
+    vec3 t2 = cross(n, t1);
+    const float e = .012;
+    vec2 m1 = marble(toLocal(p + t1 * e));
+    vec2 m2 = marble(toLocal(p + t2 * e));
+    float h0 = .5 * mb.x + .8 * mb.y, h1 = .5 * m1.x + .8 * m1.y, h2 = .5 * m2.x + .8 * m2.y;
+    n = normalize(n - (t1 * (h1 - h0) + t2 * (h2 - h0)) / e * .012);
+    col = metals(n, rd, mb);
     solid = 1.;
   }
   col = aces(col);

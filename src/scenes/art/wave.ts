@@ -6,12 +6,14 @@ import { CAMERA_GLSL, type Framing } from "./camera";
 import { STUDIO_GLSL } from "./studio.glsl";
 
 const FRAMINGS: Framing[] = [
-  // from above: the whole pattern, like a mandala in a dish
-  { az: 0.3, el: 1.4, dist: 9, target: [0, 0, 0], focal: 1.8, weight: 3 },
-  { az: 0.9, el: 0.6, dist: 7.5, target: [0, 0, 0], focal: 1.9, weight: 2 },
-  // skimming the surface
-  { az: -0.4, el: 0.14, dist: 3.6, target: [0, 0.05, -0.4], focal: 2, weight: 2 },
-  { az: 2.2, el: 0.32, dist: 2.4, target: [0.6, 0, 0.4], focal: 2.1, weight: 2 },
+  // close, skimming the surface: the relief of the waves against the light
+  { az: -0.4, el: 0.12, dist: 1.8, target: [0.3, 0, -0.2], focal: 2, weight: 3 },
+  { az: 2.2, el: 0.2, dist: 1.4, target: [0.9, 0, 0.5], focal: 2.1, weight: 3 },
+  // macro on the folds near the centre
+  { az: 0.8, el: 0.35, dist: 1.1, target: [0.15, 0, 0.1], focal: 2.2, weight: 2 },
+  { az: -1.9, el: 0.28, dist: 2.4, target: [-0.8, 0, 0.6], focal: 2, weight: 2 },
+  // from above: the whole figure, like a mandala in a dish
+  { az: 0.3, el: 1.4, dist: 9, target: [0, 0, 0], focal: 1.8, weight: 1 },
 ];
 
 /** Bands of the 64-band spectrum feeding the four patterns, low to high. */
@@ -34,7 +36,7 @@ export const wave = defineShaderScene({
   energy: "medium",
   renderScale: 0.8,
   mask: true,
-  camera: { framings: FRAMINGS, glideBars: 2 },
+  camera: { framings: FRAMINGS, glideBars: 3 },
   description:
     "Bain de mercure qui vibre en ondes stationnaires, comme la cymatique : chaque partie du spectre dessine son motif ; une goutte tombe au kick, le motif se complexifie au drop. Variante Pics : un ferrofluide noir.",
   params: [
@@ -141,7 +143,7 @@ float patterns(vec2 p, float lv) {
   h += uAmp.y * mode(r, th, 8. * ks, 6. + 2. * lv, s);
   h += uAmp.z * mode(r, th, 13. * ks, 8. + 2. * lv, -s * 1.3);
   h += uAmp.w * mode(r, th, 19. * ks, 12. + 2. * lv, s * .7);
-  return h * .085 * breathe;
+  return h * .11 * breathe;
 }
 
 /** The surface of the mercury: the patterns, the rings of the drops, calm at the dish's edge. */
@@ -254,11 +256,16 @@ void main() {
       solid = fade;
     }
   } else if (rd.y < -1e-4) {
-    // the surface, refined from the flat plane (its slopes are gentle)
-    float t = -ro.y / rd.y;
+    // the surface: marched as a relief (seen from close, its folds stand out against the light)
+    const float HM = .12;
+    float t = (ro.y - HM) / -rd.y;
+    t = max(t, 0.);
     vec3 p = ro + rd * t;
-    for (int i = 0; i < 2; i++) {
-      t = (height(p.xz) - ro.y) / rd.y;
+    float tEndW = -(ro.y + HM) / rd.y;
+    for (int i = 0; i < 72; i++) {
+      float d = p.y - height(p.xz);
+      if (abs(d) < .0004 * t || t > tEndW) break;
+      t += d * .5;
       p = ro + rd * t;
     }
     float r = length(p.xz);

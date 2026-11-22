@@ -1,22 +1,26 @@
 /**
- * The studio of the Mercure world: what liquid metal reflects. A dark room, a ring light overhead, two tall strips
- * (warm accent, cold second colour of the palette), a thin line on the horizon, a warm bounce from the floor.
- * Colour only ever comes from these reflections. Needs the palette uniforms and uTime.
+ * The studio of the Mercure world: what liquid metal reflects. A pale room, darker toward the floor, a ring light
+ * overhead with a dark centre (what lets a flat mirror show every ripple), two big white softboxes on the sides
+ * (barely tinted by the palette at their edges) and the line of the horizon. Mercury reflects almost all of it:
+ * this is what makes it read as liquid silver rather than black glass. Needs the palette uniforms and uTime.
  */
 export const STUDIO_GLSL = /* glsl */ `
 vec3 studio(vec3 r) {
-  float az = atan(r.z, r.x) + uTime * .03;
-  // grey walls, darker toward the floor: what makes liquid metal read as silver rather than black glass
-  vec3 c = mix(uBase * .6 + uInk * .1, uBase + uInk * .34, smoothstep(-.4, .7, r.y));
-  // a ring light overhead (its dark centre is what lets a flat mirror show every ripple), a soft ceiling
-  c += uInk * (2.4 * exp(-pow((r.y - .88) * 30., 2.)) + .15 * smoothstep(.5, .9, r.y));
+  float az = atan(r.z, r.x) + uTime * .01;
+  // a grey studio floor below (a floating drop shows it on its lower half), a pale room above
+  vec3 c = mix(uInk * .2, uInk * .5, smoothstep(-.5, .8, r.y));
+  c *= mix(.55, 1., smoothstep(-.25, .05, r.y));
+  c += uInk * .9 * exp(-abs(r.y - .02) * 50.);
+  // the ring light, and the dark centre of the ceiling
+  c *= 1. - .75 * smoothstep(.93, .99, r.y);
+  c += uInk * 2.2 * exp(-pow((r.y - .88) * 28., 2.));
+  // two big softboxes
   float a1 = abs(mod(az - .9 + 3.14159, 6.28318) - 3.14159);
   float a2 = abs(mod(az + 2.2 + 3.14159, 6.28318) - 3.14159);
-  float band = smoothstep(-.35, .05, r.y) * (1. - smoothstep(.5, .8, r.y));
-  c += uAccent * 3. * exp(-a1 * a1 * 60.) * band;
-  c += uPal1 * 2.6 * exp(-a2 * a2 * 45.) * band;
-  c += uInk * .8 * exp(-abs(r.y - .02) * 60.);
-  c += uAccent * .08 * (1. - smoothstep(-.7, -.1, r.y));
+  float band = smoothstep(-.2, .1, r.y) * (1. - smoothstep(.55, .75, r.y));
+  float s1 = smoothstep(.36, .3, a1) * band, s2 = smoothstep(.3, .24, a2) * band;
+  c += mix(vec3(1.), uAccent, .3 * smoothstep(.2, .34, a1)) * 2.2 * s1;
+  c += mix(vec3(1.), uPal1, .3 * smoothstep(.16, .28, a2)) * 1.9 * s2;
   return c;
 }
 `;
