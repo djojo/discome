@@ -73,7 +73,9 @@ npm run dev   # http://localhost:3000
 | Grimoire | HUD de jeu ésotérique (2D) : chapitre, glyphes, orbites, texte japonais, vraies données du morceau | Le chapitre change, l'avertissement clignote |
 | Chair | Créature entre l'anémone et le corail, tentacules lents, veines bioluminescentes où une impulsion monte à chaque kick, qui blanchit au fil de la soirée ; variante Abysses (fragments de plastique, un sac qui dérive) | Spores lumineuses |
 | Signal | Données sur une grille suisse : spectrogramme qui défile, grands chiffres, code-barres, onde ; la mise en page change à chaque phrase | Inversion |
-| Flux | Fil infini de cartes sans un mot, qui défile par coups de pouce, de plus en plus vite ; stories, cœurs au kick | Le fil se fige et se déchire en pixels ; au breakdown, une carte vide |
+| Flux | Fil infini de cartes sans un mot, qui défile par coups de pouce, de plus en plus vite ; stories, cœurs au kick | Le fil se fige et se déchire en pixels ; au breakdown, il ralentit et s'assombrit |
+| La Course | Silhouettes qui courent sur une piste sans fin vers un grand cœur lumineux qui ne se rapproche jamais, chacune suivie d'une file de petites silhouettes (ses followers) ; le cœur bat en double coup au kick, les foulées accélèrent pendant la montée ; au fil de la soirée, plus de coureurs, et certains s'épuisent | Le cœur éclate en pluie de petits cœurs, un coureur tombe et sa file passe à ses voisins |
+| Averse | Une silhouette immobile sur une eau noire sous une pluie de gouttes de lumière : chaque goutte trace un anneau d'un pixel sur l'eau et laisse un point sur elle ; les charleys amènent de grosses gouttes, le kick allume les anneaux | Scène des breakdowns de Signal : la pluie s'épaissit jusqu'à recouvrir la silhouette |
 
 **Classiques**, recolorées par les palettes des mondes : Halo, Kaléidoscope, Orbe, Tunnel, Nébuleuse, Spectro-terrain, Échos, Danseuse, Androïde, Corps de particules.
 
