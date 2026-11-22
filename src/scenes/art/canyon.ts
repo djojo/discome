@@ -81,7 +81,8 @@ float plateau(vec2 xz) {
 
 /** Half-width of the canyon at height y. */
 float halfWidth(vec3 p) {
-  float breathe = (uBass * .12 * uPsy + uDrop * .25) * sin(p.y * 2.3 + uTime * 2.);
+  // The walls stay put: the music lives in the strata colours and the light (a slow drift only)
+  float breathe = .04 * uPsy * sin(p.y * 2.3 + uTime * .3);
   if (uRelief < .5) {
     // Gorge: smooth, wavy sandstone (slot canyon), opening slightly toward the top
     return gW0 * (1. + .36 * sin(p.y * 1.9 + p.z * .35) + .17 * sin(p.y * 4.7 - p.z * .8 + 1.) + .3 * smoothstep(1., 6., p.y))

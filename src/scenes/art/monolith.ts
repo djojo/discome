@@ -28,7 +28,7 @@ export const monolith = defineShaderScene({
     uSunTarget: { value: 0.7 },
     uSunEl: { value: 0.2 },
     uBarPos: { value: 0 },
-    uRise: { value: 0 },
+    uRise: { value: 1 },
     uDust: { value: 1 },
   }),
   update(u, f, p, dt) {
@@ -37,10 +37,10 @@ export const monolith = defineShaderScene({
     u.uSunAz.value = az + ((u.uSunTarget.value as number) - az) * (1 - Math.exp(-dt * 1.5));
     u.uSunEl.value = num(p.sun, 0.2);
     u.uBarPos.value = f.bpm > 0 ? f.bar + (f.beatInBar + f.beatPhase) / 4 : f.time / 2;
-    // Blocks rise with the bass, smoothed so they glide instead of jumping
-    const rise = f.section === "breakdown" ? 0 : Math.min(1, f.bass * 1.2);
+    // The city moves at its own pace: towers rise and settle over a phrase, quieter in the breakdown
+    const rise = f.section === "breakdown" ? 0.3 : 1;
     const r = u.uRise.value as number;
-    u.uRise.value = r + (rise - r) * (1 - Math.exp(-dt * 2.5));
+    u.uRise.value = r + (rise - r) * (1 - Math.exp(-dt * 0.3));
     u.uDust.value = num(p.dust, 1);
   },
   fragment: /* glsl */ `
@@ -70,9 +70,9 @@ bool gCheap = false;
 /** The two middle columns are the avenue; a quarter of the other lots stay empty. */
 bool built(vec4 h, vec2 c) { return abs(c.x + .5) > 1. && h.w > .25; }
 
-/** Lot height; a few towers rise and settle back over 4 bars, each on its own phase. */
+/** Lot height; a few towers rise and settle back over a phrase (8 bars), each on its own phase. */
 float lotH(vec4 h, vec4 k) {
-  float rise = smoothstep(.55, 1., sin(uBarPos * 1.5708 + k.x * 6.283)) * uRise * 1.4;
+  float rise = smoothstep(.55, 1., sin(uBarPos * .7854 + k.x * 6.283)) * uRise * 1.4;
   return 1.3 + h.z * h.z * 7. + rise;
 }
 
@@ -300,7 +300,8 @@ void main() {
     gCheap = false;
     lit /= 6.;
     float phase = .25 + 1.6 * pow(sd, 5.);
-    col += uAccent * lit * phase * uDust * .1 * (1. - exp(-tEnd * .08)) * (1. + uDrop);
+    // the dust catches the light on the kick
+    col += uAccent * lit * phase * uDust * .1 * (1. - exp(-tEnd * .08)) * (1. + uDrop + .6 * uBeat);
   }
 
   float l = dot(col, vec3(.3, .59, .11));
