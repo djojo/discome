@@ -199,7 +199,7 @@ export const LOOKS: Look[] = [
       { id: "echoes", weight: 1, params: { palette: "concrete", shape: "circle" } },
     ],
     bgOpacity: 0.35,
-    fx: { grain: 0.25, vignette: 0.45, saturation: 0.85, speedBlur: 0.5 },
+    fx: { grain: 0.08, vignette: 0.45, saturation: 0.85, speedBlur: 0.5 },
     transitions: { calm: ["luma", "fade"], drop: ["flash", "fade"] },
     director: "chill",
   },

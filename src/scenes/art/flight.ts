@@ -51,7 +51,7 @@ export class Flight {
 
   private vel = 0;
   private pump = 0;
-  private pumpGain = 0.35;
+  private kick = 0;
   private boost = 0;
   /** Take-off: holds the camera high for a bar and a half after a drop, then lets it glide back down. */
   private air = 0;
@@ -92,20 +92,22 @@ export class Flight {
     const a = -w * w * (this.speed - target) - 2 * w * this.vel;
     this.vel += a * dt;
     this.speed = Math.max(0.03, this.speed + this.vel * dt);
-    this.accel = approach(this.accel, clamp(this.vel / 6, -1, 1), 10, dt);
+    this.accel = approach(this.accel, clamp(this.vel / 6, -1, 1), 3, dt);
 
-    // Each kick pushes forward a little on the groove and the drop
-    if (f.beat && (f.section === "calm" || f.section === "drop")) this.pump = Math.min(1, this.pump + 0.6);
-    this.pump *= Math.exp(-dt * 7);
+    // Each kick pushes forward a little on the groove and the drop: a short, smooth surge (a jump in
+    // speed on every beat reads as a stutter, not as a push)
+    if (f.beat && (f.section === "calm" || f.section === "drop")) this.kick = Math.min(1, this.kick + 0.6);
+    this.kick *= Math.exp(-dt * 5);
+    this.pump = approach(this.pump, this.kick, 12, dt);
 
-    this.pumpGain = pump;
     this.travel += dt * cruise * (this.speed + pump * this.pump * dynamics);
     this.flyMove(f, dt, bar, dynamics);
   }
 
   /** 0..1, the normalised speed the shaders use for FOV, streaks and blur. */
   get speedNorm() {
-    return clamp((this.speed + this.pumpGain * this.pump) / SPEED_FULL, 0, 1.5);
+    // the kicks stay out of it: the lens must not breathe on every beat
+    return clamp(this.speed / SPEED_FULL, 0, 1.5);
   }
 
   /** 0..1, how much radial speed blur the compositor applies (nothing at cruise). */
@@ -190,10 +192,14 @@ uniform float uSway;
 uniform float uDive;
 /** The lens opens with the speed: wider field of view = stronger sense of speed. */
 float flightFocal(float base) { return base / (1. + uSpeed * .55); }
-/** A small tremor when the flight accelerates hard. */
+/**
+ * A smooth vibration at high speed and during hard accelerations (take-off). Never random frame to frame:
+ * a jitter reads as a rendering bug.
+ */
 vec2 flightShake() {
-  float k = .01 * max(uAccel, 0.) + .004 * uSpeed * uSpeed;
-  return (vec2(hash12(vec2(floor(uTime * 40.), 1.7)), hash12(vec2(floor(uTime * 40.), 8.3))) - .5) * k;
+  float k = .0025 * uSpeed * uSpeed + .003 * max(uAccel, 0.);
+  float t = uTime;
+  return vec2(sin(t * 9.1) + .6 * sin(t * 15.7 + 1.3), sin(t * 8.3 + 2.1) + .6 * sin(t * 13.9)) * k;
 }
 `;
 

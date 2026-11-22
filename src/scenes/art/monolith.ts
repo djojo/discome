@@ -15,8 +15,8 @@ export const monolith = defineShaderScene({
   energy: "calm",
   renderScale: 0.85,
   mask: true,
-  // a lot (2.6 units) every ~1.7 s at cruise; each kick surges forward
-  flight: { cruise: 1.5, pump: 0.9 },
+  // a lot (2.6 units) every ~1.7 s at cruise; each kick adds a gentle surge
+  flight: { cruise: 1.5, pump: 0.3 },
   description:
     "Avenue brutaliste sous un soleil rasant : on la remonte au ras du sol, on accélère pendant la montée, on décolle au-dessus des toits au drop.",
   params: [
@@ -183,18 +183,22 @@ float marchB(vec3 ro, vec3 rd, float tmax) {
 }
 
 /** Soft shadow that hardens near the contact point. */
+/** Interleaved gradient noise: an even, fine dither (white noise clumps into grain). */
+float ign(vec2 fc) { return fract(52.9829189 * fract(dot(fc, vec2(.06711056, .00583715)))); }
+
 float shadow(vec3 ro, vec3 rd) {
   gCheap = true;
-  // Dithered start: the fixed steps would otherwise print fans of lines around the edges
-  float res = 1., t = .03 + .035 * hash12(ro.xz * 91.7 + ro.y * 13.1), ph = 1e10;
-  for (int i = 0; i < 28; i++) {
+  // The fixed steps would print fans of lines around the edges: a small ordered offset (interleaved gradient
+  // noise) breaks them up without the speckle a random one leaves in the penumbra
+  float res = 1., t = .03 + .015 * ign(gl_FragCoord.xy), ph = 1e10;
+  for (int i = 0; i < 36; i++) {
     float h = map(ro + rd * t);
     if (h < 0.) { res = 0.; break; }
     float y = h * h / (2. * ph);
     float d = sqrt(max(h * h - y * y, 0.));
-    res = min(res, 12. * d / max(t - y, .0001));
+    res = min(res, 8. * d / max(t - y, .0001));
     ph = h;
-    t += clamp(h, .04, .7);
+    t += clamp(h, .03, .6);
     if (res < .004 || t > 22. || ro.y + rd.y * t > 10.) break;
   }
   gCheap = false;
@@ -361,13 +365,16 @@ void main() {
       // smaller than a few pixels (far away or seen at a grazing angle) instead of turning into moiré.
       vec2 cell = f / vec2(.3, .225);
       vec2 fw = fwidth(cell);
-      float holes = (1. - smoothstep(.018, .03, length((fract(cell) - .5) * vec2(.3, .225)))) * (1. - smoothstep(.05, .12, max(fw.x, fw.y)));
+      // ...and at grazing angles, where even fwidth lets stripes through
+      float facing = smoothstep(.12, .4, abs(dot(n, rd)));
+      // (holes only while a cell spans 20+ pixels: smaller, they turn into speckle)
+      float holes = (1. - smoothstep(.018, .03, length((fract(cell) - .5) * vec2(.3, .225)))) * (1. - smoothstep(.025, .05, max(fw.x, fw.y)));
       float jy = joint(f.y / .45, .04) * (1. - smoothstep(.02, .05, fwidth(f.y / .45)));
       float jx = joint(f.x / 1.2, .012) * (1. - smoothstep(.006, .015, fwidth(f.x / 1.2)));
-      alb *= 1. - fade * (.2 * jy + .14 * jx) - .22 * holes * step(abs(n.y), .5);
+      alb *= 1. - facing * (fade * (.2 * jy + .14 * jx) + .16 * holes * step(abs(n.y), .5));
       // Rain streaks hanging under the top edge, and broader stains
       float streak = smoothstep(.45, .85, vnoise(vec3(f.x * 3.2, p.y * .18, hash12(c) * 50.))) * exp(-max(H - p.y, 0.) * .25);
-      streak *= 1. - smoothstep(.25, .6, fwidth(f.x * 3.2)); // facades seen edge-on would turn the streaks into moiré
+      streak *= (1. - smoothstep(.25, .6, fwidth(f.x * 3.2))) * facing; // facades seen edge-on would turn the streaks into moiré
       alb *= (1. - .18 * streak * (1. - smoothstep(8., 22., t))) * (.93 + .14 * vnoise(vec3(f * 1.1, c.x)));
     }
     vec3 sunCol = uAccent * 3.3 * (1. + uDrop);
@@ -382,13 +389,14 @@ void main() {
   // Dust lit by the sun, with shafts where the towers cut the light
   if (uDust > 0.) {
     float tEnd = t > 0. ? min(t, 24.) : 24.;
-    float j = hash12(fc + fract(uTime * 3.1) * 97.);
+    // a fixed, even dither and soft shadow edges: no flickering grain in the shafts
+    float j = ign(fc);
     float lit = 0.;
     gCheap = true;
     for (int i = 0; i < 6; i++) {
       float s = (float(i) + j) / 6.;
       vec3 q = ro + rd * (tEnd * s * s);
-      if (map(q + gSun * 1.2) > .05 && map(q + gSun * 4.5) > .05) lit += 1.;
+      lit += smoothstep(.02, .35, min(map(q + gSun * 1.2), map(q + gSun * 4.5)));
     }
     gCheap = false;
     lit /= 6.;
