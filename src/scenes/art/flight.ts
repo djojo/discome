@@ -21,9 +21,9 @@ const MOVE_LABELS: Record<FlightMove, string> = {
 const SPEED_FULL = 6;
 
 /** Settings every flight scene exposes. */
-export const flightParams = (speed = 1): ParamDef[] => [
+export const flightParams = (speed = 1, dynamics = 1): ParamDef[] => [
   { type: "range", key: "speed", label: "Vitesse de croisière", min: 0, max: 3, step: 0.05, default: speed },
-  { type: "range", key: "dynamics", label: "Dynamique", min: 0, max: 2, step: 0.05, default: 1 },
+  { type: "range", key: "dynamics", label: "Dynamique", min: 0, max: 2, step: 0.05, default: dynamics },
 ];
 
 const clamp = (v: number, a: number, b: number) => (v < a ? a : v > b ? b : v);
@@ -51,6 +51,7 @@ export class Flight {
 
   private vel = 0;
   private pump = 0;
+  private pumpGain = 0.35;
   private boost = 0;
   /** Take-off: holds the camera high for a bar and a half after a drop, then lets it glide back down. */
   private air = 0;
@@ -58,8 +59,11 @@ export class Flight {
   private moveTime = 0;
   private roll = 0;
 
-  /** Advance the flight. `cruise` is the scene's base speed (units per second). */
-  update(f: AudioFrame, dt: number, cruise: number, dynamics: number) {
+  /**
+   * Advance the flight. `cruise` is the scene's base speed (units per second); `pump` is how hard each kick
+   * pushes forward (fraction of the cruise speed).
+   */
+  update(f: AudioFrame, dt: number, cruise: number, dynamics: number, pump = 0.35) {
     const bar = f.bpm > 0 ? (60 / f.bpm) * 4 : 2;
 
     if (f.drop) {
@@ -94,13 +98,14 @@ export class Flight {
     if (f.beat && (f.section === "calm" || f.section === "drop")) this.pump = Math.min(1, this.pump + 0.6);
     this.pump *= Math.exp(-dt * 7);
 
-    this.travel += dt * cruise * (this.speed + 0.35 * this.pump * dynamics);
+    this.pumpGain = pump;
+    this.travel += dt * cruise * (this.speed + pump * this.pump * dynamics);
     this.flyMove(f, dt, bar, dynamics);
   }
 
   /** 0..1, the normalised speed the shaders use for FOV, streaks and blur. */
   get speedNorm() {
-    return clamp((this.speed + 0.35 * this.pump) / SPEED_FULL, 0, 1.5);
+    return clamp((this.speed + this.pumpGain * this.pump) / SPEED_FULL, 0, 1.5);
   }
 
   /** 0..1, how much radial speed blur the compositor applies (nothing at cruise). */

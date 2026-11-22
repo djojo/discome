@@ -163,14 +163,22 @@ export const LOOKS: Look[] = [
     swatch: ["#1B1D22", "#8E8A83", "#F2C48D"],
     palettes: ["concrete", "sodium"],
     scenes: [
-      { id: "monolith", key: "soleil", label: "Soleil rasant", weight: 3, role: "drop", params: { palette: "concrete" }, vary: { palettes: ["concrete"] } },
+      {
+        id: "monolith",
+        key: "soleil",
+        label: "Soleil rasant",
+        weight: 3,
+        role: "drop",
+        params: { palette: "concrete", dynamics: 1.3 },
+        vary: { palettes: ["concrete"] },
+      },
       {
         id: "monolith",
         key: "sodium",
         label: "Nuit sodium",
         weight: 2,
         role: "calm",
-        params: { palette: "sodium", sun: 0.07, dust: 1.6 },
+        params: { palette: "sodium", sun: 0.07, dust: 1.6, dynamics: 1.3 },
         vary: { palettes: ["sodium"] },
       },
       {
@@ -179,7 +187,7 @@ export const LOOKS: Look[] = [
         label: "Colosse",
         weight: 2,
         role: "calm",
-        params: { palette: "concrete", monument: "head", head: "moai", sun: 0.12 },
+        params: { palette: "concrete", monument: "head", head: "moai", sun: 0.12, dynamics: 1.3 },
         vary: { palettes: ["concrete", "sodium"], choices: { head: ["moai", "nefertiti", "lion"] } },
       },
       { id: "porcelain", label: "Statue brisée", weight: 1, role: "drop", params: { palette: "concrete", style: "shards" } },

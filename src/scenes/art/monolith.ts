@@ -15,12 +15,13 @@ export const monolith = defineShaderScene({
   energy: "calm",
   renderScale: 0.85,
   mask: true,
-  flight: { cruise: 0.6 },
+  // a lot (2.6 units) every ~1.7 s at cruise; each kick surges forward
+  flight: { cruise: 1.5, pump: 0.9 },
   description:
     "Avenue brutaliste sous un soleil rasant : on la remonte au ras du sol, on accélère pendant la montée, on décolle au-dessus des toits au drop.",
   params: [
     paletteParam("concrete"),
-    ...flightParams(),
+    ...flightParams(1, 1.3),
     { type: "range", key: "sun", label: "Hauteur du soleil", min: 0.05, max: 0.6, step: 0.01, default: 0.2 },
     { type: "range", key: "dust", label: "Poussière", min: 0, max: 2, step: 0.05, default: 1 },
     {
@@ -234,6 +235,36 @@ float colossus(vec3 ro, vec3 rd, out vec3 c) {
   return -1.;
 }
 
+/**
+ * Dust motes hanging in the air near the lens, on planes that come at the camera as it travels: they rush
+ * past and stretch into streaks with the speed.
+ */
+float motes(vec2 uv, float focal, float tHit) {
+  float acc = 0.;
+  for (int i = 0; i < 4; i++) {
+    float fi = float(i);
+    const float SPAN = 6.;
+    float phase = uTravel / SPAN + fi * .25;
+    float z = .4 + SPAN * (1. - fract(phase));
+    if (tHit > 0. && z > tHit) continue;
+    vec2 w = uv * z / focal / .5;
+    vec2 id = floor(w);
+    float seed = floor(phase) * 13.1 + fi * 7.7;
+    float h = hash12(id + seed);
+    if (h < .75) continue;
+    vec2 o = (vec2(hash12(id + seed + 1.3), hash12(id + seed + 4.7)) - .5) * .7;
+    vec2 d = (w - id - .5 - o) * .5;
+    // stretched along the flow of the flight (away from the centre of the frame)
+    vec2 dir = normalize(uv + 1e-4);
+    float along = dot(d, dir) / (1. + uSpeed * 10. / z);
+    float r = length(vec2(along, dot(d, vec2(-dir.y, dir.x))));
+    float size = .006 + .004 * h;
+    float fade = smoothstep(.4, 1.2, z) * (1. - smoothstep(4., 6.4, z));
+    acc += (1. - smoothstep(size * .3, size, r)) * fade * (.5 + .5 * h);
+  }
+  return acc;
+}
+
 /** Thin line where fract(x) wraps, width w (in units of one period). */
 float joint(float x, float w) { float f = fract(x); return 1. - smoothstep(0., w, min(f, 1. - f)); }
 
@@ -251,12 +282,18 @@ void main() {
   gSun = normalize(vec3(cos(az) * .9, uSunEl, sin(az) * .9));
 
   // Flight: low along the avenue, high over the roofs when the drop takes off
-  float alt = .55 + (uDive > 0. ? uDive * uDive * 4.2 : uDive * .38);
-  vec3 ro = vec3(uSway * 1.2, alt, -uTravel);
+  // On top of the flight's moves, a weave across the avenue and a swell in altitude tied to the distance
+  // travelled: the faster we go, the faster we weave. The camera looks into its turns.
+  float weave = sin(uTravel * .11), swell = sin(uTravel * .07 + 1.3);
+  float alt = .55 + .22 * swell + (uDive > 0. ? uDive * uDive * 4.2 : uDive * .38);
+  // (the avenue is 5.2 wide: stay clear of the facades)
+  vec3 ro = vec3(clamp(uSway * 1.6 + .5 * weave, -1.9, 1.9), max(alt, .2), -uTravel);
   gRo = ro;
-  float pitch = mix(.55, -2.4, smoothstep(.5, 1.5, uDive)) + .35 * smoothstep(0., 1., -uDive);
-  vec3 ta = ro + vec3(.25 * sin(uTime * .1) + uSway * .3, pitch, -4.);
-  vec3 rd = lookAt(ro, ta) * normalize(vec3(uv, flightFocal(1.35)));
+  float pitch = mix(.55, -2.4, smoothstep(.5, 1.5, uDive)) + .35 * smoothstep(0., 1., -uDive) + .12 * swell;
+  vec3 ta = ro + vec3(.25 * sin(uTime * .1) + uSway * .7 + .45 * cos(uTravel * .11), pitch, -4.);
+  uv *= rot(-.07 * cos(uTravel * .11));
+  float focal = flightFocal(1.35);
+  vec3 rd = lookAt(ro, ta) * normalize(vec3(uv, focal));
 
   vec3 sky = mix(uInk * .9, uBase * 1.6, clamp(rd.y * 1.6, 0., 1.));
   float sd = max(dot(rd, gSun), 0.);
@@ -359,6 +396,9 @@ void main() {
     // the dust catches the light on the kick
     col += uAccent * lit * phase * uDust * .1 * (1. - exp(-tEnd * .08)) * (1. + uDrop + .6 * uBeat);
   }
+
+  // dust right in front of the lens, lit by the sun; it flashes on the kick
+  col += mix(uInk, uAccent, .6) * motes(uv, focal, t) * (.25 + .6 * uSpeed + .3 * uBeat);
 
   float l = dot(col, vec3(.3, .59, .11));
   col = mix(vec3(l), col, .78);

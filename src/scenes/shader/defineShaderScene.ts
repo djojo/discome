@@ -49,7 +49,7 @@ interface ShaderSceneOptions {
    * uBank, uSway and uDive. `cruise` is the distance per second at cruise speed; the scene's
    * `speed` and `dynamics` params scale it (see flightParams).
    */
-  flight?: { cruise: number };
+  flight?: { cruise: number; pump?: number };
   /**
    * Scene built around a subject: a Cadrage draws a new framing on every phrase and writes
    * uCamPos, uCamTarget and uFocal (include CAMERA_GLSL in the fragment).
@@ -136,7 +136,7 @@ export function defineShaderScene(opts: ShaderSceneOptions): SceneGLDef {
           }
           applyPalette(pal, params.palette);
           if (flight) {
-            flight.update(f, dt, opts.flight!.cruise * num(params.speed, 1), num(params.dynamics, 1));
+            flight.update(f, dt, opts.flight!.cruise * num(params.speed, 1), num(params.dynamics, 1), opts.flight!.pump);
             uniforms.uTravel.value = flight.travel;
             uniforms.uSpeed.value = flight.speedNorm;
             uniforms.uAccel.value = flight.accel;
