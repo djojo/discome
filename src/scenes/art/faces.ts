@@ -112,7 +112,7 @@ export const topoHead = defineShaderScene({
   mask: true,
   camera: { framings: FACE_FRAMINGS, glideBars: 2 },
   description:
-    "Le visage n'existe que par ses lignes de niveau, qui changent lentement d'orientation ; une ligne s'allume et le traverse à chaque kick, au drop elles basculent en profondeur.",
+    "Le visage n'existe que par ses lignes de niveau, qui avancent lentement et changent peu à peu d'orientation ; une ligne s'allume et le traverse à chaque kick, au drop elles basculent en profondeur.",
   params: [
     paletteParam("mono"),
     headParam(),
@@ -155,7 +155,8 @@ void main() {
     vec3 dir = normalize(vec3(.6 * sin(a * .7), cos(a), .8 * sin(a * 1.3)));
     float g = mix(dot(h, dir), length(h - vec3(0., -.1, .55)) * 1.1, .5 + .5 * sin(a * .45));
     g = mix(g, h.z, smoothstep(.35, .8, uDrop));
-    float f = g * uDensity + uBass * .35 * sin(h.x * 6. - uTime * 1.5);
+    // the lines flow slowly across the face at their own pace (one every ~8 s), deaf to the music
+    float f = g * uDensity - uTime * .12;
     float w = fwidth(f);
     float dist = abs(fract(f + .5) - .5);
     float line = 1. - smoothstep(.5 * w, 1.6 * w, dist);
