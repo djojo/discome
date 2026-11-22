@@ -48,12 +48,22 @@ float gHead;   // 0 hood, 1 pyramid, 2 conical hat
 float gPose;   // 0 hands clasped at the waist, 1 right arm holding something forward
 float gLift;   // 0..1 raises the held object
 vec3 gHand;    // held object position (set by setupFigure)
+vec3 gCloth;   // explicit robe colour (several figures), used when gHasCloth = 1
+float gHasCloth;
 
 void setupFigure(float head, float pose, float lift) {
   gHead = head;
   gPose = pose;
   gLift = lift;
   gHand = vec3(.6, .16 + .42 * lift, .64);
+  gHasCloth = 0.;
+  gCloth = vec3(0.);
+}
+
+/** Give the robe its own colour (vivid cloth, lighter lines), e.g. red / blue / gold monks. */
+void setCloth(vec3 c) {
+  gCloth = c;
+  gHasCloth = 1.;
 }
 
 float sdPyramid(vec3 p, float h) {
@@ -104,6 +114,7 @@ float sdArms(vec3 p) {
 }
 
 float sdHands(vec3 p) {
+  if (gPose < .5) return 1e3; // clasped hands stay inside the sleeves
   vec3 elL, hdL, elR, hdR;
   armPoints(elL, hdL, elR, hdR);
   vec3 hl = hdL + normalize(hdL - elL) * .07;
@@ -114,9 +125,14 @@ float sdHands(vec3 p) {
 float sdFaceVoid(vec3 p) { return sdEllipsoid(p - vec3(0., .8, .02), vec3(.16, .2, .17)); }
 
 float sdHood(vec3 p) {
-  float outer = sdEllipsoid(p - vec3(0., .86, -.03), vec3(.27, .32, .3));
-  outer = smin(outer, sdCapsule(p, vec3(0., 1.02, -.1), vec3(0., 1.45, -.17), .025), .17);
-  float hole = sdEllipsoid(p - vec3(0., .82, .2), vec3(.16, .22, .2));
+  float outer = sdEllipsoid(p - vec3(0., .84, -.04), vec3(.33, .36, .34));
+  // A tall point leaning back, like a monk's cowl
+  vec3 q = p - vec3(0., 0., -.08);
+  q.z += (q.y - .9) * .3;
+  outer = smin(outer, sdConeY(q, .24, .9, 1.62) * .8, .12);
+  // drapes onto the shoulders
+  outer = smin(outer, sdEllipsoid(p - vec3(0., .58, -.02), vec3(.44, .14, .32)), .1);
+  float hole = sdEllipsoid(p - vec3(0., .8, .24), vec3(.17, .23, .22));
   return smax(outer, -hole, .03);
 }
 
@@ -206,6 +222,10 @@ vec3 robeColor(vec3 p, float tint) {
   float idx = floor(v + .5);
   vec3 lc = mix(pal(idx * .23 + uShift + tint), spectral(fract(idx * .137 + uShift + tint)), uRainbow) * 1.25;
   vec3 cloth = uRobe > .5 ? pal(tint + .1) * .55 + .03 : uBase * .6 + .015;
+  if (gHasCloth > .5) {
+    cloth = gCloth * (.42 + .2 * uBeat);
+    lc = mix(gCloth * 1.3 + .3, spectral(fract(idx * .137 + uShift)), uRainbow * .4);
+  }
   vec3 c = mix(cloth, lc, line);
   // Toward the hem the lines dissolve into a starfield
   float m = 1. - smoothstep(-1.3, -.25, p.y + (vnoise(p * 3.) - .5) * .6);

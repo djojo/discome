@@ -123,6 +123,7 @@ void main() {
 
   vec3 col = uBase * .6 + starfield(rd, .2 + .1 * uTreble);
   col += pal(.35 + uShift) * .07 * vnoise(rd * 3. + uTime * .02) * smoothstep(-.1, .5, rd.y);
+  vec3 sky = col;
   float solid = 0.;
 
   float dmin;
@@ -133,8 +134,10 @@ void main() {
     solid = 1.;
   } else {
     if (tg > 0.) {
-      col = lake(ro + rd * tg, rd);
-      solid = 1.;
+      // The far lake melts into the sky and lets the background through: no hard horizon line
+      float far = smoothstep(5., 22., tg);
+      col = mix(lake(ro + rd * tg, rd), sky, far);
+      solid = 1. - far;
     }
     col += figHalo(dmin);
   }

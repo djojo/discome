@@ -19,6 +19,8 @@ uniform float uBeat;
 uniform float uHat;
 uniform float uDrop;
 uniform float uBuild;
+/** 8 frequency bands, bass (0) to treble (7), 0..1. */
+uniform float uBands[8];
 ${PALETTE_GLSL}
 mat2 rot(float a) { float c = cos(a), s = sin(a); return mat2(c, -s, s, c); }
 `;
@@ -76,6 +78,7 @@ export function defineShaderScene(opts: ShaderSceneOptions): SceneGLDef {
         uHat: { value: 0 },
         uDrop: { value: 0 },
         uBuild: { value: 0 },
+        uBands: { value: new Array<number>(8).fill(0) },
         ...pal,
         ...(opts.flight ? flightUniforms() : {}),
         ...(opts.uniforms?.() ?? {}),
@@ -104,6 +107,14 @@ export function defineShaderScene(opts: ShaderSceneOptions): SceneGLDef {
           uniforms.uHat.value = f.onsetPulse;
           uniforms.uDrop.value = f.dropPulse;
           uniforms.uBuild.value = f.buildProgress;
+          // 64 log bands averaged into 8 (each a bit more than an octave)
+          const bands = uniforms.uBands.value as number[];
+          const per = f.bands.length / 8;
+          for (let i = 0; i < 8; i++) {
+            let sum = 0;
+            for (let j = 0; j < per; j++) sum += f.bands[i * per + j];
+            bands[i] = sum / per;
+          }
           applyPalette(pal, params.palette);
           if (flight) {
             flight.update(f, dt, opts.flight!.cruise * num(params.speed, 1), num(params.dynamics, 1));

@@ -16,6 +16,9 @@ import { cathedral } from "./art/cathedral";
 import { monolith } from "./art/monolith";
 import { canyonGorge, canyonMesas } from "./art/canyon";
 import { arcaneArchitect } from "./art/architect";
+import { arcaneNomad } from "./art/nomad";
+import { arcanePrism } from "./art/prism";
+import { arcanePortal } from "./art/portal";
 import { flesh } from "./art/flesh";
 import { signal } from "./art/signal";
 
@@ -35,6 +38,9 @@ export const SCENES: SceneDef[] = [
   canyonGorge,
   canyonMesas,
   arcaneArchitect,
+  arcaneNomad,
+  arcanePrism,
+  arcanePortal,
   flesh,
   signal,
   // Classics, recoloured by the worlds' palettes
