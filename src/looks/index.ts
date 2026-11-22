@@ -60,7 +60,7 @@ export const LOOKS: Look[] = [
     ],
     bgOpacity: 0.35,
     fx: { grain: 0.18, vignette: 0.45, saturation: 0.9, contrast: 1.05 },
-    transitions: { calm: ["fade", "luma"], drop: ["flash", "fade"] },
+    transitions: { calm: ["fade", "luma", "dive"], drop: ["flash", "fade"] },
     director: "chill",
   },
   {
@@ -189,7 +189,7 @@ export const LOOKS: Look[] = [
     bgOpacity: 0.35,
     layer: { id: "grimoire", mode: "screen", opacity: 0.6 },
     fx: { scanlines: 0.3, chroma: 0.2, grain: 0.2, vhs: 0.1, pixel: 0.15, vignette: 0.45 },
-    transitions: { calm: ["fade", "luma"], drop: ["flash", "glitch"] },
+    transitions: { calm: ["fade", "luma", "dive"], drop: ["flash", "glitch", "dive"] },
     director: "club",
   },
   {

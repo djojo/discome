@@ -8,6 +8,7 @@ export const TRANSITIONS = [
   { id: "iris", label: "Iris" },
   { id: "flash", label: "Flash blanc" },
   { id: "dip", label: "Passage au noir" },
+  { id: "dive", label: "Plongée dans la fissure" },
 ] as const;
 
 export type TransitionId = (typeof TRANSITIONS)[number]["id"];

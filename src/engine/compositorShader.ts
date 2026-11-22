@@ -126,6 +126,21 @@ vec3 transition(vec2 uv) {
     return mix(A(uv), B(uv), inside) + ring * (1.0 - p) * 0.8;
   }
 
+  if (uTransition == 8) {
+    // Dive: we rush into a vertical crack of light in the middle of A, and come out on the other side in B
+    float aspect = uRes.x / uRes.y;
+    vec3 a = A(0.5 + (uv - 0.5) / (1.0 + 7.0 * p * p * p));
+    float x = abs(uv.x - 0.5) * aspect;
+    float jag = (hash(vec2(floor(uv.y * 60.0), 3.0)) - 0.5) * 0.02 * (1.0 - p);
+    float open = smoothstep(0.25, 1.0, p);
+    float half_w = 0.004 + open * open * 1.2 * aspect;
+    float inside = 1.0 - smoothstep(half_w - 0.006, half_w + 0.006, x + jag);
+    vec3 b = B(0.5 + (uv - 0.5) * mix(0.25, 1.0, smoothstep(0.3, 1.0, p)));
+    float rim = exp(-abs(x + jag - half_w) * 90.0) * (1.0 - open * 0.7);
+    float crack = exp(-x * 25.0) * smoothstep(0.0, 0.3, p) * (1.0 - open);
+    return mix(a, b, inside) + vec3(1.0, 0.9, 0.8) * (rim * 1.4 + crack * 0.8);
+  }
+
   float w = 1.0 - abs(p * 2.0 - 1.0);
   vec3 base = p < 0.5 ? A(uv) : B(uv);
   // Dip: A fades to black, B rises out of it (used between worlds)
