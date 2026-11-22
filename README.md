@@ -70,6 +70,7 @@ npm run dev   # http://localhost:3000
 | Le Nomade | Chapeau conique, orbe dans la main, désert martien, longue ombre, contour néon | L'orbe éclate et embrase le désert, le soleil tourne |
 | Les Trois | Moines rouge, bleu et or traversés par un rayon prismatique (une bande de couleur = une bande de fréquences) | Le rayon s'élargit, les robes s'embrasent |
 | Le Portail | Lac d'anneaux arc-en-ciel, colonne de lumière, minuscule silhouette | Le portail s'ouvre en vortex |
+| La Voie | Vol rapide sur une route de lumière prismatique vers la pyramide sacrée, qui grossit et s'élève sans jamais être atteinte ; obélisques, vague de lumière au kick ; ambiances Cosmos ou Désert | La pyramide bondit vers nous et devient un prisme (rayon blanc qui entre, éventail arc-en-ciel) |
 | Grimoire | HUD de jeu ésotérique (2D) : chapitre, glyphes, orbites, texte japonais, vraies données du morceau | Le chapitre change, l'avertissement clignote |
 | Chair | Créature entre l'anémone et le corail, tentacules lents, veines bioluminescentes où une impulsion monte à chaque kick, qui blanchit au fil de la soirée ; variante Abysses (fragments de plastique, un sac qui dérive) | Spores lumineuses |
 | Signal | Données sur une grille suisse : spectrogramme qui défile, grands chiffres, code-barres, onde ; la mise en page change à chaque phrase | Inversion |
