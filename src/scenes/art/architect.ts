@@ -3,6 +3,7 @@ import { paletteParam } from "../palettes";
 import { ART_LIB } from "./lib.glsl";
 import { ARCANE_GLSL, arcaneParams, arcaneUniforms, updateArcane } from "./arcane.glsl";
 import { CAMERA_GLSL, type Framing } from "./camera";
+import { HEAD_GLSL, headUniforms, setHead } from "./heads";
 
 const FRAMINGS: Framing[] = [
   { az: -0.45, el: 0.04, dist: 6.2, target: [0, 0.05, 0], focal: 1.55, weight: 3 },
@@ -25,7 +26,23 @@ export const arcaneArchitect = defineShaderScene({
   camera: { framings: FRAMINGS, glideBars: 2 },
   description:
     "Mage à tête de pyramide au-dessus d'un lac d'anneaux arc-en-ciel ; au drop, la pyramide devient un prisme et sa robe s'ouvre sur le cosmos.",
-  params: [paletteParam("cosmos"), ...arcaneParams()],
+  params: [
+    paletteParam("cosmos"),
+    {
+      type: "select",
+      key: "head",
+      label: "Tête",
+      options: [
+        { value: "pyramide", label: "Pyramide" },
+        { value: "faucon", label: "Faucon (Horus)" },
+        { value: "belier", label: "Bélier (Amon)" },
+        { value: "loup", label: "Loup" },
+        { value: "lion", label: "Lion" },
+      ],
+      default: "pyramide",
+    },
+    ...arcaneParams(),
+  ],
   uniforms: () => ({
     ...arcaneUniforms(),
     uRing: { value: 0 },
@@ -33,9 +50,14 @@ export const arcaneArchitect = defineShaderScene({
     uBeam: { value: 0 },
     uLift: { value: 0.2 },
     uCloak: { value: 0 },
+    uFigHead: { value: 1 },
+    ...headUniforms(),
   }),
   update(u, f, p, dt) {
     updateArcane(u, f, p, dt);
+    // a statue head once it is loaded, the pyramid until then
+    const head = p.head ?? "pyramide";
+    u.uFigHead.value = setHead(u, head) && head !== "pyramide" ? 3 : 1;
     // Each kick sends the rings a step outward
     if (f.beat) u.uRingTarget.value = (u.uRingTarget.value as number) + 1;
     const r = u.uRing.value as number;
@@ -60,7 +82,10 @@ uniform float uRing;
 uniform float uBeam;
 uniform float uLift;
 uniform float uCloak;
+uniform float uFigHead;
 ${ART_LIB}
+#define FIG_BAKED_HEAD
+${HEAD_GLSL}
 ${ARCANE_GLSL}
 ${CAMERA_GLSL}
 
@@ -129,7 +154,7 @@ vec3 beam(vec3 ro, vec3 rd, float tmax) {
 void main() {
   vec2 fc = gl_FragCoord.xy;
   vec2 uv = (fc - .5 * uRes) / uRes.y;
-  setupFigure(1., 1., uLift);
+  setupFigure(uFigHead, 1., uLift);
   gCloak = uCloak;
   gCrystal = gHand + vec3(0., .3, 0.);
 

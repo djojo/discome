@@ -3,6 +3,7 @@ import { paletteParam } from "../palettes";
 import { num } from "../utils";
 import { ART_LIB } from "./lib.glsl";
 import { FLIGHT_GLSL, flightParams } from "./flight";
+import { HEAD_GLSL, headParam, headUniforms, setHead } from "./heads";
 
 /**
  * Brutalist concrete avenue under a single low sun, flown through by the shared flight:
@@ -22,6 +23,17 @@ export const monolith = defineShaderScene({
     ...flightParams(),
     { type: "range", key: "sun", label: "Hauteur du soleil", min: 0.05, max: 0.6, step: 0.01, default: 0.2 },
     { type: "range", key: "dust", label: "Poussière", min: 0, max: 2, step: 0.05, default: 1 },
+    {
+      type: "select",
+      key: "monument",
+      label: "Au bout de l'avenue",
+      options: [
+        { value: "slab", label: "Le monolithe" },
+        { value: "head", label: "Une tête colossale" },
+      ],
+      default: "slab",
+    },
+    headParam("moai"),
   ],
   uniforms: () => ({
     uSunAz: { value: 0.7 },
@@ -30,6 +42,8 @@ export const monolith = defineShaderScene({
     uBarPos: { value: 0 },
     uRise: { value: 1 },
     uDust: { value: 1 },
+    uMonument: { value: 0 },
+    ...headUniforms(),
   }),
   update(u, f, p, dt) {
     if (f.drop) u.uSunTarget.value = (u.uSunTarget.value as number) + 2.1;
@@ -42,6 +56,8 @@ export const monolith = defineShaderScene({
     const r = u.uRise.value as number;
     u.uRise.value = r + (rise - r) * (1 - Math.exp(-dt * 0.3));
     u.uDust.value = num(p.dust, 1);
+    // the colossal head once it is loaded, the slab until then
+    u.uMonument.value = p.monument === "head" && setHead(u, p.head ?? "moai") ? 1 : 0;
   },
   fragment: /* glsl */ `
 uniform float uSunAz;
@@ -49,7 +65,9 @@ uniform float uSunEl;
 uniform float uBarPos;
 uniform float uRise;
 uniform float uDust;
+uniform float uMonument;  // 0: the black slab, 1: a colossal head
 ${ART_LIB}
+${HEAD_GLSL}
 ${FLIGHT_GLSL}
 #define CS 2.6
 vec3 gSun;
@@ -193,6 +211,25 @@ float ao(vec3 p, vec3 n) {
   return clamp(1. - 1.5 * occ, 0., 1.);
 }
 
+const float COL_S = 12.;
+/** The colossus: a giant head buried up to the lips at the end of the avenue, always on the horizon. */
+float colossus(vec3 ro, vec3 rd, out vec3 c) {
+  c = vec3(0., COL_S * .3, ro.z - 42.);
+  vec3 oc = ro - c;
+  float R = COL_S * 1.2;
+  float b = dot(oc, rd), h = b * b - dot(oc, oc) + R * R;
+  if (h < 0.) return -1.;
+  h = sqrt(h);
+  float t = max(-b - h, 0.), t1 = -b + h;
+  for (int i = 0; i < 64; i++) {
+    float d = headD((ro + rd * t - c) / COL_S) * COL_S;
+    if (d < .002 * t) return t;
+    t += d;
+    if (t > t1) break;
+  }
+  return -1.;
+}
+
 /** Thin line where fract(x) wraps, width w (in units of one period). */
 float joint(float x, float w) { float f = fract(x); return 1. - smoothstep(0., w, min(f, 1. - f)); }
 
@@ -228,7 +265,9 @@ void main() {
   if (t < 0. && tg < 46.) { t = tg; ground = true; }
   // The monolith: a black slab standing at the end of the avenue, always on the horizon
   float tm = -1.;
-  if (rd.z < -.01) {
+  vec3 cc;
+  if (uMonument > .5) tm = colossus(ro, rd, cc);
+  else if (rd.z < -.01) {
     float tt = -40. / rd.z;
     vec3 q = ro + rd * tt;
     if (abs(q.x) < 2.4 && q.y < 24. && q.y > 0.) tm = tt;
@@ -237,10 +276,23 @@ void main() {
   vec3 col = sky;
   float solid = step(0., t);
   if (tm > 0. && (t < 0. || t > tm)) {
-    // Near black, with a thin sunlit edge on the side facing the sun
-    vec3 q = ro + rd * tm;
-    float rim = smoothstep(2.25, 2.4, q.x * sign(gSun.x)) * (.4 + 1.2 * uDrop);
-    col = mix(uBase * .1 + uAccent * rim, fogColor(rd), .32);
+    if (uMonument > .5) {
+      // Weathered stone in the low sun, softened by the distance; its edges flare on the drop
+      vec3 q = (ro + rd * tm - cc) / COL_S;
+      const vec2 k = vec2(1, -1);
+      const float e = .004;
+      vec3 n = normalize(k.xyy * headD(q + k.xyy * e) + k.yyx * headD(q + k.yyx * e) + k.yxy * headD(q + k.yxy * e) + k.xxx * headD(q + k.xxx * e));
+      float dif = clamp(dot(n, gSun), 0., 1.);
+      vec3 alb = uInk * .75 * (.88 + .18 * vnoise(q * 18.));
+      float rim = pow(1. - clamp(dot(n, -rd), 0., 1.), 3.) * (.3 + 1.2 * uDrop);
+      col = alb * (dif * uAccent * 2.6 * (1. + uDrop) + uBase * 1.2 * (.5 + .5 * n.y)) + uAccent * rim * dif;
+      col = mix(col, fogColor(rd), .38);
+    } else {
+      // Near black, with a thin sunlit edge on the side facing the sun
+      vec3 q = ro + rd * tm;
+      float rim = smoothstep(2.25, 2.4, q.x * sign(gSun.x)) * (.4 + 1.2 * uDrop);
+      col = mix(uBase * .1 + uAccent * rim, fogColor(rd), .32);
+    }
     t = -1.;
     solid = 1.;
   }

@@ -11,11 +11,15 @@ npm run dev   # http://localhost:3000
 
 - **Sources** : micro / entrée, son d'un onglet, fichier (glisser-déposer), démo (un morceau de 32 mesures synthétisé en direct).
 - **Horloge musicale** : BPM, temps, mesures et phrases de 8 mesures, avec tap tempo. Les sections (groove → breakdown → montée → drop) sont détectées automatiquement.
-- **Mondes** : Porcelaine, Signal, Mercure, Cathédrale, Monolithe, Canyon, Arcanes, Chair, et Classique (les premières scènes).
+- **Mondes** : Porcelaine, Signal, Mercure, Cathédrale, Monolithe, Canyon, Arcanes, Chair, Bestiaire, et Classique (les premières scènes).
   - Un monde est une direction artistique complète : une sélection de plans (une scène du catalogue et ses réglages pour ce monde), des palettes, des post-effets, des transitions et un rythme de réalisation.
   - **Les plans** : une même scène peut apparaître plusieurs fois, dans un monde ou d'un monde à l'autre, avec d'autres réglages (Porcelaine « Coquille » et « Éclats », Cathédrale « Rouge » et « Blanche », Profil chrome ou béton…). Chaque plan a sa propre instance, son rôle pour le réalisateur (calme, montée, drop) et ses limites de variation.
   - Tes retouches sont gardées par plan et par monde ; « Réinitialiser le plan » revient aux réglages du monde.
   - **Enchaîner les mondes** : ils se succèdent, au breakdown (et au moins toutes les 8 phrases) ou toutes les 4 ou 8 phrases. Le passage se fait par le noir, et les effets glissent vers ceux du nouveau monde.
+- **Têtes** : les scènes de visage (Porcelaine, Topographie, Profil, Trame, Mercure, Métamorphose), l'Architecte et le Colosse du Monolithe ont un réglage « Tête » :
+  - humain (la tête sculptée en code), tigre, loup, faucon, lion, hibou, bélier, Moai, Néfertiti ;
+  - ce sont des bustes gratuits de Printables (crédits dans `public/heads/CREDITS.md`), convertis une fois en grilles de distances par `scripts/bake-heads.mjs`, donc tous les effets marchent avec toutes les têtes ;
+  - un plan peut tirer une autre tête à chaque retour (`vary.choices`). Toutes les têtes se chargent en arrière-plan au démarrage.
 - **Vol** : Monolithe, Cathédrale et Canyon sont des travellings. Leur vitesse suit la structure du morceau, avec de l'inertie :
 
   | Moment | Vitesse |
@@ -47,15 +51,16 @@ npm run dev   # http://localhost:3000
 | Scène | Ce qu'on voit | Au drop |
 | --- | --- | --- |
 | Porcelaine | Visage de céramique immobile, fissures d'or kintsugi qui se propagent sur plusieurs minutes, format 2.39 | La tête s'ouvre en coquille ou se brise en éclats flottants (en alternance) sur une agate, une géode et un cœur fractal ; elle se referme au breakdown |
+| Métamorphose | Buste de musée en marbre ou en obsidienne qui se transforme lentement d'une tête en une autre, du cou vers le sommet ; la couture d'or du front flashe au kick | La transformation démarre ou s'accélère, la couture s'embrase et lâche des étincelles |
 | Topographie | Le visage dessiné par des lignes de niveau qui changent lentement d'orientation ; une ligne de lumière le traverse à chaque kick | Les lignes basculent en profondeur |
 | Profil | Le profil en contre-jour, brume et rais de lumière ; le contour s'allume en vague à chaque kick | Un contour d'accent s'allume |
 | Trame | Trois trames de couleur, chacune éclairée d'un côté, qui tournent lentement | Inversion |
 | Mercure | Masque chromé immobile dans un bain de métal liquide ; chaque kick lance un anneau | Une lame de lumière balaie le chrome |
 | Cathédrale | Nef d'arches lumineuses, sol miroir, brume ; la forme des arches change à chaque phrase. Une silhouette encapuchonnée au bout de la nef ne s'approche que pendant les montées | Vitesse lumière : les arches s'étirent en traînées, la silhouette disparaît |
-| Monolithe | Avenue brutaliste en béton banché, soleil rasant, poussière, monolithe à l'horizon | Décollage au-dessus des toits, le soleil change de côté |
+| Monolithe | Avenue brutaliste en béton banché, soleil rasant, poussière, monolithe ou tête colossale à l'horizon | Décollage au-dessus des toits, le soleil change de côté |
 | Gorge | Vol dans une gorge étroite aux parois ondulées, strates colorées, rais de lumière | On sort de la fente, les couleurs des strates basculent |
 | Mesas | Vol au ras d'une rivière miroir entre des falaises en gradins, soleil en anneau | On monte au-dessus des mesas |
-| L'Architecte | Mage à tête de pyramide, robe de lignes et d'étoiles, cristal rouge, lac d'anneaux arc-en-ciel | La pyramide devient un prisme (rayon blanc entrant, arc-en-ciel sortant) et la robe s'ouvre sur le cosmos |
+| L'Architecte | Mage à tête de pyramide (ou de faucon, Horus), robe de lignes et d'étoiles, cristal rouge, lac d'anneaux arc-en-ciel | La pyramide devient un prisme (rayon blanc entrant, arc-en-ciel sortant) et la robe s'ouvre sur le cosmos |
 | Le Nomade | Chapeau conique, orbe dans la main, désert martien, longue ombre, contour néon | L'orbe éclate et embrase le désert, le soleil tourne |
 | Les Trois | Moines rouge, bleu et or traversés par un rayon prismatique (une bande de couleur = une bande de fréquences) | Le rayon s'élargit, les robes s'embrasent |
 | Le Portail | Lac d'anneaux arc-en-ciel, colonne de lumière, minuscule silhouette | Le portail s'ouvre en vortex |
@@ -97,9 +102,12 @@ src/
     art/flight.ts        Vol partagé des travellings (vitesse selon la structure, figures, roulis)
     art/camera.ts        Cadrages : un plan par phrase, la caméra y glisse en orbite autour du sujet
     art/arcane.glsl.ts   Figure sans visage et robe cosmique du monde Arcanes
+    art/heads.ts         Bibliothèque de têtes : chargement des grilles, headD() en GLSL
     2d/  shader/  3d/    Scènes classiques ; 3d/humanoid/ : danseuse, androïde, particules
   components/            Visualizer (boucle, sources, HUD), ControlPanel, settings
 public/models/           Michelle.glb (personnage Mixamo des exemples three.js)
+public/heads/            Têtes converties (grilles de distances), crédits
+scripts/bake-heads.mjs   Conversion des bustes (STL/3MF de assets/heads-src/, calés par assets/heads.config.json)
 ```
 
 À chaque frame, `AudioEngine.update(dt)` remplit un `AudioFrame` que les scènes reçoivent dans `render(frame, params, dt)`. Ce frame contient :

@@ -22,7 +22,7 @@ import {
 } from "./settings";
 import { NEUTRAL_FX, type FxSettings } from "@/engine/fx";
 import { findPlan, lookBackgrounds, lookPlans, planDefaults, sceneForKey } from "@/looks";
-import { preloadHeads } from "@/scenes/art/heads";
+import { HEADS, preloadHeads } from "@/scenes/art/heads";
 import { getPalette, ink } from "@/scenes/palettes";
 import { preloadDancer } from "@/scenes/3d/humanoid/dancerAsset";
 import type { DirectorContext } from "@/engine/Director";
@@ -108,6 +108,9 @@ export default function Visualizer() {
     let raf = 0;
     let last = performance.now();
     let firstShow = true;
+    // Every head of the library loads in the background shortly after start: the director can then cut to
+    // any of them (or another world) without a head popping in late. ~25 Mo, read once.
+    const headsTimer = window.setTimeout(() => preloadHeads(HEADS.map((h) => h.id)), 4000);
 
     // "Auto" quality: lower the resolution when frames get slow, raise it back when there's headroom.
     const AUTO_MIN = 0.6;
@@ -315,6 +318,7 @@ export default function Visualizer() {
 
     return () => {
       cancelAnimationFrame(raf);
+      window.clearTimeout(headsTimer);
       ro.disconnect();
       compositor.dispose();
     };

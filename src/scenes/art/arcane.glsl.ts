@@ -8,6 +8,8 @@ import { num } from "../utils";
  * a cosmic robe (flowing contour lines dissolving into stars), neon outline, rainbow and starfield helpers.
  * Include after ART_LIB (needs hash12/hash13, vnoise, smin/smax, sdEllipsoid, sdCapsule).
  * Figure space: feet at y = -1.6, about 3 units tall, facing +z.
+ * A scene may give the figure a sculpted head from the head library (gHead = 3): define FIG_BAKED_HEAD and
+ * include HEAD_GLSL before this.
  */
 export const ARCANE_GLSL = /* glsl */ `
 uniform float uFlow;
@@ -44,7 +46,7 @@ vec3 starfield(vec3 rd, float density) {
 }
 
 // ---------------------------------------------------------------- figure
-float gHead;   // 0 hood, 1 pyramid, 2 conical hat
+float gHead;   // 0 hood, 1 pyramid, 2 conical hat, 3 a head of the library (FIG_BAKED_HEAD)
 float gPose;   // 0 hands clasped at the waist, 1 right arm holding something forward
 float gLift;   // 0..1 raises the held object
 vec3 gHand;    // held object position (set by setupFigure)
@@ -131,7 +133,7 @@ float sdHands(vec3 p) {
   return min(length(p - hl) - .065, length(p - hr) - .065);
 }
 
-float sdFaceVoid(vec3 p) { return sdEllipsoid(p - vec3(0., .8, .02), vec3(.16, .2, .17)); }
+float sdFaceVoid(vec3 p) { return gHead > 2.5 ? 1e3 : sdEllipsoid(p - vec3(0., .8, .02), vec3(.16, .2, .17)); }
 
 float sdHood(vec3 p) {
   float outer = sdEllipsoid(p - vec3(0., .84, -.04), vec3(.33, .36, .34));
@@ -145,7 +147,19 @@ float sdHood(vec3 p) {
   return smax(outer, -hole, .03);
 }
 
+#ifdef FIG_BAKED_HEAD
+/** A head of the library at the figure's scale: a statue's head on the robe (Horus, Amon…). */
+float figBakedHead(vec3 p) {
+  const float S = .32;
+  // the bust stops at the collar of the robe
+  return max(bakedHead(uHeadTex, uHeadMin, uHeadSize, (p - vec3(0., .81, .02)) / S) * S, .56 - p.y);
+}
+#endif
+
 float sdHeadwear(vec3 p) {
+#ifdef FIG_BAKED_HEAD
+  if (gHead > 2.5) return figBakedHead(p);
+#endif
   if (gHead < .5) return sdHood(p);
   if (gHead < 1.5) return sdPyramid((p - vec3(0., .78, 0.)) / .84, .9) * .84;
   return sdConeY(p, .68, .97, 1.36);
@@ -158,7 +172,7 @@ float figMap(vec3 p) {
   return min(d, sdHeadwear(p));
 }
 
-/** Material id at a hit: 0 cloth, 1 face void, 2 pyramid, 3 hat, 4 hand, 5 the cosmos inside the robe. */
+/** Material id at a hit: 0 cloth, 1 face void, 2 pyramid, 3 hat, 4 hand, 5 the cosmos inside the robe, 6 sculpted head. */
 float figPart(vec3 p) {
   float best = smin(sdRobe(p), sdArms(p), .06);
   float id = gCloak > .001 && abs(cloakCut(p)) < .008 ? 5. : 0.;
@@ -167,7 +181,7 @@ float figPart(vec3 p) {
   float v = sdFaceVoid(p);
   if (v < best) { best = v; id = 1.; }
   float w = sdHeadwear(p);
-  if (w < best) id = gHead < .5 ? 0. : gHead < 1.5 ? 2. : 3.;
+  if (w < best) id = gHead < .5 ? 0. : gHead < 1.5 ? 2. : gHead < 2.5 ? 3. : 6.;
   return id;
 }
 
@@ -266,7 +280,9 @@ vec3 shadeFigure(vec3 p, vec3 rd, float tint) {
   float part = figPart(p);
   float dif = .55 + .45 * clamp(dot(n, normalize(vec3(-.4, .6, .7))), 0., 1.);
   vec3 c;
-  if (part < .5) c = robeColor(p, tint) * dif;
+  // a sculpted head is drawn like the pyramid: lines of light, one side refracting a rainbow
+  if (part > 5.5) c = pyramidColor(p, n);
+  else if (part < .5) c = robeColor(p, tint) * dif;
   else if (part < 1.5) c = uBase * .2;
   else if (part < 2.5) c = pyramidColor(p, n);
   else if (part < 3.5) c = hatColor(p) * dif;
@@ -280,7 +296,7 @@ vec3 shadeFigure(vec3 p, vec3 rd, float tint) {
   // Neon outline
   float rim = pow(1. - abs(dot(n, -rd)), 2.5);
   // (not inside the robe's opening: the cosmos stays deep and dark)
-  if (part < 4.5) c += mix(vec3(.25, .85, 1.), vec3(1., .88, .3), rim * rim) * rim * uNeon * (part > 3.5 ? 1.8 : .9);
+  if (part < 4.5 || part > 5.5) c += mix(vec3(.25, .85, 1.), vec3(1., .88, .3), rim * rim) * rim * uNeon * (part > 3.5 ? 1.8 : .9);
   return c;
 }
 
