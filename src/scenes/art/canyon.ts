@@ -147,15 +147,45 @@ vec3 rockColor(vec3 p, vec3 n) {
   // (seams only on the walls: on flat tops they would turn into noise)
   float seam = 1. - smoothstep(0., .07, fract(s));
   c *= (.85 + .3 * hash12(vec2(floor(s), 7.))) * (1. - .22 * seam * (1. - abs(n.y)));
+  // One stratum that geology will remember: studded with fragments of plastic, thicker as the night drifts
+  float band = 1. - smoothstep(.06 + .12 * uDrift, .1 + .14 * uDrift, abs(p.y - 1.25 - .15 * sin(p.z * .13)));
+  if (band > 0.) {
+    vec3 q = p * vec3(7., 16., 7.);
+    vec3 id = floor(q);
+    float h = hash13(id);
+    float frag = step(.74, h) * (1. - smoothstep(.25, .45, length(fract(q) - .5)));
+    frag *= 1. - smoothstep(.3, .6, fwidth(q.y));
+    vec3 plastic = .5 + .5 * cos(6.2831 * (hash13(id + 4.2) + vec3(0., .33, .67)));
+    c = mix(c * .7, mix(plastic, vec3(1.), step(.92, h)) * 1.2, frag * band);
+  }
   return c;
+}
+
+/** Cracked mud where the river has dried up: plates and dark cracks between them. */
+vec3 dryBed(vec3 p) {
+  vec2 g = p.xz * 2.2;
+  vec2 i = floor(g), f = fract(g);
+  float d1 = 8., d2 = 8.;
+  for (int y = -1; y <= 1; y++)
+    for (int x = -1; x <= 1; x++) {
+      vec2 o = vec2(float(x), float(y));
+      vec2 r = o + vec2(hash12(i + o), hash12(i + o + 5.3)) - f;
+      float d = dot(r, r);
+      if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) d2 = d;
+    }
+  float e = sqrt(d2) - sqrt(d1);
+  float crack = (1. - smoothstep(.03, .07 + fwidth(e), e)) * (1. - smoothstep(.2, .5, fwidth(g.x)));
+  return uInk * .5 * (.85 + .2 * hash12(i)) * (1. - .75 * crack);
 }
 
 vec3 sky(vec3 rd) {
   vec3 c = mix(pal(uShift + .4) * .75 + uBase, uBase * 1.4, smoothstep(-.02, .55, rd.y));
-  // A ringed sun low over the canyon
+  // A ringed sun low over the canyon; over the night it grows and burns
   vec3 sd = normalize(vec3(-.25, .16, -1.));
   float a = acos(clamp(dot(rd, sd), -1., 1.));
-  c += uAccent * (exp(-pow((a - .085) * 70., 2.)) * 1.6 + exp(-a * 9.) * .35) * (1. + uDrop);
+  float R = .085 * (1. + 1.4 * uDrift);
+  c += uAccent * (exp(-pow((a - R) * 70. / (1. + uDrift), 2.)) * 1.6 + exp(-a * 9. / (1. + 1.5 * uDrift)) * (.35 + .5 * uDrift)) * (1. + uDrop);
+  c += uAccent * .15 * uDrift * (1. - smoothstep(-.1, .5, rd.y));
   return c;
 }
 
@@ -192,7 +222,11 @@ void main() {
     float dif = clamp(dot(n, gL), 0., 1.) * sh;
     float occ = ao(p, n);
     bool water = !gorge && p.y < .02;
-    if (water) {
+    // As the night drifts the river shrinks to a thread in the middle of its bed
+    bool dry = water && abs(p.x - pathX(p.z)) > gW0 * (1.05 - .97 * smoothstep(.1, 1., uDrift));
+    if (dry) {
+      col = dryBed(p) * (dif * (vec3(1.) + uAccent * .4) * 1.25 + .25 * occ);
+    } else if (water) {
       // Mirror river: the sky and the light, rippled
       // (ripples fade with distance: too fine to resolve far away)
       float rip = exp(-t * .08);

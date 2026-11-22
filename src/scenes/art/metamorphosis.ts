@@ -18,6 +18,8 @@ const CYCLES: Record<string, HeadId[]> = {
   bestiaire: ["tigre", "loup", "faucon", "lion", "hibou", "belier"],
   egypte: ["faucon", "nefertiti", "lion", "belier"],
   tout: ["humain", "tigre", "loup", "faucon", "lion", "hibou", "belier", "moai", "nefertiti"],
+  // the animals one after the other, and the human head last: it stays alone
+  extinction: ["tigre", "loup", "faucon", "lion", "hibou", "belier"],
 };
 
 interface MorphState {
@@ -83,6 +85,7 @@ export const metamorphosis = defineShaderScene({
         { value: "bestiaire", label: "Bestiaire" },
         { value: "egypte", label: "Égypte" },
         { value: "tout", label: "Toutes" },
+        { value: "extinction", label: "Extinction" },
       ],
       default: "bestiaire",
     },
@@ -96,17 +99,20 @@ export const metamorphosis = defineShaderScene({
     uWave: { value: 9 },
     uFlare: { value: 0 },
     uMatter: { value: 0 },
+    uDying: { value: 0 },
   }),
   update(u, f, p, dt) {
     const seed = u.uSeed.value as number;
     const cycle = String(p.cycle ?? "bestiaire");
     let s = states.get(u);
     if (!s || s.seed !== seed || s.cycle !== cycle) {
-      const order = shuffled(CYCLES[cycle] ?? CYCLES.bestiaire, seed);
+      const order: HeadId[] = shuffled(CYCLES[cycle] ?? CYCLES.bestiaire, seed);
+      if (cycle === "extinction") order.push("humain");
       s = { seed, cycle, order, i: 0, t: 0, rate: 0, morphing: false, held: 0, lastBar: f.bar };
       preloadHeads(order);
       states.set(u, s);
     }
+    const extinction = s.cycle === "extinction";
     const n = s.order.length;
     const a = s.order[s.i % n];
     const b = s.order[(s.i + 1) % n];
@@ -119,7 +125,9 @@ export const metamorphosis = defineShaderScene({
       if (newBar) s.held++;
       // a new transformation starts on a phrase once the bust has held long enough, or right away on a drop
       const phrase = newBar && f.phraseBar === 0 && s.held >= num(p.hold, 8);
-      if (ready && (f.drop || phrase)) {
+      // Extinction: only the drops change the head, and once only the human head is left, it stays
+      const go = extinction ? f.drop && n > 1 : f.drop || phrase;
+      if (ready && go) {
         s.morphing = true;
         s.t = 0;
         s.rate = 1 / (bar * (f.drop ? 2 : num(p.pace, 6)));
@@ -129,7 +137,9 @@ export const metamorphosis = defineShaderScene({
       if (f.drop) s.rate = Math.max(s.rate, (1 - s.t) / (bar * 2));
       s.t += s.rate * dt;
       if (s.t >= 1) {
-        s.i = (s.i + 1) % n;
+        // the head that just went extinct leaves the cycle for good
+        if (extinction) s.order.splice(s.i % n, 1);
+        else s.i = (s.i + 1) % n;
         s.t = 0;
         s.morphing = false;
         s.held = 0;
@@ -142,6 +152,8 @@ export const metamorphosis = defineShaderScene({
     u.uWave.value = f.beat ? 0 : (u.uWave.value as number) + dt;
     u.uFlare.value = f.dropPulse;
     u.uMatter.value = p.matter === "obsidian" ? 1 : 0;
+    const dying = extinction && s.morphing ? 1 : 0;
+    u.uDying.value = (u.uDying.value as number) + (dying - (u.uDying.value as number)) * (1 - Math.exp(-dt * 4));
   },
   fragment: /* glsl */ `
 uniform highp sampler3D uHeadTexB;
@@ -152,6 +164,7 @@ uniform float uMorph;   // 0..1: the current transformation (0: head A only)
 uniform float uWave;    // seconds since the last kick
 uniform float uFlare;   // the drop, decaying
 uniform float uMatter;  // 0: marble, 1: obsidian and gold
+uniform float uDying;   // extinction: the old head petrifies and cracks as the new one rises
 ${ART_LIB}
 ${HEAD_GLSL}
 ${CAMERA_GLSL}
@@ -227,6 +240,15 @@ void main() {
       col = uBase * .2 * dif * ao + env(refl) * (.06 + .9 * fre) * ao;
       col += pow(clamp(dot(refl, L), 0., 1.), 90.) * 1.2 * uInk;
       col += gold * rim * .25 * (.5 + 1.2 * kick);
+    }
+    // Extinction: above the front, the head that is disappearing turns to grey stone and cracks
+    if (uDying > .01 && uMorph > 0.) {
+      float old = smoothstep(gFront - .05, gFront + .3, frontY(h)) * uDying;
+      float cv = abs(vnoise(h * 9. + uSeed * 3.) - .5);
+      float crack = 1. - smoothstep(.0, .02 + fwidth(cv) * 1.5, cv);
+      float lum = dot(col, vec3(.3, .59, .11));
+      col = mix(col, vec3(lum) * vec3(.9, .9, .95) * .7, old * .8);
+      col *= 1. - crack * old * .85;
     }
     // The seam of the transformation: a thread of gold and the veins around it
     if (uMorph > 0. && uMorph < 1.) {

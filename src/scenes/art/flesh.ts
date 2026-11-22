@@ -150,7 +150,31 @@ vec3 abyss(vec3 rd, vec2 uv) {
     float h = hash12(id + fi * 11.);
     vec2 o = (vec2(hash12(id + 2.1), hash12(id + 5.3)) - .5) * .7;
     c += vec3(.75, .85, 1.) * step(.88, h) * (1. - smoothstep(.02, .08, length(fract(g) - .5 - o))) * (.15 + .1 * fi);
+    // fragments of plastic drifting with the snow, more of them as the night drifts
+    vec3 plastic = .5 + .5 * cos(6.2831 * (hash12(id + 9.9) + vec3(0., .33, .67)));
+    vec2 fq = (fract(g) - .5 - o) * rot(hash12(id + 2.2) * 6.);
+    float shard = 1. - smoothstep(.0, .03, max(abs(fq.x) - .09, abs(fq.y) - .03));
+    c += plastic * step(.97 - .05 * uDrift, hash12(id + 7.4)) * shard * (.12 + .1 * fi);
   }
+  // A plastic bag drifting like a jellyfish, translucent
+  vec2 bc = vec2(.55 * sin(uTime * .045 + uSeed), .18 + .14 * sin(uTime * .06 + uSeed * 2.));
+  vec2 bq = (uv - bc) * rot(.15 * sin(uTime * .3));
+  // a sagging bag, wider at the bottom, its edge rippling
+  float wdt = .06 + .035 * clamp((.1 - bq.y) / .2, 0., 1.);
+  float body = max(abs(bq.x) - wdt, abs(bq.y) - .1) + .006 * sin(bq.y * 60. + uTime * 2.);
+  // its two handles: thin half-loops on top
+  vec2 hq = vec2(abs(bq.x) - .04, bq.y - .1);
+  float handle = hq.y < 0. ? 1e3 : abs(length(hq) - .028);
+  // and its torn bottom: a few thin strands trailing like tentacles
+  float strands = 1e3;
+  for (int k = 0; k < 5; k++) {
+    float fk = float(k);
+    float yy = bq.y + .1;
+    float len = .06 + .1 * hash12(vec2(fk, uSeed));
+    if (yy < 0. && yy > -len) strands = min(strands, abs(bq.x - (-.07 + fk * .035) - .012 * sin(yy * 40. + uTime * 1.5 + fk)));
+  }
+  float bag = exp(-abs(body) * 70.) * .25 + step(body, 0.) * .04 + exp(-handle * 90.) * .2 + exp(-strands * 260.) * .14;
+  c += vec3(.85, .9, 1.) * bag * (.3 + .6 * uDrift);
   return c;
 }
 
@@ -163,6 +187,9 @@ void main() {
   vec3 col = deep ? abyss(rd, uv) : uBase + uAccent * .12 * exp(-length(uv - vec2(.05, .1)) * 2.);
   float tt = march(ro, rd, 12.);
   vec3 veinCol = deep ? mix(uInk, vec3(.6, 1., 1.), .5) : mix(uAccent, vec3(1., .55, .6), .55);
+  // Over the night the creature bleaches like coral: its colour drains away, its veins dim
+  float bleach = smoothstep(.15, 1., uDrift) * .85;
+  veinCol = mix(veinCol, vec3(.8), bleach * .6);
   if (tt > 0.) {
     vec3 p = ro + rd * tt;
     map(p);
@@ -201,7 +228,9 @@ void main() {
       pulseH = uWave * 1.6 - .9;
     }
     float pulse = exp(-pow(along - pulseH, 2.) * 25.) * exp(-uWave * 1.1);
-    col += veinCol * lines * (.08 + 1.8 * pulse + .6 * uDrop) * (.6 + .4 * ao);
+    col += veinCol * lines * (.08 + 1.8 * pulse + .6 * uDrop) * (.6 + .4 * ao) * (1. - .6 * bleach);
+    float lum = dot(col, vec3(.3, .59, .11));
+    col = mix(col, vec3(lum) * 1.15 + .04, bleach);
   }
 
   // Spores released from the tentacle tips on the drop
