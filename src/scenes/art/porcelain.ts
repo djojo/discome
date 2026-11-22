@@ -30,10 +30,21 @@ export const porcelain = defineShaderScene({
   mask: true,
   camera: { framings: FRAMINGS, glideBars: 2 },
   description:
-    "Visage de céramique qui s'ouvre comme une coquille au drop, sur une géode et un cœur fractal ; des fissures d'or se propagent lentement.",
+    "Visage de céramique qui s'ouvre au drop, en coquille ou en éclats flottants, sur une géode et un cœur fractal ; des fissures d'or se propagent lentement.",
   params: [
     paletteParam("porcelain"),
-    { type: "range", key: "open", label: "Ouverture", min: 0, max: 1.5, step: 0.05, default: 1 },
+    {
+      type: "select",
+      key: "style",
+      label: "Ouverture",
+      options: [
+        { value: "alternate", label: "Alterner" },
+        { value: "shell", label: "Coquille" },
+        { value: "shards", label: "Éclats" },
+      ],
+      default: "alternate",
+    },
+    { type: "range", key: "open", label: "Amplitude", min: 0, max: 1.5, step: 0.05, default: 1 },
     { type: "range", key: "kintsugi", label: "Kintsugi", min: 0, max: 1, step: 0.05, default: 0.8 },
     { type: "toggle", key: "cinema", label: "Format cinéma 2.39", default: true },
   ],
@@ -48,6 +59,8 @@ export const porcelain = defineShaderScene({
     uShift: { value: 0 },
     uShiftTarget: { value: 0 },
     uCinema: { value: 1 },
+    uMode: { value: Math.random() < 0.5 ? 0 : 1 },
+    uWasOpen: { value: 0 },
   }),
   update(u, f, p, dt, ctx) {
     const bar = f.bpm > 0 ? (60 / f.bpm) * 4 : 2;
@@ -67,6 +80,14 @@ export const porcelain = defineShaderScene({
     u.uOpen.value = Math.max(0, o + v * dt);
     const open = u.uOpen.value as number;
     if (ctx.camera) ctx.camera.allow = (fr) => fr.tag !== "open" || target > 0.5 || open > 0.5;
+    // Shell or shards: the style only changes while the head is closed
+    if (open > 0.5) u.uWasOpen.value = 1;
+    if (open < 0.02) {
+      if (p.style === "shell") u.uMode.value = 0;
+      else if (p.style === "shards") u.uMode.value = 1;
+      else if (u.uWasOpen.value === 1) u.uMode.value = 1 - (u.uMode.value as number);
+      u.uWasOpen.value = 0;
+    }
 
     const leak = Math.min(1, (f.section === "build" ? f.buildProgress : 0) + open * 0.6);
     const l = u.uLeak.value as number;
@@ -89,6 +110,7 @@ uniform float uKinMax;
 uniform float uWave;
 uniform float uShift;
 uniform float uCinema;
+uniform float uMode;   // 0: opens like a shell, 1: breaks into floating shards
 ${ART_LIB}
 ${CAMERA_GLSL}
 
@@ -109,7 +131,13 @@ vec3 halfFrame(vec3 h, float s) {
   return q + HINGE;
 }
 
-float shell(vec3 q) { float d = sdHead(q); return max(d, -(d + TH)); }
+float shell(vec3 q) {
+  // the sculpted head is costly: away from it, a simple enclosing ellipsoid is enough
+  float be = sdEllipsoid(q - vec3(0., -.05, -.02), vec3(.56, .95, .75));
+  if (be > .08) return be;
+  float d = sdHead(q);
+  return max(d, -(d + TH));
+}
 
 float halfD(vec3 h, float s) {
   vec3 q = halfFrame(h, s);
@@ -117,7 +145,59 @@ float halfD(vec3 h, float s) {
   return max(d, NECK - q.y);
 }
 
-float neckD(vec3 h) { return max(sdHead(h), h.y - NECK); }
+float neckD(vec3 h) {
+  float b = sdCapsule(h, vec3(0., NECK, -.15), vec3(0., -1.65, -.2), .3);
+  if (b > .08) return b;
+  return max(sdHead(h), h.y - NECK);
+}
+
+// ---- shards: the head breaks into NS segments (like an orange) that drift out and float around the core
+const float NS = 9.;
+const float WS = 6.2831853 / 9.;
+
+/** Undo the drift and tilt of shard i. */
+vec3 shardFrame(vec3 h, float i) {
+  float a = i * WS;
+  float hs = hash12(vec2(i, 3.7));
+  vec3 off = vec3(sin(a), 0., cos(a)) * uOpen * (.3 + .22 * hs)
+    + vec3(0., uOpen * (.12 * sin(uTime * .25 + i * 1.7) + .12 * (hs - .5)), 0.);
+  vec3 q = h - off - CORE;
+  q.xz *= rot(uOpen * .3 * (hs - .5));
+  q.yz *= rot(uOpen * .25 * (hash12(vec2(i, 9.1)) - .5));
+  return q + CORE;
+}
+
+/** Signed distance to the pie slice of shard i (negative inside). */
+float wedge(vec3 q, float i) {
+  vec2 c = (q - CORE).xz;
+  c *= rot(i * WS);
+  return abs(c.x) * cos(WS * .5) - c.y * sin(WS * .5);
+}
+
+float shardsD(vec3 h, out float best, out vec3 bq) {
+  vec2 c = h.xz - CORE.xz;
+  float i0 = floor(atan(c.x, c.y) / WS + .5);
+  float d = 1e3;
+  best = 0.;
+  bq = h;
+  for (int k = -1; k <= 1; k++) {
+    float i = mod(i0 + float(k), NS);
+    vec3 q = shardFrame(h, i);
+    float w = wedge(q, i) + .004 * uOpen;
+    if (w < d) {
+      float ds = max(max(shell(q), w), NECK - q.y);
+      if (ds < d) { d = ds; best = i; bq = q; }
+    }
+  }
+  return d;
+}
+
+/** Distance to the nearest gap between shards (for the light leaking out). */
+float gapDist(vec3 h) {
+  vec2 c = h.xz - CORE.xz;
+  float a = atan(c.x, c.y) / WS + .5;
+  return abs(sin((fract(a) - .5) * WS)) * length(c);
+}
 
 /**
  * Kaleidoscopic folds with a spherical inversion: a symmetrical, organic jewel filling the inside of the head.
@@ -150,9 +230,20 @@ float coreFractal(vec3 h, out float trap) {
 
 float map(vec3 p) {
   vec3 h = toHead(p);
-  float d = halfD(h, -1.);
-  // The right half and the neck are only evaluated when they can be the closest
-  if (-halfFrame(h, 1.).x < d) d = min(d, halfD(h, 1.));
+  // Cheap bound: far from the head (and its drifting shards), no need to evaluate anything
+  float bound = sdCapsule(h, vec3(0., -1.5, -.1), vec3(0., .3, -.1), .85 + .6 * uOpen);
+  gCoreD = 1e3;
+  if (bound > .3) return bound;
+  float d;
+  if (uMode > .5) {
+    float si;
+    vec3 sq;
+    d = shardsD(h, si, sq);
+  } else {
+    d = halfD(h, -1.);
+    // The right half is only evaluated when it can be the closest
+    if (-halfFrame(h, 1.).x < d) d = min(d, halfD(h, 1.));
+  }
   if (h.y - NECK < d) d = min(d, neckD(h));
   gCoreD = 1e3;
   if (uOpen > .01) {
@@ -196,7 +287,7 @@ void main() {
   vec3 col = uBase * .9 + uInk * .06 * exp(-2.4 * length(uv - vec2(.3, .12)));
   // March, gathering the glow of the core along the way
   float t = .05, tt = -1., glow = 0.;
-  for (int i = 0; i < 130; i++) {
+  for (int i = 0; i < 115; i++) {
     float d = map(ro + rd * t);
     if (gCoreD < .4) glow += exp(-max(gCoreD, 0.) * 45.) * .008;
     if (abs(d) < .0007 * t) { tt = t; break; }
@@ -231,12 +322,23 @@ void main() {
       col += spe * .4 + fre * iri(uShift + .5) * .3;
     } else {
       // ---- which piece, and where on it
-      float dl = halfD(h, -1.), dr = halfD(h, 1.), dn = neckD(h);
-      float s = dl < dr ? -1. : 1.;
-      vec3 q = dn < min(dl, dr) ? h : halfFrame(h, s);
+      float dn = neckD(h);
+      vec3 q;
+      float dPiece, cutPlane;
+      if (uMode > .5) {
+        float si;
+        dPiece = shardsD(h, si, q);
+        cutPlane = abs(wedge(q, si));
+      } else {
+        float dl = halfD(h, -1.), dr = halfD(h, 1.);
+        dPiece = min(dl, dr);
+        q = halfFrame(h, dl < dr ? -1. : 1.);
+        cutPlane = abs(q.x);
+      }
+      if (dn < dPiece) q = h;
       float sd = sdHead(q);
       float dOut = abs(sd), dIn = abs(sd + TH);
-      float dCut = dn < min(dl, dr) ? abs(q.y - NECK) : min(abs(q.x), abs(q.y - NECK));
+      float dCut = dn < dPiece ? abs(q.y - NECK) : min(cutPlane, abs(q.y - NECK));
       if (dOut <= dIn && dOut <= dCut) {
         // Porcelain, with gold kintsugi cracks spreading over minutes
         col = uInk * (dif * vec3(1.1, 1.04, .96) + vec3(.06, .065, .08) * (.5 + .5 * n.y)) * ao;
@@ -254,8 +356,8 @@ void main() {
         vec3 gold = vec3(1., .76, .34);
         col = mix(col, gold * (.35 + dif * 1.1) + gold * spe * 2. + gold * uBeat * .5, crack);
         // The seam: a thread of light that pulses on the kick
-        float seam = abs(q.x);
-        col += uAccent * exp(-seam * 120.) * (.3 + 1.4 * uBeat + 2. * uLeak) * step(NECK, q.y);
+        float seam = uMode > .5 ? gapDist(q) : abs(q.x);
+        col += uAccent * exp(-seam * 120.) * ((uMode > .5 ? .12 : .3) + 1.4 * uBeat + 2. * uLeak) * step(NECK, q.y);
       } else if (dIn < dCut) {
         // Geode lining: crystal facets, iridescent, lit by the core
         vec3 cv = cells(q * 16.);
@@ -288,7 +390,8 @@ void main() {
       vec3 h = toHead(ro + rd * tEnd * (float(i) + j) / 8.);
       float sd = sdHead(h);
       if (sd < 0.) continue;
-      float sheet = exp(-abs(h.x) * (40. - 25. * uOpen)) * exp(-sd * 2.2) * step(NECK, h.y);
+      float g = uMode > .5 ? gapDist(h) : abs(h.x);
+      float sheet = exp(-g * (40. - 25. * uOpen)) * exp(-sd * 2.2) * step(NECK, h.y);
       acc += sheet * (.55 + .45 * vnoise(vec3(h.yz * 6., uTime * .8)));
     }
     col += uAccent * acc / 8. * uLeak * (.7 + .9 * uHat) * 1.6;
