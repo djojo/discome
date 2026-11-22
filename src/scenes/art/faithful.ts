@@ -10,13 +10,17 @@ const FRAMINGS: Framing[] = [
   { az: 2.2, el: 0.12, dist: 5, target: [0.5, 1.1, -0.5], focal: 2.2, weight: 2 },
   { az: 0.1, el: 1.1, dist: 10, target: [0, 0, 0], focal: 1.9, weight: 1 },
   { az: -0.3, el: 0.02, dist: 3.4, target: [0.2, 1.3, 0.2], focal: 2.4, weight: 2 },
+  // at eye level along the rows: where the heads can be seen rising (asked for on the drop)
+  { az: 0.78, el: 0, dist: 6.5, target: [0, 1.35, 0], focal: 2.1, weight: 2, tag: "eye" },
+  { az: -0.2, el: 0.03, dist: 5, target: [0.3, 1.4, -0.2], focal: 2.3, weight: 1, tag: "eye" },
 ];
 
 /**
  * The faithful: a crowd of hooded figures, heads bowed, each lit from below by the screen in its hands.
  * The screens flicker on the kick and notifications pop on the hats. On the drop every screen goes out and,
  * slowly, the heads rise toward a sky full of stars; the next build lights the screens again, one by one,
- * and the heads bow back down. As the night drifts, the crowd fills up.
+ * and the heads bow back down. As the night drifts, the crowd fills up. Somewhere in the crowd one figure has no
+ * screen: it dances, slowly, in a warm light of its own.
  */
 export const faithful = defineShaderScene({
   id: "faithful",
@@ -34,7 +38,8 @@ export const faithful = defineShaderScene({
     uCrowd: { value: 0.6 },
     uWave: { value: 9 },
   }),
-  update(u, f, p, dt) {
+  update(u, f, p, dt, ctx) {
+    if (f.drop) ctx.camera?.request("eye");
     const bar = f.bpm > 0 ? (60 / f.bpm) * 4 : 2;
     // Awake: the screens go out on the drop and stay out through the breakdown; the build lights them again
     const awake = f.section === "drop" || f.section === "breakdown" ? 1 : f.section === "build" ? 1 - f.buildProgress : 0;
@@ -57,7 +62,7 @@ ${CAMERA_GLSL}
 const float CELL = 1.1;
 const float EXT = 9.5;          // half size of the crowd
 const vec3 SCREEN = vec3(.78, .88, 1.);
-float gMat;                     // 0 robe, 1 screen
+float gMat;                     // 0 robe, 1 screen, 2 the dancer
 vec2 gCid;
 
 /** Per-figure randoms: jitter, yaw, height, bow. */
@@ -65,21 +70,29 @@ vec4 figRand(vec2 cid) {
   return vec4(hash12(cid + uSeed), hash12(cid + uSeed + 3.1), hash12(cid + uSeed + 7.7), hash12(cid + uSeed + 11.3));
 }
 
+/** The cell of the one who has no screen. */
+vec2 dancerCell() { return floor(vec2(hash12(vec2(uSeed, 1.)), hash12(vec2(uSeed, 2.))) * 5.) - 2.; }
+
 /** Is there someone in this cell? (and never right on top of the camera: the crowd parts around us) */
 bool occupied(vec2 cid) {
   if (max(abs(cid.x), abs(cid.y)) * CELL > EXT) return false;
   if (length(cid * CELL - uCamPos.xz) < 1.1) return false;
-  return hash12(cid + uSeed + 23.) < uCrowd;
+  return all(equal(cid, dancerCell())) || hash12(cid + uSeed + 23.) < uCrowd;
 }
 
-/** One hooded figure, feet at the origin, facing +z, head bowed forward by bow (radians). */
-float figure(vec3 q, float bow, out float mat) {
-  float robe = sdEllipsoid(q - vec3(0., .62, 0.), vec3(.25, .64, .21));
-  robe = smin(robe, sdEllipsoid(q - vec3(0., 1.16, -.02), vec3(.23, .13, .16)), .1);
+/** Robe, shoulders and hood; w widens the figure. The hood is bowed forward by bow (radians). */
+float body(vec3 q, float bow, float w) {
+  float robe = sdEllipsoid(q - vec3(0., .62, 0.), vec3(.25 * w, .64, .21));
+  robe = smin(robe, sdEllipsoid(q - vec3(0., 1.14, -.02), vec3(.27 * w, .12, .17)), .1);
   vec3 hq = q - vec3(0., 1.22, 0.);
   hq.yz *= rot(-bow);
-  float head = sdEllipsoid(hq - vec3(0., .2, .02), vec3(.13, .16, .14));
-  float d = smin(robe, head, .06);
+  float hood = sdEllipsoid(hq - vec3(0., .2, -.01), vec3(.14, .17, .16));
+  return smin(robe, hood, .06);
+}
+
+/** One hooded figure, feet at the origin, facing +z, holding its screen. */
+float figure(vec3 q, float bow, float w, out float mat) {
+  float d = body(q, bow, w);
   float arms = min(sdCapsule(q, vec3(-.17, 1.05, .05), vec3(-.03, .98, .24), .045),
                    sdCapsule(q, vec3(.17, 1.05, .05), vec3(.03, .98, .24), .045));
   d = smin(d, arms, .05);
@@ -101,6 +114,25 @@ vec3 toFigure(vec3 p, vec2 cid, vec4 r, out float s) {
 
 float bowOf(vec4 r) { return mix(.75 + .2 * r.w, -.45 - .2 * r.w, uLift); }
 
+/**
+ * The one without a screen: no hood, head up, one arm raised and one held out, swaying and turning slowly at
+ * its own pace.
+ */
+float dancer(vec3 q) {
+  float t = uTime * .55;
+  q.xz *= rot(.8 * sin(t * .45));
+  q.xy *= rot(.09 * sin(t));
+  float robe = sdEllipsoid(q - vec3(0., .62, 0.), vec3(.21, .64, .18));
+  robe = smin(robe, sdEllipsoid(q - vec3(0., 1.15, -.01), vec3(.22, .1, .14)), .1);
+  vec3 hq = q - vec3(0., 1.22, 0.);
+  hq.yz *= rot(.25 + .1 * sin(t * 1.3));
+  float d = smin(robe, sdEllipsoid(hq - vec3(0., .17, .02), vec3(.1, .12, .11)), .05);
+  float s1 = sin(t * 1.1), s2 = sin(t * .8 + 1.);
+  d = smin(d, sdCapsule(q, vec3(-.17, 1.13, 0.), vec3(-.3 - .05 * s1, 1.62 + .08 * s1, .05), .03), .04);
+  d = smin(d, sdCapsule(q, vec3(.17, 1.13, 0.), vec3(.55, 1.2 + .1 * s2, -.08), .03), .04);
+  return d;
+}
+
 float map(vec3 p) {
   float bound = sdBox(p - vec3(0., 1., 0.), vec3(EXT + .6, 1., EXT + .6));
   gMat = 0.;
@@ -114,8 +146,8 @@ float map(vec3 p) {
   vec4 r = figRand(cid);
   float s;
   vec3 q = toFigure(p, cid, r, s);
-  float mat;
-  float d = figure(q, bowOf(r), mat) * s;
+  float mat = 2.;
+  float d = all(equal(cid, dancerCell())) ? dancer(q) * s : figure(q, bowOf(r), .9 + .25 * hash12(cid + 5.3), mat) * s;
   gMat = mat;
   return min(d, edge);
 }
@@ -173,8 +205,14 @@ void main() {
     map(p);
     float mat = gMat;
     vec2 cid = gCid;
-    float on = screenOn(cid);
-    if (mat > .5) {
+    float on = all(equal(cid, dancerCell())) ? 0. : screenOn(cid);
+    if (mat > 1.5) {
+      // the dancer, in a warm light falling from above
+      vec3 n = calcN(p);
+      vec3 warm = mix(vec3(1., .82, .6), uAccent, .3);
+      col = uBase * .25 + warm * (.15 + .85 * clamp(dot(n, normalize(vec3(.2, 1., .3))), 0., 1.)) * .9;
+      col += warm * .4 * pow(1. - abs(dot(n, -rd)), 3.);
+    } else if (mat > .5) {
       // the screen itself
       col = SCREEN * on * 1.6 + uBase * .1;
     } else {
@@ -204,6 +242,17 @@ void main() {
   }
   // depth haze
   if (hitT > 0.) col = mix(col, uBase * .6 + uInk * .03, 1. - exp(-hitT * .05));
+  // a soft column of warm light above the dancer, so the eye finds it
+  {
+    vec2 D = dancerCell() * CELL + (figRand(dancerCell()).xy - .5) * .3;
+    vec2 rxz = rd.xz;
+    float ts = dot(D - ro.xz, rxz) / max(dot(rxz, rxz), 1e-4);
+    float y = ro.y + rd.y * ts;
+    if (ts > 0. && (hitT < 0. || ts < hitT) && y > 0. && y < 7.) {
+      float dd = length(ro.xz + rxz * ts - D);
+      col += mix(vec3(1., .82, .6), uAccent, .3) * exp(-dd * 7.) * (1. - y / 7.) * .07;
+    }
+  }
 
   col = aces(col * 1.1);
   col *= vignette(fc / uRes);
