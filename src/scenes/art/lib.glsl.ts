@@ -20,7 +20,6 @@ float smin(float a, float b, float k) { float h = clamp(.5 + .5 * (b - a) / k, 0
 float smax(float a, float b, float k) { return -smin(-a, -b, k); }
 mat3 lookAt(vec3 ro, vec3 ta) { vec3 f = normalize(ta - ro); vec3 r = normalize(cross(f, vec3(0, 1, 0))); vec3 u = cross(r, f); return mat3(r, u, f); }
 vec3 aces(vec3 x) { return clamp((x * (2.51 * x + .03)) / (x * (2.43 * x + .59) + .14), 0., 1.); }
-float grain(vec2 fc) { return hash12(fc + fract(uTime * 7.13) * 431.) - .5; }
 float vignette(vec2 q) { q = q * 2. - 1.; return 1. - dot(q * vec2(.62, .85), q * vec2(.62, .85)) * .6; }
 float letterbox(vec2 fc) {
   if (uRes.x / uRes.y < 1.5) return 1.;
