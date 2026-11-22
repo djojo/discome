@@ -71,6 +71,7 @@ export const LOOKS: Look[] = [
     scenes: [
       { id: "porcelain", key: "coquille", label: "Coquille", weight: 3, role: "calm", params: { style: "shell" } },
       { id: "porcelain", key: "eclats", label: "Éclats", weight: 2, role: "drop", params: { style: "shards" } },
+      { id: "porcelain", key: "selfie", label: "Selfie", weight: 2, role: "build", params: { style: "shell", frame: "selfie" } },
       { id: "profile-head", weight: 2, role: "calm", params: { palette: "porcelain" } },
       { id: "halftone-head", weight: 1, role: "drop", params: { palette: "porcelain" } },
       { id: "topo-head", label: "Os", weight: 1, role: "build", params: { palette: "bone" } },
@@ -81,7 +82,7 @@ export const LOOKS: Look[] = [
     ],
     bgOpacity: 0.35,
     fx: { grain: 0.18, vignette: 0.45, saturation: 0.9, contrast: 1.05 },
-    transitions: { calm: ["fade", "luma", "dive"], drop: ["flash", "fade"] },
+    transitions: { calm: ["fade", "luma", "dive", "screen"], drop: ["flash", "fade"] },
     director: "chill",
   },
   {
@@ -93,7 +94,9 @@ export const LOOKS: Look[] = [
     scenes: [
       { id: "signal", key: "dense", label: "Dense", weight: 3, role: "drop", params: { density: 0.75, readouts: true } },
       { id: "signal", key: "epure", label: "Épuré", weight: 2, role: "calm", params: { density: 0.25, readouts: true } },
-      { id: "topo-head", weight: 2, role: "calm", params: { palette: "mono" } },
+      { id: "topo-head", key: "reconnaissance", label: "Reconnaissance", weight: 2, role: "calm", params: { palette: "mono", recog: true } },
+      { id: "flux", weight: 2, role: "build", params: { palette: "mono" } },
+      { id: "flux", key: "carte-vide", label: "Carte vide", weight: 1, role: "after", params: { palette: "mono" } },
       { id: "halftone-head", label: "Fine", weight: 2, role: "drop", params: { palette: "mono", cells: 90 } },
       { id: "grimoire", weight: 1, role: "build", params: { palette: "mono" } },
     ],
@@ -105,7 +108,7 @@ export const LOOKS: Look[] = [
     ],
     bgOpacity: 0.5,
     fx: { vignette: 0, contrast: 1.2, saturation: 0, strobe: "invert" },
-    transitions: { calm: ["cut", "glitch"], drop: ["cut", "flash"] },
+    transitions: { calm: ["cut", "glitch", "screen"], drop: ["cut", "flash"] },
     director: "rave",
   },
   {
@@ -116,7 +119,9 @@ export const LOOKS: Look[] = [
     palettes: ["mercury", "cobalt"],
     scenes: [
       { id: "mercury", key: "houle", label: "Houle", weight: 3, role: "drop", params: { swell: 1.5 } },
-      { id: "mercury", key: "miroir", label: "Miroir", weight: 2, role: "calm", params: { swell: 0.3 } },
+      { id: "mercury", key: "miroir", label: "Miroir", weight: 2, role: "after", params: { swell: 0.3 } },
+      { id: "warehouse", weight: 2, role: "build", params: { palette: "mercury", variant: "boxes" } },
+      { id: "warehouse", key: "serveurs", label: "Serveurs", weight: 1, role: "calm", params: { palette: "cobalt", variant: "servers" } },
       { id: "profile-head", label: "Chrome", weight: 2, role: "calm", params: { palette: "mercury" } },
       { id: "porcelain", label: "Chrome", weight: 1, role: "drop", params: { palette: "mercury", style: "shell", head: "nefertiti" } },
     ],
@@ -126,7 +131,7 @@ export const LOOKS: Look[] = [
     ],
     bgOpacity: 0.4,
     fx: { grain: 0.1, vignette: 0.5, chroma: 0.12 },
-    transitions: { calm: ["fade", "luma"], drop: ["punch", "flash"] },
+    transitions: { calm: ["fade", "luma", "screen"], drop: ["punch", "flash"] },
     director: "club",
   },
   {
@@ -148,6 +153,8 @@ export const LOOKS: Look[] = [
       },
       { id: "profile-head", label: "Rouge", weight: 1, role: "calm", params: { palette: "signalRed", head: "lion" } },
       { id: "topo-head", label: "Rouge", weight: 1, role: "build", params: { palette: "signalRed", density: 30 } },
+      { id: "faithful", weight: 2, role: "calm", params: { palette: "whiteLight" } },
+      { id: "faithful", key: "fideles-apres", label: "Après", weight: 2, role: "after", params: { palette: "signalRed", crowd: 0.45 } },
     ],
     backgrounds: [
       { id: "tunnel", weight: 2, params: { palette: "signalRed", segments: 12 } },
@@ -156,7 +163,7 @@ export const LOOKS: Look[] = [
     ],
     bgOpacity: 0.45,
     fx: { vignette: 0.5, grain: 0.1, strobe: "flash", speedBlur: 0.8 },
-    transitions: { calm: ["fade", "iris"], drop: ["flash", "cut"] },
+    transitions: { calm: ["fade", "iris", "screen"], drop: ["flash", "cut"] },
     director: "club",
   },
   {
@@ -189,11 +196,12 @@ export const LOOKS: Look[] = [
         key: "colosse",
         label: "Colosse",
         weight: 2,
-        role: "calm",
+        role: "after",
         params: { palette: "concrete", monument: "head", head: "moai", sun: 0.12, dynamics: 1.3 },
         vary: { palettes: ["concrete", "sodium"], choices: { head: ["moai", "nefertiti", "lion"] } },
       },
       { id: "porcelain", label: "Statue brisée", weight: 1, role: "drop", params: { palette: "concrete", style: "shards" } },
+      { id: "panopticon", weight: 2, role: "calm", params: { palette: "concrete" } },
       { id: "profile-head", label: "Béton", weight: 1, role: "calm", params: { palette: "concrete" } },
     ],
     backgrounds: [
@@ -203,7 +211,7 @@ export const LOOKS: Look[] = [
     ],
     bgOpacity: 0.35,
     fx: { grain: 0.08, vignette: 0.45, saturation: 0.85, speedBlur: 0.5 },
-    transitions: { calm: ["luma", "fade"], drop: ["flash", "fade"] },
+    transitions: { calm: ["luma", "fade", "screen"], drop: ["flash", "fade"] },
     director: "chill",
   },
   {
@@ -215,7 +223,7 @@ export const LOOKS: Look[] = [
     scenes: [
       { id: "canyon-gorge", weight: 3, role: "drop", params: { palette: "desert" } },
       { id: "canyon-mesas", label: "Peyote", weight: 2, role: "drop", params: { palette: "peyote" } },
-      { id: "canyon-mesas", key: "mesas-mars", label: "Mars", weight: 1, role: "calm", params: { palette: "mars", width: 1.4, speed: 0.7 } },
+      { id: "canyon-mesas", key: "mesas-mars", label: "Mars", weight: 1, role: "after", params: { palette: "mars", width: 1.4, speed: 0.7 } },
       { id: "arcane-nomad", weight: 1, role: "calm", params: { palette: "mars" } },
       { id: "topo-head", label: "Désert", weight: 1, role: "build", params: { palette: "desert", density: 34, head: "loup" } },
     ],
@@ -238,6 +246,7 @@ export const LOOKS: Look[] = [
     scenes: [
       { id: "arcane-architect", weight: 2 },
       { id: "arcane-architect", key: "horus", label: "Horus", weight: 2, params: { head: "faucon" } },
+      { id: "arcane-architect", key: "relique", label: "Relique", weight: 1, params: { relic: "slab" } },
       { id: "arcane-nomad", weight: 2, params: { palette: "mars" } },
       { id: "arcane-prism", weight: 2 },
       { id: "arcane-portal", weight: 2 },
@@ -273,7 +282,7 @@ export const LOOKS: Look[] = [
         key: "abysses",
         label: "Abysses",
         weight: 2,
-        role: "calm",
+        role: "after",
         params: { palette: "cobalt", variant: "abyss" },
         vary: { palettes: ["cobalt"] },
       },
@@ -322,6 +331,14 @@ export const LOOKS: Look[] = [
         role: "drop",
         params: { palette: "fauve", style: "shards", head: "tigre" },
         vary: { palettes: ["fauve", "bone"], choices: { head: ["tigre", "loup", "faucon", "lion"] } },
+      },
+      {
+        id: "metamorphosis",
+        key: "extinction",
+        label: "Extinction",
+        weight: 2,
+        role: "drop",
+        params: { palette: "bone", matter: "marble", cycle: "extinction" },
       },
       { id: "topo-head", label: "Fauve", weight: 1, role: "build", params: { palette: "fauve", density: 30, head: "tigre" } },
       { id: "halftone-head", label: "Hibou", weight: 1, role: "drop", params: { palette: "fauve", head: "hibou" } },

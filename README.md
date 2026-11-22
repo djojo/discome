@@ -12,6 +12,9 @@ npm run dev   # http://localhost:3000
 - **Sources** : micro / entrée, son d'un onglet, fichier (glisser-déposer), démo (un morceau de 32 mesures synthétisé en direct).
 - **Horloge musicale** : BPM, temps, mesures et phrases de 8 mesures, avec tap tempo. Les sections (groove → breakdown → montée → drop) sont détectées automatiquement.
 - **Mondes** : Porcelaine, Signal, Mercure, Cathédrale, Monolithe, Canyon, Arcanes, Chair, Bestiaire, et Classique (les premières scènes).
+  - **Le propos, sans un mot** : chaque monde garde son thème et dénonce, par les images et le montage seulement, une dérive d'aujourd'hui : les écrans et l'attention (Cathédrale, Signal, Porcelaine), la surveillance (Monolithe, Signal), l'argent et la consommation (Mercure), le vivant (Canyon, Chair, Bestiaire).
+  - **La dérive de la soirée** : réglable sur 30 min, 1 h ou 1 h 30 à partir du lancement de la source. Les mondes se dégradent lentement : l'eau monte dans l'avenue du Monolithe, les caméras et les écrans s'y multiplient, la rivière du Canyon s'assèche, la créature de Chair blanchit comme un corail, la nef de la Cathédrale devient une nef d'écrans, le Flux défile de plus en plus vite.
+  - **Le récit** : chaque plan a un rôle (calme, montée, drop ou « après »). Les plans « après » (les ruines, le silence) sont réservés aux breakdowns. Quand les mondes s'enchaînent, la rotation alterne nature et machine.
   - Un monde est une direction artistique complète : une sélection de plans (une scène du catalogue et ses réglages pour ce monde), des palettes, des post-effets, des transitions et un rythme de réalisation.
   - **Les plans** : une même scène peut apparaître plusieurs fois, dans un monde ou d'un monde à l'autre, avec d'autres réglages (Porcelaine « Coquille » et « Éclats », Cathédrale « Rouge » et « Blanche », Profil chrome ou béton…). Chaque plan a sa propre instance, son rôle pour le réalisateur (calme, montée, drop) et ses limites de variation.
   - Tes retouches sont gardées par plan et par monde ; « Réinitialiser le plan » revient aux réglages du monde.
@@ -40,7 +43,7 @@ npm run dev   # http://localhost:3000
   - Le monde Classique garde ces scènes en plein écran, avec leurs couleurs d'origine.
 - **Palettes** : 2 à 4 couleurs par palette, avec des rôles fixes (fond, encre, accent) au lieu d'arcs-en-ciel. Les scènes s'en servent pour se recolorer selon le monde.
 - **Réalisateur** (Manuel / Chill / Club / Rave) : fondu au breakdown, tension pendant la montée, impact et rafale de coupes au drop, variation des réglages à chaque coupe.
-- **Transitions** : cut, fondu, punch, glitch, volet lumineux, iris, flash blanc, passage au noir, plongée dans la fissure (on entre dans une fente de lumière et on ressort dans la scène suivante).
+- **Transitions** : cut, fondu, punch, glitch, volet lumineux, iris, flash blanc, passage au noir, plongée dans la fissure (on entre dans une fente de lumière et on ressort dans la scène suivante), plongée dans l'écran (un petit rectangle lumineux s'allume au milieu de l'image, on plonge dedans).
 - **Calque** : une 2e scène superposée, avec mode de fusion, opacité et option « pulse au beat ». Un monde peut poser son propre calque (Arcanes pose le Grimoire), retiré en quittant le monde.
 - **Post-FX** : aberration chromatique, traînées, flou de vitesse, pixel (tramage), scanlines, CRT, VHS, grain, étalonnage, miroir, postérisation, strobo (option « Limiter les flashs »).
 
@@ -50,23 +53,27 @@ npm run dev   # http://localhost:3000
 
 | Scène | Ce qu'on voit | Au drop |
 | --- | --- | --- |
-| Porcelaine | Visage de céramique immobile, fissures d'or kintsugi qui se propagent sur plusieurs minutes | La tête s'ouvre en coquille ou se brise en éclats flottants (en alternance) sur une agate, une géode et un cœur fractal ; elle se referme au breakdown |
-| Métamorphose | Buste de musée en marbre ou en obsidienne qui se transforme lentement d'une tête en une autre, du cou vers le sommet ; la couture d'or du front flashe au kick | La transformation démarre ou s'accélère, la couture s'embrase et lâche des étincelles |
-| Topographie | Le visage dessiné par des lignes de niveau qui changent lentement d'orientation ; une ligne de lumière le traverse à chaque kick | Les lignes basculent en profondeur |
+| Porcelaine | Visage de céramique immobile, fissures d'or kintsugi qui se propagent sur plusieurs minutes ; option viseur de téléphone (Selfie) | La tête s'ouvre en coquille ou se brise en éclats flottants (en alternance) sur une agate, une géode et un cœur fractal ; elle se referme au breakdown |
+| Métamorphose | Buste de musée en marbre ou en obsidienne qui se transforme lentement d'une tête en une autre, du cou vers le sommet ; la couture d'or du front flashe au kick ; cycle Extinction (chaque drop pétrifie un animal qui ne revient pas, jusqu'à la tête humaine seule) | La transformation démarre ou s'accélère, la couture s'embrase et lâche des étincelles |
+| Topographie | Le visage dessiné par des lignes de niveau qui changent lentement d'orientation ; une ligne de lumière le traverse à chaque kick ; option Reconnaissance faciale (points, maillage, cadre, balayage) | Les lignes basculent en profondeur |
 | Profil | Le profil en contre-jour, brume et rais de lumière ; le contour s'allume en vague à chaque kick | Un contour d'accent s'allume |
 | Trame | Trois trames de couleur, chacune éclairée d'un côté, qui tournent lentement | Inversion |
-| Mercure | Masque chromé immobile dans un bain de métal liquide ; chaque kick lance un anneau | Une lame de lumière balaie le chrome |
-| Cathédrale | Nef d'arches lumineuses, sol miroir, brume ; la forme des arches change à chaque phrase. Une silhouette encapuchonnée au bout de la nef ne s'approche que pendant les montées | Vitesse lumière : les arches s'étirent en traînées, la silhouette disparaît |
-| Monolithe | Avenue brutaliste en béton banché, soleil rasant, poussière, monolithe ou tête colossale à l'horizon | Décollage au-dessus des toits, le soleil change de côté |
+| Mercure | Masque chromé dans un bain de métal liquide, une courbe de cotations à l'horizon ; le masque s'enfonce à mesure qu'elle monte ; chaque kick lance un anneau | La courbe s'effondre, une lame de lumière balaie le chrome |
+| Entrepôt | Vol dans les allées infinies d'un entrepôt : cartons identiques, tapis roulant, néons au kick ; variante Serveurs | Pluie de colis dans l'allée |
+| Cathédrale | Nef d'arches lumineuses, sol miroir, brume ; la forme des arches change à chaque phrase, et devient de plus en plus souvent un écran. Une silhouette encapuchonnée, éclairée par son téléphone, ne s'approche que pendant les montées | Vitesse lumière : les arches s'étirent en traînées, la silhouette disparaît |
+| Les Fidèles | Une foule tête baissée, chacun éclairé par son écran ; une seule silhouette sans téléphone danse lentement | Les écrans s'éteignent, les têtes se relèvent vers les étoiles |
+| Monolithe | Avenue brutaliste en béton banché, soleil rasant, poussière, monolithe ou tête colossale à l'horizon ; caméras de surveillance qui suivent la nôtre, écrans muets, l'eau qui monte | Décollage au-dessus des toits, le monolithe s'allume comme un écran |
+| Panoptique | Anneau de cellules autour d'une tour de guet, une silhouette devant un écran dans chacune ; le projecteur s'arrête sur une cellule à chaque kick | Toutes les cellules s'allument |
 | Gorge | Vol dans une gorge étroite aux parois ondulées, strates colorées, rais de lumière | On sort de la fente, les couleurs des strates basculent |
-| Mesas | Vol au ras d'une rivière miroir entre des falaises en gradins, soleil en anneau | On monte au-dessus des mesas |
+| Mesas | Vol au ras d'une rivière miroir entre des falaises en gradins, soleil en anneau ; au fil de la soirée la rivière s'assèche, le soleil grossit, une strate de plastique traverse les falaises | On monte au-dessus des mesas |
 | L'Architecte | Mage à tête de pyramide (ou de faucon, Horus), robe de lignes et d'étoiles, cristal rouge, lac d'anneaux arc-en-ciel | La pyramide devient un prisme (rayon blanc entrant, arc-en-ciel sortant) et la robe s'ouvre sur le cosmos |
 | Le Nomade | Chapeau conique, orbe dans la main, désert martien, longue ombre, contour néon | L'orbe éclate et embrase le désert, le soleil tourne |
 | Les Trois | Moines rouge, bleu et or traversés par un rayon prismatique (une bande de couleur = une bande de fréquences) | Le rayon s'élargit, les robes s'embrasent |
 | Le Portail | Lac d'anneaux arc-en-ciel, colonne de lumière, minuscule silhouette | Le portail s'ouvre en vortex |
 | Grimoire | HUD de jeu ésotérique (2D) : chapitre, glyphes, orbites, texte japonais, vraies données du morceau | Le chapitre change, l'avertissement clignote |
-| Chair | Créature entre l'anémone et le corail, tentacules lents, veines bioluminescentes où une impulsion monte à chaque kick ; variante Abysses | Spores lumineuses |
+| Chair | Créature entre l'anémone et le corail, tentacules lents, veines bioluminescentes où une impulsion monte à chaque kick, qui blanchit au fil de la soirée ; variante Abysses (fragments de plastique, un sac qui dérive) | Spores lumineuses |
 | Signal | Données sur une grille suisse : spectrogramme qui défile, grands chiffres, code-barres, onde ; la mise en page change à chaque phrase | Inversion |
+| Flux | Fil infini de cartes sans un mot, qui défile par coups de pouce, de plus en plus vite ; stories, cœurs au kick | Le fil se fige et se déchire en pixels ; au breakdown, une carte vide |
 
 **Classiques**, recolorées par les palettes des mondes : Halo, Kaléidoscope, Orbe, Tunnel, Nébuleuse, Spectro-terrain, Échos, Danseuse, Androïde, Corps de particules.
 
