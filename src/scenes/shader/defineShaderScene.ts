@@ -24,6 +24,8 @@ uniform float uBuild;
 uniform float uBands[8];
 /** Random, redrawn each time the scene comes back on screen: vary patterns so it never repeats exactly. */
 uniform float uSeed;
+/** 0..1: how far the night has drifted (the worlds degrade slowly over the set; see Settings.drift). */
+uniform float uDrift;
 ${PALETTE_GLSL}
 mat2 rot(float a) { float c = cos(a), s = sin(a); return mat2(c, -s, s, c); }
 `;
@@ -126,6 +128,7 @@ export function defineShaderScene(opts: ShaderSceneOptions): SceneGLDef {
           uniforms.uHat.value = f.onsetPulse;
           uniforms.uDrop.value = f.dropPulse;
           uniforms.uBuild.value = f.buildProgress;
+          uniforms.uDrift.value = f.drift;
           // 64 log bands averaged into 8 (each a bit more than an octave)
           const bands = uniforms.uBands.value as number[];
           const per = f.bands.length / 8;

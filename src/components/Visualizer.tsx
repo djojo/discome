@@ -148,7 +148,12 @@ export default function Visualizer() {
 
     if (process.env.NODE_ENV !== "production") {
       // Dev-only handle for debugging from the console.
-      (window as unknown as { __discome?: unknown }).__discome = { compositor, engine };
+      (window as unknown as { __discome?: unknown }).__discome = {
+        compositor,
+        engine,
+        /** Force the night's drift (0..1) to look at a world at any point of the night; null to let it run. */
+        setDrift: (v: number | null) => (driftOverride = v),
+      };
     }
 
     let lastQuality = settingsRef.current.quality;
@@ -156,6 +161,10 @@ export default function Visualizer() {
     ro.observe(stage);
     measure();
 
+    // The night's drift: counted while a source plays, from zero again when the source changes
+    let driftTime = 0;
+    let driftKind: unknown = null;
+    let driftOverride: number | null = null;
     const director = new Director();
     const fxShown: FxSettings = { ...NEUTRAL_FX, ...settingsRef.current.fx };
     // Director pool derived from the active look, rebuilt only when the look changes
@@ -177,6 +186,7 @@ export default function Visualizer() {
             weight: p.shot.weight ?? 1,
             defaults: planDefaults(p),
             vary: p.shot.vary,
+            role: p.shot.role,
           })),
           palettes: look.palettes,
           transitions: look.transitions,
@@ -206,6 +216,13 @@ export default function Visualizer() {
       }
 
       const frame = engine.update(dt);
+      if (engine.kind !== driftKind) {
+        driftKind = engine.kind;
+        driftTime = 0;
+      }
+      if (frame.active) driftTime += dt;
+      const driftMin = settingsRef.current.drift;
+      frame.drift = driftOverride ?? (driftMin > 0 ? Math.min(1, driftTime / (driftMin * 60)) : 0);
       let s = settingsRef.current;
 
       // ---- Auto director

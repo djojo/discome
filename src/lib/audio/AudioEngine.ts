@@ -36,6 +36,8 @@ export interface AudioFrame extends MusicState {
   energy: number;
   /** False while no source is connected. */
   active: boolean;
+  /** 0..1: how far the night has drifted since the source started (set by the visualizer, see Settings.drift). */
+  drift: number;
 }
 
 export const BAND_COUNT = 64;
@@ -103,6 +105,7 @@ export class AudioEngine {
       time: 0,
       energy: 0,
       active: false,
+      drift: 0,
       ...emptyMusicState(),
     };
   }

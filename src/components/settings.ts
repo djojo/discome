@@ -71,7 +71,20 @@ export interface Settings {
   /** Worlds take turns automatically. */
   worldCycle: { enabled: boolean; rule: WorldRule };
   background: BackgroundSettings;
+  /**
+   * The night's drift: over this many minutes from the start of the source, the worlds slowly degrade
+   * (the river dries up, the cameras multiply…). 0 = off.
+   */
+  drift: number;
 }
+
+/** Choices for the night's drift. */
+export const DRIFT_OPTIONS = [
+  { minutes: 0, label: "Désactivée" },
+  { minutes: 30, label: "Sur 30 min" },
+  { minutes: 60, label: "Sur 1 h" },
+  { minutes: 90, label: "Sur 1 h 30" },
+];
 
 // v2: the art-directed worlds replaced the first looks; start fresh rather than inherit vivid settings.
 const KEY = "discome:settings:v2";
@@ -95,6 +108,7 @@ export function defaultSettings(): Settings {
     customLooks: [],
     worldCycle: { enabled: true, rule: "breakdown" },
     background: { auto: true, sceneId: null, opacity: 0.4, tint: true, blur: 0.4 },
+    drift: 60,
   };
   return applyLook(base, LOOKS[0]);
 }
@@ -224,6 +238,7 @@ export function loadSettings(): Settings {
       lookId,
       params,
       layer,
+      drift: DRIFT_OPTIONS.some((o) => o.minutes === saved.drift) ? saved.drift! : base.drift,
       worldCycle: {
         enabled: saved.worldCycle?.enabled ?? base.worldCycle.enabled,
         rule: WORLD_RULES.some((r) => r.id === saved.worldCycle?.rule) ? saved.worldCycle!.rule : base.worldCycle.rule,

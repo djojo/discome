@@ -10,6 +10,8 @@ export interface DirectorPlan {
   /** The plan's own settings: variations stay around them instead of drifting away. */
   defaults: ParamValues;
   vary?: { palettes?: string[]; ranges?: Record<string, [number, number]>; choices?: Record<string, string[]> };
+  /** "after": the aftermath, kept for the breakdowns. */
+  role?: string;
 }
 import { paletteOptions } from "@/scenes/palettes";
 import type { TransitionId, TransitionSpec } from "./transitions";
@@ -136,6 +138,8 @@ export class Director {
   private burstUntil = -1;
   private burstPacing: Pacing = PACING.club;
   private lastSection: AudioFrame["section"] = "calm";
+  /** Section of the current frame (the aftermath plans are kept for breakdowns). */
+  private section: AudioFrame["section"] = "calm";
   private history: string[] = [];
   private plannedDrop: string | null = null;
   private plannedNext: string | null = null;
@@ -163,6 +167,7 @@ export class Director {
   }
 
   update(f: AudioFrame, ctx: DirectorContext): Decision | null {
+    this.section = f.section;
     const dt = Math.max(0, Math.min(0.1, f.time - this.now));
     const fg = this.decide(f, ctx);
     const bg = this.decideBackground(f, ctx, dt);
@@ -331,7 +336,13 @@ export class Director {
   private pick(ctx: DirectorContext, energies: Energy[]): string {
     const free = ctx.plans.filter((p) => p.key !== ctx.currentId && p.scene.id !== ctx.layerId);
     const recent = this.history.slice(-3);
+    // The aftermath plans belong to the breakdowns; elsewhere they only fill in when nothing else fits
+    const fits = (p: DirectorPlan) => (this.section === "breakdown") === (p.role === "after");
     const tiers = [
+      free.filter((p) => fits(p) && energies.includes(p.energy) && !recent.includes(p.key)),
+      free.filter((p) => fits(p) && energies.includes(p.energy)),
+      free.filter((p) => fits(p) && !recent.includes(p.key)),
+      free.filter(fits),
       free.filter((p) => energies.includes(p.energy) && !recent.includes(p.key)),
       free.filter((p) => energies.includes(p.energy)),
       free.filter((p) => !recent.includes(p.key)),

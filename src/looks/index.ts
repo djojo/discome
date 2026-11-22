@@ -8,8 +8,11 @@ import { defaultParams, SCENES, sceneById, type Energy, type ParamValues, type S
  * the catalogue + its settings for this world), palettes, post-effects, transitions and pacing.
  * The same scene shows up in several worlds with different settings (a red or a white Cathedral…).
  */
-/** What a plan is for: the director takes calm plans in calm passages and drop plans on drops. */
-export type Role = "calm" | "build" | "drop";
+/**
+ * What a plan is for: the director takes calm plans in calm passages and drop plans on drops. "after" is the
+ * aftermath (ruins, silence): kept for the breakdowns.
+ */
+export type Role = "calm" | "build" | "drop" | "after";
 
 /**
  * A plan ("shot"): a scene of the catalogue with its settings for this world. The same scene may appear
@@ -362,7 +365,7 @@ export interface Plan {
   energy: Energy;
 }
 
-const ROLE_ENERGY: Record<Role, Energy> = { calm: "calm", build: "medium", drop: "intense" };
+const ROLE_ENERGY: Record<Role, Energy> = { calm: "calm", build: "medium", drop: "intense", after: "calm" };
 
 export const shotKey = (s: Shot) => s.key ?? s.id;
 
@@ -424,4 +427,9 @@ export function pickShot(shots: Shot[], avoid: (string | null)[] = []): Shot | n
 }
 
 /** The art-directed worlds that take turns when "Enchaîner les mondes" is on. */
-export const ROTATION = LOOKS.filter((l) => !l.classic).map((l) => l.id);
+/** The rotation alternates nature and machine: the cut between two worlds says something on its own. */
+const ROTATION_ORDER = ["porcelaine", "canyon", "monolithe", "chair", "signal", "bestiaire", "mercure", "arcanes", "cathedrale"];
+export const ROTATION = [
+  ...ROTATION_ORDER.filter((id) => LOOKS.some((l) => l.id === id && !l.classic)),
+  ...LOOKS.filter((l) => !l.classic && !ROTATION_ORDER.includes(l.id)).map((l) => l.id),
+];

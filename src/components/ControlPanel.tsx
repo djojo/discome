@@ -6,7 +6,7 @@ import { ParamControl } from "./ParamControl";
 import { BLEND_MODES, TRANSITIONS, type BlendModeId, type TransitionId } from "@/engine/transitions";
 import { DIRECTOR_MODES } from "@/engine/Director";
 import { FX_SLIDERS, MIRROR_OPTIONS, STROBE_OPTIONS, type FxSettings, type StrobeMode } from "@/engine/fx";
-import { allLooks, findLook, WORLD_RULES, type Quality, type Settings, type WorldRule } from "./settings";
+import { allLooks, DRIFT_OPTIONS, findLook, WORLD_RULES, type Quality, type Settings, type WorldRule } from "./settings";
 import { lookBackgrounds, lookPlans, type Plan } from "@/looks";
 
 export const SOURCE_LABELS: Record<SourceKind, string> = {
@@ -154,6 +154,18 @@ export function ControlPanel({
             checked={settings.worldCycle.enabled}
             onChange={(e) => onSettings({ worldCycle: { ...settings.worldCycle, enabled: e.target.checked } })}
           />
+        </label>
+        <label className="field">
+          <span className="field-head">
+            <span>Dérive de la soirée</span>
+          </span>
+          <select value={settings.drift} onChange={(e) => onSettings({ drift: Number(e.target.value) })}>
+            {DRIFT_OPTIONS.map((o) => (
+              <option key={o.minutes} value={o.minutes}>
+                {o.label}
+              </option>
+            ))}
+          </select>
         </label>
         {settings.worldCycle.enabled && (
           <label className="field">
