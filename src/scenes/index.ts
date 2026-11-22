@@ -32,6 +32,7 @@ import { wave } from "./art/wave";
 import { blend } from "./art/blend";
 import { morphose } from "./art/morphose";
 import { radiolaria } from "./art/radiolaria";
+import { jellyfish } from "./art/jellyfish";
 import { grimoire } from "./art/grimoire";
 import { flesh } from "./art/flesh";
 import { signal } from "./art/signal";
@@ -67,6 +68,7 @@ export const SCENES: SceneDef[] = [
   blend,
   morphose,
   radiolaria,
+  jellyfish,
   grimoire,
   flesh,
   signal,
