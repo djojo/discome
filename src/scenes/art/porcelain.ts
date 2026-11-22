@@ -11,9 +11,10 @@ const FRAMINGS: Framing[] = [
   { az: 1.45, el: 0.03, dist: 4.2, target: [0, -0.12, 0], focal: 2.1, weight: 2 },
   { az: 0.32, el: 0.05, dist: 2.3, target: [0.1, -0.06, 0.32], focal: 2.2, weight: 2 },
   { az: -0.5, el: 0.12, dist: 6.2, target: [0, -0.35, 0], focal: 1.8, weight: 1 },
-  { az: 0.15, el: 0.62, dist: 3.4, target: [0, 0.02, 0.05], focal: 1.9, weight: 3, tag: "open" },
-  { az: 0.02, el: 0.1, dist: 3.8, target: [0, -0.05, 0], focal: 1.95, weight: 2, tag: "open" },
-  { az: -0.7, el: 0.3, dist: 3.2, target: [0, 0, 0], focal: 1.9, weight: 2, tag: "open" },
+  // (pulled back: the halves and the shards spread wide)
+  { az: 0.15, el: 0.62, dist: 4.2, target: [0, 0.02, 0.05], focal: 1.9, weight: 3, tag: "open" },
+  { az: 0.02, el: 0.1, dist: 4.6, target: [0, -0.05, 0], focal: 1.95, weight: 2, tag: "open" },
+  { az: -0.7, el: 0.3, dist: 4, target: [0, 0, 0], focal: 1.9, weight: 2, tag: "open" },
 ];
 
 /**
@@ -138,7 +139,7 @@ ${CAMERA_GLSL}
 const float TH = .1;                    // shell thickness
 const vec3 HINGE = vec3(0., 0., -.58);  // back of the skull
 const vec3 CORE = vec3(0., .1, -.03);
-const float CORE_R = .4;
+const float CORE_R = .46;
 const float NECK = -.85;                // the halves open above this cut
 float gAng;
 float gCoreD;
@@ -183,11 +184,13 @@ const float WS = 6.2831853 / 9.;
 vec3 shardFrame(vec3 h, float i) {
   float a = i * WS;
   float hs = hash12(vec2(i, 3.7));
-  vec3 off = vec3(sin(a), 0., cos(a)) * uOpen * (.3 + .22 * hs)
-    + vec3(0., uOpen * (.12 * sin(uTime * .25 + i * 1.7) + .12 * (hs - .5)), 0.);
+  // wide apart, staggered in height, each turned a little so its inner face shows
+  float o = uOpen * uAmp;
+  vec3 off = vec3(sin(a), 0., cos(a)) * o * (.85 + .45 * hs)
+    + vec3(0., o * (.18 * sin(uTime * .25 + i * 1.7) + .35 * (hs - .5)), 0.);
   vec3 q = h - off - CORE;
-  q.xz *= rot(uOpen * .3 * (hs - .5));
-  q.yz *= rot(uOpen * .25 * (hash12(vec2(i, 9.1)) - .5));
+  q.xz *= rot(o * .45 * (hs - .5));
+  q.yz *= rot(o * .35 * (hash12(vec2(i, 9.1)) - .5));
   return q + CORE;
 }
 
@@ -233,7 +236,8 @@ float coreFractal(vec3 h, out float trap) {
   p.xy *= rot(uTime * .017 + uSeed * .7);
   float s = 1.;
   trap = 1e3;
-  for (int i = 0; i < 4; i++) {
+  // three folds only: bigger forms, which stay readable instead of fizzing
+  for (int i = 0; i < 3; i++) {
     p = abs(p);
     if (p.x < p.y) p.xy = p.yx;
     if (p.x < p.z) p.xz = p.zx;
@@ -255,7 +259,7 @@ float coreFractal(vec3 h, out float trap) {
 float map(vec3 p) {
   vec3 h = toHead(p);
   // Cheap bound: far from the head (and its drifting shards), no need to evaluate anything
-  float bound = sdCapsule(h, vec3(0., -1.5, -.1), vec3(0., .3, -.1), .85 + .3 * uHeadOn + .6 * uOpen);
+  float bound = sdCapsule(h, vec3(0., -1.5, -.1), vec3(0., .3, -.1), .85 + .3 * uHeadOn + (.6 + 1.1 * uAmp) * uOpen);
   gCoreD = 1e3;
   if (bound > .3) return bound;
   float d;
@@ -304,7 +308,7 @@ vec3 iri(float t) { return .5 + .5 * cos(6.2831 * (t + vec3(0., .33, .67))); }
 void main() {
   vec2 fc = gl_FragCoord.xy;
   vec2 uv = (fc - .5 * uRes) / uRes.y;
-  gAng = uOpen * .62 * uAmp;
+  gAng = uOpen * .85 * uAmp;
   gYaw = .22 * sin(uTime * .04 + uSeed) + .06 * sin(uTime * .1 + uSeed * 2.);
   vec3 ro = uCamPos;
   vec3 rd = lookAt(ro, uCamTarget) * normalize(vec3(uv, uFocal));
@@ -314,7 +318,7 @@ void main() {
   float t = .05, tt = -1., glow = 0.;
   for (int i = 0; i < 115; i++) {
     float d = map(ro + rd * t);
-    if (gCoreD < .4) glow += exp(-max(gCoreD, 0.) * 45.) * .008;
+    if (gCoreD < .4) glow += exp(-max(gCoreD, 0.) * 40.) * .012;
     if (abs(d) < .0007 * t) { tt = t; break; }
     t += d * .9;
     if (t > 12.) break;
@@ -341,10 +345,11 @@ void main() {
       coreFractal(h, tr);
       float r = length(h - CORE) / CORE_R;
       float wave = exp(-pow(r - waveR, 2.) * 60.) * exp(-uWave * 1.5);
-      vec3 c = mix(pal(tr * .3 + uShift), iri(r * .8 + tr * .15 + uShift), .7);
-      float lit = .55 + .45 * clamp(dot(n, normalize(vec3(.3, .8, .5))), 0., 1.);
-      col = c * (.25 + .75 * ao) * lit * coreLight + iri(r + uShift) * wave * 1.8;
-      col += spe * .4 + fre * iri(uShift + .5) * .3;
+      // soft gradients through the jewel (the orbit trap only nudges them) rather than fine speckles
+      vec3 c = mix(pal(r * .6 + tr * .08 + uShift), iri(r * .8 + uShift), .6);
+      float lit = .7 + .3 * clamp(dot(n, normalize(vec3(.3, .8, .5))), 0., 1.);
+      col = c * (.45 + .55 * ao) * lit * coreLight + iri(r + uShift) * wave * 1.8;
+      col += c * .35 * (1. - r) + spe * .15 + fre * iri(uShift + .5) * .3;
     } else {
       // ---- which piece, and where on it
       float dn = neckD(h);
@@ -403,6 +408,8 @@ void main() {
       }
     }
   }
+  // The heads float: below the cut of the neck the light dies out into the dark
+  if (tt > 0.) col *= smoothstep(NECK - .4, NECK + .02, toHead(ro + rd * tt).y);
   // The glow of the core around the fractal
   col += iri(uShift + .2) * glow * coreLight * (uOpen + .05);
 

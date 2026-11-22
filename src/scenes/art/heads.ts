@@ -136,8 +136,8 @@ export function setHead(u: Record<string, THREE.IUniform>, id: unknown, suffix =
 }
 
 /**
- * GLSL: headD(p), the head of the scene in the frame of sdHead (y up, facing +z), sculpted or baked, with the
- * same column below. headBound(p) is a cheap distance that never exceeds the head's. Needs ART_LIB.
+ * GLSL: headD(p), the head of the scene in the frame of sdHead (y up, facing +z), sculpted or baked (a baked
+ * bust floats, cut flat under its neck). headBound(p) is a cheap distance that never exceeds the head's. Needs ART_LIB.
  */
 export const HEAD_GLSL = /* glsl */ `
 uniform highp sampler3D uHeadTex;
@@ -180,15 +180,14 @@ float bakedHead(highp sampler3D tex, vec3 bmin, vec3 bsize, vec3 p) {
   if (d < .08) d = mix(tricubic(tex, c), d, smoothstep(.04, .08, d));
   return d + length((uvw - c) * bsize);
 }
-float headColumn(vec3 p) { return sdCapsule(p, vec3(0., -.55, -.12), vec3(0., -1.6, -.2), .23); }
-/** A head slot: the sculpted head (on = 0) or a baked one on the same column. */
+/** A head slot: the sculpted head (on = 0) or a baked one, which floats: no column under the bust. */
 float headSlot(highp sampler3D tex, float on, vec3 bmin, vec3 bsize, vec3 p) {
   if (on < .5) return sdHead(p);
-  return smin(bakedHead(tex, bmin, bsize, p), headColumn(p), .15);
+  return bakedHead(tex, bmin, bsize, p);
 }
 float headD(vec3 p) { return headSlot(uHeadTex, uHeadOn, uHeadMin, uHeadSize, p); }
 float headBound(vec3 p) {
   if (uHeadOn < .5) return sdEllipsoid(p - vec3(0., -.05, -.02), vec3(.56, .95, .75));
-  return min(sdBox(p - uHeadMin - uHeadSize * .5, uHeadSize * .5), headColumn(p));
+  return sdBox(p - uHeadMin - uHeadSize * .5, uHeadSize * .5);
 }
 `;

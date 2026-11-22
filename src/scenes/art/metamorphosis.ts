@@ -176,11 +176,9 @@ vec3 toHead(vec3 p) { p.y += .1; p.xz *= rot(gYaw); p.yz *= rot(gPitch); return 
 vec3 fromHead(vec3 h) { h.yz *= rot(-gPitch); h.xz *= rot(-gYaw); h.y -= .1; return h; }
 float frontY(vec3 h) { return h.y + (vnoise(h * 2.6 + uSeed) - .5) * .35; }
 
-float map(vec3 p) {
-  vec3 h = toHead(p);
-  // both heads fit in the common box, on the common column
-  float b = min(sdBox(h - vec3(0., .025, 0.), vec3(.84, 1., .92)), sdCapsule(h, vec3(0., -.55, -.12), vec3(0., -1.6, -.2), .26));
-  if (b > .2) return b;
+const float CUT = -.82;  // the busts float, cut just under the neck; the light dies out before the cut
+
+float morphD(vec3 h) {
   if (uMorph <= 0.) return headD(h);
   float w = 1. - smoothstep(gFront - K, gFront + K, frontY(h));
   float dB = w > .001 ? headSlot(uHeadTexB, uHeadOnB, uHeadMinB, uHeadSizeB, h) : 0.;
@@ -190,14 +188,27 @@ float map(vec3 p) {
   // the weight varies in space: divide by the blend's Lipschitz bound so the march never overshoots
   return mix(dA, dB, w) / (1. + abs(dB - dA) * 3.6 * w * (1. - w) / K);
 }
+
+float map(vec3 p) {
+  vec3 h = toHead(p);
+  // both heads fit in the common box
+  float b = sdBox(h - vec3(0., .025, 0.), vec3(.84, 1., .92));
+  if (b > .2) return b;
+  return max(morphD(h), CUT - h.y);
+}
 ${MARCH}
 
+/**
+ * The studio the obsidian reflects: a big softbox overhead, two tall strips on the sides, a lighter backdrop,
+ * a warm bounce from the floor. These shapes, stretched along the curves, are what draws the black glass.
+ */
 vec3 env(vec3 r) {
-  vec3 c = mix(uBase * .6, uInk * .8, smoothstep(-.2, .9, r.y));
+  vec3 c = mix(uBase * .5, uBase * 1.5 + uInk * .1, smoothstep(-.3, .8, r.y));
+  c += uInk * 1.7 * smoothstep(.55, .8, r.y);
   float az = atan(r.z, r.x);
-  // two softboxes: the long reflections that make the obsidian read
-  c += uInk * 1.4 * exp(-pow((az - 2.2) * 2.5, 2.)) * smoothstep(-.1, .5, r.y);
-  c += uInk * .6 * exp(-pow((az + .6) * 3., 2.)) * smoothstep(.1, .7, r.y);
+  float strips = exp(-pow((az - 2.3) * 7., 2.)) + exp(-pow((az - .7) * 7., 2.)) + .6 * exp(-pow((az + 1.9) * 6., 2.));
+  c += uInk * 2.3 * strips * smoothstep(-.45, .1, r.y) * (1. - smoothstep(.55, .85, r.y));
+  c += uAccent * .14 * (1. - smoothstep(-.6, -.1, r.y));
   return c;
 }
 
@@ -210,8 +221,9 @@ void main() {
   vec3 ro = uCamPos;
   vec3 rd = lookAt(ro, uCamTarget) * normalize(vec3(uv, uFocal));
   // museum dark, a soft spot behind the bust
-  vec3 col = uBase * .9 + uInk * .07 * exp(-2.2 * length(uv - vec2(0., .12)));
   vec3 gold = mix(vec3(1., .74, .32), uAccent, .3);
+  // museum dark, a warm halo behind the bust so it stands out of the background
+  vec3 col = uBase * .9 + uInk * .06 * exp(-2.2 * length(uv - vec2(0., .12))) + mix(gold, uAccent, .4) * .1 * exp(-2.4 * length(uv - vec2(0., .1)));
   float kick = exp(-uWave * 5.);
   float tt = march(ro, rd, 12.);
   if (tt > 0.) {
@@ -226,20 +238,32 @@ void main() {
     float fre = pow(1. - clamp(dot(n, -rd), 0., 1.), 4.);
     vec3 refl = reflect(rd, n);
     if (uMatter < .5) {
-      // Marble: warm white with soft veining
+      // Marble: a warm key light and cool shadows, a stone whose tint drifts slightly, veins of colour,
+      // a warm glow through the thin parts (ears, mane, horns) and a coloured rim
+      vec3 warm = vec3(1., .88, .72), cool = vec3(.52, .62, .85);
       float v = fbm3(h * 2.2 + uSeed);
       float s = abs(sin(h.x * 3. + h.y * 2. + v * 7.));
       float vein = 1. - smoothstep(0., .1 + fwidth(s), s);
-      vec3 base = uInk * vec3(1., .97, .92) * (1. - .22 * vein);
-      col = base * (.12 + .8 * dif) * ao;
-      col += base * .22 * clamp(dot(n, -rd), 0., 1.) * ao;
-      col += uInk * rim * .35 * (.6 + .8 * kick);
-      col += pow(clamp(dot(refl, L), 0., 1.), 24.) * .25;
+      vec3 tint = uInk * mix(vec3(1., .96, .9), vec3(.95, .93, 1.), vnoise(h * 1.3 + 3.));
+      vec3 base = mix(tint, mix(gold, uAccent, .4) * .85, vein * .5);
+      col = base * (warm * dif * .95 + cool * (.14 + .22 * (1. - dif)) * (.6 + .4 * n.y)) * ao;
+      col += base * .14 * clamp(dot(n, -rd), 0., 1.) * ao;
+      // translucency: where the stone is thin, the light from behind glows through
+      // (only where the light comes from behind: a lit face does not glow from within)
+      float thin = 1. - smoothstep(.02, .12, -map(p - n * .14));
+      col += mix(warm, uAccent, .35) * thin * .3 * clamp(dot(-n, L) + .2, 0., 1.);
+      col += mix(uAccent, gold, .5) * rim * .5 * (.6 + .8 * kick);
+      col += warm * pow(clamp(dot(refl, L), 0., 1.), 24.) * .3;
     } else {
-      // Obsidian: black glass, everything is in the reflections
-      col = uBase * .2 * dif * ao + env(refl) * (.06 + .9 * fre) * ao;
-      col += pow(clamp(dot(refl, L), 0., 1.), 90.) * 1.2 * uInk;
-      col += gold * rim * .25 * (.5 + 1.2 * kick);
+      // Obsidian: black glass drawn by the studio's reflections, a coloured backlight around its outline,
+      // and veins of gold inside that light up on the kick
+      col = uBase * .15 * dif * ao + env(refl) * (.14 + .86 * fre) * ao;
+      col += pow(clamp(dot(refl, L), 0., 1.), 90.) * 1.6 * uInk;
+      float edge = pow(1. - clamp(dot(n, -rd), 0., 1.), 3.);
+      col += mix(gold, uAccent, .4) * edge * (.35 + .65 * rim) * (.9 + 1.2 * kick);
+      float gv = abs(vnoise(h * 6. + uSeed * 2.) - .5);
+      float gvein = 1. - smoothstep(0., .012 + fwidth(gv) * 1.5, gv);
+      col += gold * gvein * (.15 + 1.1 * kick) * ao;
     }
     // Extinction: above the front, the head that is disappearing turns to grey stone and cracks
     if (uDying > .01 && uMorph > 0.) {
@@ -263,6 +287,8 @@ void main() {
     }
     // between transformations the hats glint on the highlights
     col += gold * step(.985, hash13(floor(h * 60.) + floor(uTime * 10.))) * uHat * pow(dif, 4.) * .8;
+    // a museum spotlight from above: the light dies out down the neck, the cut melts into the dark
+    col *= smoothstep(CUT, -.42, h.y);
   }
 
   // The drop: sparks flying off the front
