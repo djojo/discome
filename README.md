@@ -35,7 +35,7 @@ npm run dev   # http://localhost:3000
   - Le monde Classique garde ces scènes en plein écran, avec leurs couleurs d'origine.
 - **Palettes** : 2 à 4 couleurs par palette, avec des rôles fixes (fond, encre, accent) au lieu d'arcs-en-ciel. Les scènes s'en servent pour se recolorer selon le monde.
 - **Réalisateur** (Manuel / Chill / Club / Rave) : fondu au breakdown, tension pendant la montée, impact et rafale de coupes au drop, variation des réglages à chaque coupe.
-- **Transitions** : cut, fondu, punch, glitch, volet lumineux, iris, flash blanc, passage au noir.
+- **Transitions** : cut, fondu, punch, glitch, volet lumineux, iris, flash blanc, passage au noir, plongée dans la fissure (on entre dans une fente de lumière et on ressort dans la scène suivante).
 - **Calque** : une 2e scène superposée, avec mode de fusion, opacité et option « pulse au beat ». Un monde peut poser son propre calque (Arcanes pose le Grimoire), retiré en quittant le monde.
 - **Post-FX** : aberration chromatique, traînées, flou de vitesse, pixel (tramage), scanlines, CRT, VHS, grain, étalonnage, miroir, postérisation, strobo (option « Limiter les flashs »).
 
@@ -45,16 +45,16 @@ npm run dev   # http://localhost:3000
 
 | Scène | Ce qu'on voit | Au drop |
 | --- | --- | --- |
-| Porcelaine | Visage de céramique immobile, fissures d'or kintsugi qui se propagent sur plusieurs minutes, format 2.39 | La tête s'ouvre en coquille sur une agate, une géode et un cœur fractal ; elle se referme au breakdown |
+| Porcelaine | Visage de céramique immobile, fissures d'or kintsugi qui se propagent sur plusieurs minutes, format 2.39 | La tête s'ouvre en coquille ou se brise en éclats flottants (en alternance) sur une agate, une géode et un cœur fractal ; elle se referme au breakdown |
 | Topographie | Le visage dessiné uniquement par des lignes de niveau | Les lignes basculent en profondeur |
 | Profil | Seul le contour du profil, éclairé à contre-jour | Un contour d'accent s'allume |
 | Trame | Visage en demi-teinte de sérigraphie | Inversion |
 | Mercure | Masque chromé immobile dans un bain de métal liquide ; chaque kick lance un anneau | Une lame de lumière balaie le chrome |
-| Cathédrale | Nef d'arches lumineuses, sol miroir, brume ; la forme des arches change à chaque phrase | Vitesse lumière : les arches s'étirent en traînées |
+| Cathédrale | Nef d'arches lumineuses, sol miroir, brume ; la forme des arches change à chaque phrase. Une silhouette encapuchonnée au bout de la nef ne s'approche que pendant les montées | Vitesse lumière : les arches s'étirent en traînées, la silhouette disparaît |
 | Monolithe | Avenue brutaliste en béton banché, soleil rasant, poussière, monolithe à l'horizon | Décollage au-dessus des toits, le soleil change de côté |
 | Gorge | Vol dans une gorge étroite aux parois ondulées, strates colorées, rais de lumière | On sort de la fente, les couleurs des strates basculent |
 | Mesas | Vol au ras d'une rivière miroir entre des falaises en gradins, soleil en anneau | On monte au-dessus des mesas |
-| L'Architecte | Mage à tête de pyramide, robe de lignes et d'étoiles, cristal rouge, lac d'anneaux arc-en-ciel | La pyramide devient un prisme : rayon blanc entrant, arc-en-ciel sortant |
+| L'Architecte | Mage à tête de pyramide, robe de lignes et d'étoiles, cristal rouge, lac d'anneaux arc-en-ciel | La pyramide devient un prisme (rayon blanc entrant, arc-en-ciel sortant) et la robe s'ouvre sur le cosmos |
 | Le Nomade | Chapeau conique, orbe dans la main, désert martien, longue ombre, contour néon | L'orbe éclate et embrase le désert, le soleil tourne |
 | Les Trois | Moines rouge, bleu et or traversés par un rayon prismatique (une bande de couleur = une bande de fréquences) | Le rayon s'élargit, les robes s'embrasent |
 | Le Portail | Lac d'anneaux arc-en-ciel, colonne de lumière, minuscule silhouette | Le portail s'ouvre en vortex |
