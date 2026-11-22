@@ -50,6 +50,7 @@ float gLift;   // 0..1 raises the held object
 vec3 gHand;    // held object position (set by setupFigure)
 vec3 gCloth;   // explicit robe colour (several figures), used when gHasCloth = 1
 float gHasCloth;
+float gCloak;  // 0..1: the front of the robe opens onto the cosmos
 
 void setupFigure(float head, float pose, float lift) {
   gHead = head;
@@ -58,6 +59,7 @@ void setupFigure(float head, float pose, float lift) {
   gHand = vec3(.6, .16 + .42 * lift, .64);
   gHasCloth = 0.;
   gCloth = vec3(0.);
+  gCloak = 0.;
 }
 
 /** Give the robe its own colour (vivid cloth, lighter lines), e.g. red / blue / gold monks. */
@@ -87,6 +89,12 @@ float sdConeY(vec3 p, float r, float y0, float y1) {
   return max(dot(q - vec2(0., y1), n), y0 - q.y);
 }
 
+/** The opening down the front of the robe (negative inside): wider toward the hem. */
+float cloakCut(vec3 p) {
+  float hw = gCloak * (.03 + .3 * clamp((.35 - p.y) / 1.9, 0., 1.));
+  return max(max(abs(p.x) - hw, .02 - p.z), p.y - .35);
+}
+
 float sdRobe(vec3 p) {
   float top = .55;
   float h = clamp((top - p.y) / (top - FEET), 0., 1.);
@@ -95,6 +103,7 @@ float sdRobe(vec3 p) {
   float r = mix(.3, .8, pow(h, .85)) + h * (.04 * sin(a * 9. + p.y * .7) + .02 * sin(a * 15. - p.y * 1.3));
   float d = max(length(p.xz * vec2(1., 1.3)) - r, max(p.y - top, FEET - p.y));
   d = smin(d, sdEllipsoid(p - vec3(0., .48, 0.), vec3(.46, .2, .3)), .16);
+  if (gCloak > .001) d = max(d, -cloakCut(p) / .8);
   return d * .8;
 }
 
@@ -149,10 +158,10 @@ float figMap(vec3 p) {
   return min(d, sdHeadwear(p));
 }
 
-/** Material id at a hit: 0 cloth, 1 face void, 2 pyramid, 3 hat, 4 hand. */
+/** Material id at a hit: 0 cloth, 1 face void, 2 pyramid, 3 hat, 4 hand, 5 the cosmos inside the robe. */
 float figPart(vec3 p) {
   float best = smin(sdRobe(p), sdArms(p), .06);
-  float id = 0.;
+  float id = gCloak > .001 && abs(cloakCut(p)) < .008 ? 5. : 0.;
   float h = sdHands(p);
   if (h < best) { best = h; id = 4.; }
   float v = sdFaceVoid(p);
@@ -261,10 +270,17 @@ vec3 shadeFigure(vec3 p, vec3 rd, float tint) {
   else if (part < 1.5) c = uBase * .2;
   else if (part < 2.5) c = pyramidColor(p, n);
   else if (part < 3.5) c = hatColor(p) * dif;
-  else c = vec3(.02);
+  else if (part < 4.5) c = vec3(.02);
+  else {
+    // The cosmos inside the robe: drawn from the view ray, not the surface, so it looks infinitely deep
+    c = uBase * .3 + starfield(rd, .5) * 1.6 * (1. + .8 * uBeat);
+    c += pal(vnoise(rd * 3. + uTime * .02) + uShift) * .9 * pow(vnoise(rd * 5. + 1.), 2.);
+    c += spectral(fract(dot(rd, vec3(.3, .8, .5)) * 2. + uTime * .05)) * .18;
+  }
   // Neon outline
   float rim = pow(1. - abs(dot(n, -rd)), 2.5);
-  c += mix(vec3(.25, .85, 1.), vec3(1., .88, .3), rim * rim) * rim * uNeon * (part > 3.5 ? 1.8 : .9);
+  // (not inside the robe's opening: the cosmos stays deep and dark)
+  if (part < 4.5) c += mix(vec3(.25, .85, 1.), vec3(1., .88, .3), rim * rim) * rim * uNeon * (part > 3.5 ? 1.8 : .9);
   return c;
 }
 

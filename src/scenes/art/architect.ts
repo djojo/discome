@@ -24,7 +24,7 @@ export const arcaneArchitect = defineShaderScene({
   mask: true,
   camera: { framings: FRAMINGS, glideBars: 2 },
   description:
-    "Mage à tête de pyramide, robe de lignes et d'étoiles, au-dessus d'un lac d'anneaux arc-en-ciel ; au drop, la pyramide devient un prisme.",
+    "Mage à tête de pyramide au-dessus d'un lac d'anneaux arc-en-ciel ; au drop, la pyramide devient un prisme et sa robe s'ouvre sur le cosmos.",
   params: [paletteParam("cosmos"), ...arcaneParams()],
   uniforms: () => ({
     ...arcaneUniforms(),
@@ -32,6 +32,7 @@ export const arcaneArchitect = defineShaderScene({
     uRingTarget: { value: 0 },
     uBeam: { value: 0 },
     uLift: { value: 0.2 },
+    uCloak: { value: 0 },
   }),
   update(u, f, p, dt) {
     updateArcane(u, f, p, dt);
@@ -45,6 +46,10 @@ export const arcaneArchitect = defineShaderScene({
     if (f.drop) u.uBeam.value = 1.3;
     const b = u.uBeam.value as number;
     u.uBeam.value = b + (target - b) * (1 - Math.exp(-dt / (b > target ? bar * 1.6 : 0.3)));
+    // The robe opens onto the cosmos on the drop (over a couple of bars) and closes through the breakdown
+    const cloak = f.section === "drop" || f.drop ? 1 : f.section === "build" ? 0.12 * f.buildProgress : 0;
+    const c = u.uCloak.value as number;
+    u.uCloak.value = c + (cloak - c) * (1 - Math.exp(-dt / (cloak > c ? bar * 0.6 : bar * 1.4)));
     // The crystal rises through the build
     const lift = f.section === "build" ? 0.2 + 0.8 * f.buildProgress : f.section === "drop" ? 0.75 : 0.2;
     const l = u.uLift.value as number;
@@ -54,6 +59,7 @@ export const arcaneArchitect = defineShaderScene({
 uniform float uRing;
 uniform float uBeam;
 uniform float uLift;
+uniform float uCloak;
 ${ART_LIB}
 ${ARCANE_GLSL}
 ${CAMERA_GLSL}
@@ -124,6 +130,7 @@ void main() {
   vec2 fc = gl_FragCoord.xy;
   vec2 uv = (fc - .5 * uRes) / uRes.y;
   setupFigure(1., 1., uLift);
+  gCloak = uCloak;
   gCrystal = gHand + vec3(0., .3, 0.);
 
   vec3 ro = uCamPos;
