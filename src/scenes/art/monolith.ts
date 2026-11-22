@@ -45,11 +45,15 @@ export const monolith = defineShaderScene({
     uRise: { value: 1 },
     uDust: { value: 1 },
     uMonument: { value: 0 },
+    uSlabScreen: { value: 0 },
     uCinema: { value: 0 },
     ...headUniforms(),
   }),
   update(u, f, p, dt) {
     if (f.drop) u.uSunTarget.value = (u.uSunTarget.value as number) + 2.1;
+    // On the drop the monolith lights up like a giant screen, then goes dark again over a few bars
+    const barS = f.bpm > 0 ? (60 / f.bpm) * 4 : 2;
+    u.uSlabScreen.value = f.drop ? 1 : (u.uSlabScreen.value as number) * Math.exp(-dt / (barS * 2.5));
     const az = u.uSunAz.value as number;
     u.uSunAz.value = az + ((u.uSunTarget.value as number) - az) * (1 - Math.exp(-dt * 1.5));
     u.uSunEl.value = num(p.sun, 0.2);
@@ -70,6 +74,7 @@ uniform float uBarPos;
 uniform float uRise;
 uniform float uDust;
 uniform float uCinema;
+uniform float uSlabScreen;
 uniform float uMonument;  // 0: the black slab, 1: a colossal head
 ${ART_LIB}
 ${HEAD_GLSL}
@@ -159,6 +164,51 @@ float lotAndWalks(vec2 c, vec3 p) {
   return d;
 }
 
+/** What the last map() hit: 0 building, 1 a surveillance camera, 2 its red light. */
+float gMatM = 0.;
+
+/** One surveillance camera on its pole at the edge of the avenue, turned toward us. */
+float camOne(vec3 p, float cz, float side, out float mat) {
+  mat = 1.;
+  // more and more of them as the night drifts
+  if (hash12(vec2(cz * 1.7, side * 3.1 + 7.7)) > .15 + .7 * uDrift) return 1e3;
+  vec3 base = vec3(side * 2.45, 0., (cz + .5) * CS);
+  vec3 q = p - base;
+  float pole = length(vec2(q.x, q.z)) - .045;
+  // well below the head, the pole is all there is (the head is at least this far)
+  if (q.y < 2.6) return min(pole, 2.75 - q.y);
+  vec3 head = vec3(-side * .3, 3.15, 0.);
+  float d = min(sdCapsule(q, vec3(0.), vec3(0., 3.1, 0.), .045), sdCapsule(q, vec3(0., 3.05, 0.), head, .03));
+  vec3 to = gRo - (base + head);
+  vec3 hq = q - head;
+  hq.xz *= rot(atan(to.x, to.z));
+  hq.yz *= rot(atan(to.y, length(to.xz)));
+  // a box camera with its hood and lens, big enough to read as a camera, not a street lamp
+  d = min(d, min(sdRBox(hq, vec3(.12, .1, .26), .02), sdCapsule(hq, vec3(0., 0., .16), vec3(0., 0., .32), .065)));
+  d = min(d, sdBox(hq - vec3(0., .12, .06), vec3(.14, .015, .3)));
+  float led = length(hq - vec3(.07, .1, .22)) - .02;
+  if (led < d) { mat = 2.; d = led; }
+  return d;
+}
+
+/** The cameras along both edges of the avenue (this cell and the nearest neighbour along it). */
+float camsD(vec3 p, out float mat) {
+  mat = 0.;
+  float ex = abs(abs(p.x) - 2.45);
+  if (ex > .7 || p.y > 3.7) return max(ex - .55, p.y - 3.5);
+  float side = p.x > 0. ? 1. : -1.;
+  float cz = floor(p.z / CS);
+  float fr = fract(p.z / CS);
+  float m1, m2;
+  float d1 = camOne(p, cz, side, m1);
+  // the neighbouring camera only matters near the edge of the cell (it reaches .7 into ours at most)
+  float edge = (.5 - abs(fr - .5)) * CS;
+  if (edge > .75) { mat = m1; return min(d1, edge - .7); }
+  float d2 = camOne(p, cz + (fr < .5 ? -1. : 1.), side, m2);
+  mat = d1 < d2 ? m1 : m2;
+  return min(d1, d2);
+}
+
 /** Buildings only: the ground is intersected analytically (grazing rays would crawl along it). */
 float map(vec3 p) {
   vec2 g = p.xz / CS;
@@ -168,7 +218,14 @@ float map(vec3 p) {
   // The 4 nearest lots; anything further is at least the distance to the far edges of this cell
   float d = min(min(lotAndWalks(c, p), lotAndWalks(c + vec2(o.x, 0.), p)), min(lotAndWalks(c + vec2(0., o.y), p), lotAndWalks(c + o, p)));
   vec2 far = (.5 + abs(f - .5)) * CS;
-  return min(d, min(far.x, far.y));
+  d = min(d, min(far.x, far.y));
+  gMatM = 0.;
+  if (!gCheap) {
+    float cm;
+    float dc = camsD(p, cm);
+    if (dc < d) { d = dc; gMatM = cm; }
+  }
+  return d;
 }
 
 float marchB(vec3 ro, vec3 rd, float tmax) {
@@ -290,8 +347,11 @@ void main() {
   // travelled: the faster we go, the faster we weave. The camera looks into its turns.
   float weave = sin(uTravel * .11), swell = sin(uTravel * .07 + 1.3);
   float alt = .55 + .22 * swell + (uDive > 0. ? uDive * uDive * 4.2 : uDive * .38);
+  // Over the night the water rises in the avenue: the towers stand in it, the camera flies above it
+  float W = .32 * smoothstep(.2, 1., uDrift) - .02;
+  float level = max(W, 0.);
   // (the avenue is 5.2 wide: stay clear of the facades)
-  vec3 ro = vec3(clamp(uSway * 1.6 + .5 * weave, -1.9, 1.9), max(alt, .2), -uTravel);
+  vec3 ro = vec3(clamp(uSway * 1.6 + .5 * weave, -1.9, 1.9), max(alt, .2) + level, -uTravel);
   gRo = ro;
   float pitch = mix(.55, -2.4, smoothstep(.5, 1.5, uDive)) + .35 * smoothstep(0., 1., -uDive) + .12 * swell;
   vec3 ta = ro + vec3(.25 * sin(uTime * .1) + uSway * .7 + .45 * cos(uTravel * .11), pitch, -4.);
@@ -304,7 +364,7 @@ void main() {
   sky += uAccent * (pow(sd, 24.) * .55 + smoothstep(.9994, .9998, sd) * 1.6);
 
   // Ground plane intersected analytically; the march only looks for buildings in front of it
-  float tg = rd.y < -.0001 ? -ro.y / rd.y : 1e5;
+  float tg = rd.y < -.0001 ? (ro.y - level) / -rd.y : 1e5;
   float t = marchB(ro, rd, min(tg, 46.));
   bool ground = false;
   if (t < 0. && tg < 46.) { t = tg; ground = true; }
@@ -336,13 +396,45 @@ void main() {
       // Near black, with a thin sunlit edge on the side facing the sun
       vec3 q = ro + rd * tm;
       float rim = smoothstep(2.25, 2.4, q.x * sign(gSun.x)) * (.4 + 1.2 * uDrop);
-      col = mix(uBase * .1 + uAccent * rim, fogColor(rd), .32);
+      vec3 slab = uBase * .1 + uAccent * rim;
+      // ...until the drop lights it up like a giant screen
+      if (uSlabScreen > .01) {
+        vec2 su = vec2((q.x + 2.4) / 4.8, q.y / 24.);
+        vec3 scr = mix(pal(fract(su.y * .5 + su.x * .2 + uTime * .04)), uInk, .35);
+        scr *= .75 + .25 * smoothstep(-.3, .3, sin(su.y * 75.));
+        scr += uInk * .5 * exp(-pow((su.y - fract(uTime * .25)) * 9., 2.));
+        slab = mix(slab, scr * 1.5, uSlabScreen);
+      }
+      col = mix(slab, fogColor(rd), .32);
     }
     t = -1.;
     solid = 1.;
   }
-  if (t > 0.) {
+  if (t > 0. && ground && W > 0.) {
+    // The water: the city reflected, rippling, rings spreading on the kick
     vec3 p = ro + rd * t;
+    vec2 rel = p.xz - ro.xz;
+    vec3 wn = vec3(.015 * sin(p.x * 3.1 + uTime * 1.3) + .01 * sin(p.z * 5.3 - uTime * .9), 1., .015 * sin(p.z * 2.3 - uTime));
+    wn.xz += .05 * uBeat * sin(length(rel) * 5. - uTime * 7.) * normalize(rel + 1e-4);
+    wn = normalize(wn);
+    vec3 rr = reflect(rd, wn);
+    gCheap = true;
+    float tr = marchB(p + vec3(0., .01, 0.), rr, 30.);
+    gCheap = false;
+    vec3 refl = mix(uInk * .9, uBase * 1.6, clamp(rr.y * 1.6, 0., 1.)) + uAccent * pow(max(dot(rr, gSun), 0.), 24.) * .55;
+    if (tr > 0.) {
+      vec3 q = p + rr * tr;
+      vec3 qn = nrm(q);
+      refl = uInk * .7 * (clamp(dot(qn, gSun), 0., 1.) * uAccent * 2.5 + uBase * 1.2);
+      refl = mix(refl, fogColor(rr), 1. - exp(-(t + tr) * .022));
+    }
+    float fre = .3 + .7 * pow(1. - clamp(dot(wn, -rd), 0., 1.), 4.);
+    col = mix(uBase * .45 + uInk * .03, refl, fre);
+    col = mix(col, fogColor(rd), max(1. - exp(-t * .022), smoothstep(30., 46., t)));
+  } else if (t > 0.) {
+    vec3 p = ro + rd * t;
+    map(p);
+    float mm = ground ? 0. : gMatM;
     vec3 n = ground ? vec3(0., 1., 0.) : nrm(p);
     float sh = shadow(p + n * .01, gSun);
     float dif = clamp(dot(n, gSun), 0., 1.) * sh;
@@ -355,6 +447,9 @@ void main() {
       alb = uInk * .55 * (.9 + .15 * vnoise(p * 1.7));
       vec2 gw = fwidth(p.xz / 1.3);
       alb *= 1. - .25 * fade * max(joint(p.x / 1.3, .012), joint(p.z / 1.3, .012)) * (1. - smoothstep(.006, .015, max(gw.x, gw.y)));
+    } else if (mm > .5) {
+      // a surveillance camera: dark metal
+      alb = vec3(.05, .05, .06);
     } else {
       float H = lotH(hash42(c), hash42(c + 17.31));
       alb = uInk * .85 * (.88 + .2 * hash12(c + 21.));
@@ -382,6 +477,25 @@ void main() {
     // Warm light bounced by the sunlit ground onto the lower facades
     vec3 bounce = uAccent * .45 * clamp(gSun.y * 3., 0., 1.) * (.5 - .5 * n.y) * exp(-p.y * .35);
     col = alb * (dif * sunCol + (skyCol + bounce) * occ);
+    // its red light blinks on the beat
+    if (mm > 1.5) col = vec3(1., .14, .1) * (.4 + 2.6 * uBeat);
+    // Silent advertising screens on the facades facing the avenue (more of them as the night drifts)
+    if (!ground && mm < .5 && -sign(p.x) * n.x > .9) {
+      vec4 hp = hash42(c + 41.7);
+      if (hp.x < .2 + .6 * uDrift) {
+        vec2 lc = (c + .5) * CS;
+        vec2 pc = vec2(p.z - lc.y - (hp.y - .5) * .6, p.y - (1.3 + hp.z * 1.4));
+        vec2 ps = vec2(.62, .4);
+        vec2 dq = abs(pc) - ps;
+        if (max(dq.x, dq.y) < 0.) {
+          vec2 pu = pc / ps * .5 + .5;
+          float tt = uTime * .3 + hp.w * 10.;
+          vec3 ad = mix(pal(fract(hp.w + pu.y * .3 + tt * .1)), pal(fract(hp.w + .5)), smoothstep(.3, .7, pu.x + .2 * sin(tt)));
+          ad += uInk * .8 * (1. - smoothstep(.18, .22, length(pu - vec2(.5 + .25 * sin(tt * 1.3), .5))));
+          col = ad * (1.1 + .4 * uHat) * (1. - .7 * smoothstep(-.03, 0., max(dq.x, dq.y)));
+        }
+      }
+    }
     float fog = max(1. - exp(-t * .022), smoothstep(30., 46., t));
     col = mix(col, fogColor(rd), fog);
   }
