@@ -59,6 +59,9 @@ npm run dev   # http://localhost:3000
 | Profil | Le profil en contre-jour, brume et rais de lumière ; le contour s'allume en vague à chaque kick | Un contour d'accent s'allume |
 | Trame | Trois trames de couleur, chacune éclairée d'un côté, qui tournent lentement | Inversion |
 | Mercure | Masque chromé dans un bain de métal liquide, une courbe de cotations à l'horizon ; le masque s'enfonce à mesure qu'elle monte ; chaque kick lance un anneau | La courbe s'effondre, une lame de lumière balaie le chrome |
+| Billes | Gouttes de mercure en apesanteur qui se frôlent, fusionnent et se séparent, et se reflètent entre elles ; elles gonflent sur les basses | Elles fusionnent en une sphère qui éclate en centaines de billes |
+| Onde | Bain de mercure en ondes stationnaires, comme la cymatique : chaque partie du spectre dessine ses anneaux et ses pétales ; une goutte tombe au kick ; variante Pics (ferrofluide noir dont les pointes suivent les basses) | La figure passe à un motif plus complexe ; les pics jaillissent |
+| Mélange | Sphère de métal liquide où le mercure et l'or (ou le cobalt) se marbrent en volutes ; les coutures s'allument au kick ; l'or gagne au fil de la soirée | Un remous brasse les deux métaux |
 | Entrepôt | Vol dans les allées infinies d'un entrepôt : cartons identiques, tapis roulant, néons au kick ; variante Serveurs | Pluie de colis dans l'allée |
 | Cathédrale | Nef d'arches lumineuses, sol miroir, brume ; la forme des arches change à chaque phrase, et devient de plus en plus souvent un écran. Une silhouette encapuchonnée, éclairée par son téléphone, ne s'approche que pendant les montées | Vitesse lumière : les arches s'étirent en traînées, la silhouette disparaît |
 | Les Fidèles | Une foule tête baissée, chacun éclairé par son écran ; une seule silhouette sans téléphone danse lentement | Les écrans s'éteignent, les têtes se relèvent vers les étoiles |
