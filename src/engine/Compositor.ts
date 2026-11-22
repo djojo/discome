@@ -331,7 +331,11 @@ export class Compositor {
     }
     // 3D scenes get MSAA (rendering offscreen loses the canvas antialiasing); fullscreen shaders don't need it.
     const is3D = def.tag === "3D";
-    const target = new THREE.WebGLRenderTarget(w, h, { samples: is3D ? 4 : 0, depthBuffer: is3D });
+    const k = def.renderScale ?? 1;
+    const target = new THREE.WebGLRenderTarget(Math.max(1, Math.floor(w * k)), Math.max(1, Math.floor(h * k)), {
+      samples: is3D ? 4 : 0,
+      depthBuffer: is3D,
+    });
     const instance = def.create({ renderer: this.renderer, viewport: this.viewport, target });
     return { def, instance, target, lastUsed: 0 };
   }
@@ -343,7 +347,8 @@ export class Compositor {
       s.canvas.height = h;
       s.canvasTexture!.dispose(); // reallocate the GPU texture at the new size
     }
-    s.target?.setSize(w, h);
+    const k = s.def.renderScale ?? 1;
+    s.target?.setSize(Math.max(1, Math.floor(w * k)), Math.max(1, Math.floor(h * k)));
     s.instance.resize?.(this.viewport);
   }
 

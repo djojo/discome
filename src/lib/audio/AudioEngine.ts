@@ -25,6 +25,10 @@ export interface AudioFrame extends MusicState {
   onset: boolean;
   /** 1 right after a beat, decays to 0. Handy for flashes and kicks. */
   beatPulse: number;
+  /** 1 right after a sharp attack (hats, snares), decays fast. */
+  onsetPulse: number;
+  /** 1 at a drop, decays over a few seconds: the big moments of a scene. */
+  dropPulse: number;
   beatCount: number;
   /** Wall-clock seconds since the engine started. */
   time: number;
@@ -93,6 +97,8 @@ export class AudioEngine {
       beat: false,
       onset: false,
       beatPulse: 0,
+      onsetPulse: 0,
+      dropPulse: 0,
       beatCount: 0,
       time: 0,
       energy: 0,
@@ -258,6 +264,8 @@ export class AudioEngine {
     f.beat = false;
     f.onset = false;
     f.beatPulse *= Math.exp(-dt * 5);
+    f.onsetPulse *= Math.exp(-dt * 14);
+    f.dropPulse *= Math.exp(-dt * 0.9);
 
     const analyser = this.analyser;
     if (!analyser || !this.kind) {
@@ -271,6 +279,7 @@ export class AudioEngine {
       f.volume = follow(f.volume, 0, dt);
       f.energy += dt * 0.25;
       this.music.update(f, dt, null);
+      if (f.drop) f.dropPulse = 1;
       return f;
     }
 
@@ -286,6 +295,8 @@ export class AudioEngine {
     }
     // The beat clock runs every frame so ticks land on time even at 120 Hz.
     this.music.update(f, dt, this.levels);
+    if (f.onset) f.onsetPulse = 1;
+    if (f.drop) f.dropPulse = 1;
     return f;
   }
 

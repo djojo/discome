@@ -14,6 +14,9 @@ uniform float uMid;
 uniform float uTreble;
 uniform float uVol;
 uniform float uBeat;
+uniform float uHat;
+uniform float uDrop;
+uniform float uBuild;
 ${PALETTE_GLSL}
 mat2 rot(float a) { float c = cos(a), s = sin(a); return mat2(c, -s, s, c); }
 `;
@@ -25,6 +28,9 @@ interface ShaderSceneOptions {
   name: string;
   description: string;
   energy: Energy;
+  tag?: "Shader" | "Visage";
+  /** Render at a fraction of the screen resolution (heavy ray-marched scenes). */
+  renderScale?: number;
   params: ParamDef[];
   /** Fragment shader body. Has access to the header uniforms above and `pal(t)`. */
   fragment: string;
@@ -38,9 +44,10 @@ export function defineShaderScene(opts: ShaderSceneOptions): SceneGLDef {
     id: opts.id,
     name: opts.name,
     description: opts.description,
-    tag: "Shader",
+    tag: opts.tag ?? "Shader",
     kind: "webgl",
     energy: opts.energy,
+    renderScale: opts.renderScale,
     params: opts.params,
     create({ renderer, target }) {
       const scene = new THREE.Scene();
@@ -55,6 +62,9 @@ export function defineShaderScene(opts: ShaderSceneOptions): SceneGLDef {
         uTreble: { value: 0 },
         uVol: { value: 0 },
         uBeat: { value: 0 },
+        uHat: { value: 0 },
+        uDrop: { value: 0 },
+        uBuild: { value: 0 },
         ...pal,
         ...(opts.uniforms?.() ?? {}),
       };
@@ -78,6 +88,9 @@ export function defineShaderScene(opts: ShaderSceneOptions): SceneGLDef {
           uniforms.uTreble.value = f.treble;
           uniforms.uVol.value = f.volume;
           uniforms.uBeat.value = f.beatPulse;
+          uniforms.uHat.value = f.onsetPulse;
+          uniforms.uDrop.value = f.dropPulse;
+          uniforms.uBuild.value = f.buildProgress;
           applyPalette(pal, params.palette);
           opts.update?.(uniforms, f, params, dt);
           renderer.setRenderTarget(target);

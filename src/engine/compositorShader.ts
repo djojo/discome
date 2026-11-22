@@ -106,9 +106,11 @@ vec3 transition(vec2 uv) {
     return mix(A(uv), B(uv), inside) + ring * (1.0 - p) * 0.8;
   }
 
-  // Flash: A burns to white, white resolves into B
   float w = 1.0 - abs(p * 2.0 - 1.0);
   vec3 base = p < 0.5 ? A(uv) : B(uv);
+  // Dip: A fades to black, B rises out of it (used between worlds)
+  if (uTransition == 7) return base * (1.0 - smoothstep(0.0, 0.85, w));
+  // Flash: A burns to white, white resolves into B
   return mix(base, vec3(1.0), pow(w, 1.4));
 }
 

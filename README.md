@@ -9,42 +9,41 @@ npm run dev   # http://localhost:3000
 
 ## Fonctionnalités
 
-- **Sources** : micro / entrée, son d'un onglet, fichier (glisser-déposer), démo (un vrai morceau de 32 mesures, synthétisé en direct).
-- **Horloge musicale** : BPM, temps, mesures et phrases de 8 mesures, plus un tap tempo.
-- **Sections du morceau** : groove → breakdown → montée → drop, détectées automatiquement.
-- **Réalisateur** (Manuel / Chill / Club / Rave) :
-  - au breakdown, fondu long vers une scène calme ;
-  - pendant la montée, de la tension (zoom pulsé, montée vers le blanc) ;
-  - au drop, une transition d'impact, puis une rafale de coupes calées sur les temps ;
-  - à chaque coupe, la palette et les réglages varient.
-- **Transitions** : cut, fondu, punch, glitch, volet lumineux, iris, flash blanc.
-- **Calque** : une 2e scène superposée, avec un mode de fusion, une opacité et une option « pulse au beat ».
-- **Esthétiques** : Libre, Synthwave 84, Acid Rave, Techno Noir, Chrome Future, Cosmos, VHS Glitch. Tu peux aussi enregistrer tes propres looks.
-- **Post-FX globaux** :
-  - aberration chromatique, traînées, scanlines, CRT, VHS, grain ;
-  - étalonnage, miroir / kaléidoscope, postérisation ;
-  - strobo au drop, avec l'option « Limiter les flashs » pour la photosensibilité.
+- **Sources** : micro / entrée, son d'un onglet, fichier (glisser-déposer), démo (un morceau de 32 mesures synthétisé en direct).
+- **Horloge musicale** : BPM, temps, mesures et phrases de 8 mesures, avec tap tempo. Les sections (groove → breakdown → montée → drop) sont détectées automatiquement.
+- **Mondes** : Porcelaine, Signal, Mercure, Cathédrale, Monolithe, Chair, et Classique (les premières scènes).
+  - Un monde est une direction artistique complète : une sélection de plans (une scène du catalogue et ses réglages pour ce monde), des palettes, des post-effets, des transitions et un rythme de réalisation.
+  - Une même scène est réutilisée d'un monde à l'autre avec d'autres réglages : Cathédrale en rouge ou en blanc, Profil en ivoire ou en argent…
+  - **Enchaîner les mondes** : ils se succèdent, au breakdown (et au moins toutes les 8 phrases) ou toutes les 4 ou 8 phrases. Le passage se fait par le noir, et les effets glissent vers ceux du nouveau monde.
+- **Palettes** : 2 à 4 couleurs par palette, avec des rôles fixes (fond, encre, accent) au lieu d'arcs-en-ciel. Les scènes s'en servent pour se recolorer selon le monde.
+- **Réalisateur** (Manuel / Chill / Club / Rave) : fondu au breakdown, tension pendant la montée, impact et rafale de coupes au drop, variation des réglages à chaque coupe.
+- **Transitions** : cut, fondu, punch, glitch, volet lumineux, iris, flash blanc, passage au noir.
+- **Calque** : une 2e scène superposée, avec mode de fusion, opacité et option « pulse au beat ».
+- **Post-FX** : aberration chromatique, traînées, scanlines, CRT, VHS, grain, étalonnage, miroir, postérisation, strobo (option « Limiter les flashs »).
 
 ## Scènes
 
-| # | Scène | Type | Énergie |
-| --- | --- | --- | --- |
-| 1 | Halo : spectre radial en mandala | 2D | medium |
-| 2 | Kaléidoscope : fractale repliée | Shader | intense |
-| 3 | Orbe : sphère de bruit, anneaux spectraux | 3D | medium |
-| 4 | Tunnel : grille néon infinie | Shader | intense |
-| 5 | Nébuleuse : particules en spirale | 2D | calm |
-| 6 | Spectro-terrain : paysage synthwave | 3D | calm |
-| 7 | Échos : oscilloscope en feedback | 2D | medium |
-| 8 | Danseuse : hologramme / chrome / peau psychédélique, clones échos, solo / duo / cercle | 3D | medium |
-| 9 | Androïde : casque chrome, visière LED (spectre, onde, texte) | 3D | medium |
-| 0 | Corps de particules : la danseuse en nuage de points, explose au drop | 3D | intense |
+**Direction artistique** (`src/scenes/art/`, shaders en raymarching) :
+
+| Scène | Ce qu'on voit | Au drop |
+| --- | --- | --- |
+| Porcelaine | Visage de céramique fendu par une lumière intérieure, format 2.39 | Le masque s'ouvre |
+| Topographie | Le visage dessiné uniquement par des lignes de niveau | Les lignes basculent en profondeur |
+| Profil | Seul le contour du profil, éclairé à contre-jour | Un contour d'accent s'allume |
+| Trame | Visage en demi-teinte de sérigraphie | Inversion |
+| Mercure | Masque chromé qui émerge d'un bain de métal liquide | Le bain se soulève |
+| Cathédrale | Nef d'arches lumineuses, sol miroir, brume | Toute la nef s'allume |
+| Monolithe | Tours de béton brutalistes, soleil rasant | Le soleil change de côté |
+| Chair | Matière organique translucide et nacrée | Contraction |
+| Signal | Données en deux couleurs : codes-barres, balayage, onde | Inversion |
+
+**Classiques**, recolorées par les palettes des mondes : Halo, Kaléidoscope, Orbe, Tunnel, Nébuleuse, Spectro-terrain, Échos, Danseuse, Androïde, Corps de particules.
 
 ## Raccourcis
 
 | Touche | Action |
 | --- | --- |
-| `←` `→`, `1`–`9`, `0` | Changer de scène |
+| `←` `→`, `1`–`9` | Changer de plan dans le monde courant |
 | `Espace` | Drop manuel (impact + rafale, recale la mesure) |
 | `T` | Tap tempo |
 | `L` | Verrouiller la scène |
@@ -65,10 +64,11 @@ src/
     compositorShader.ts  Passe finale GLSL
     Director.ts          Réalisateur automatique
     transitions.ts, fx.ts
-  looks/index.ts         Esthétiques (scènes pondérées, palettes, effets, rythme)
+  looks/index.ts         Mondes (plans = scène + réglages, palettes, effets, rythme)
   scenes/
     types.ts             Contrat d'une scène + paramètres déclaratifs
-    2d/  shader/  3d/    Scènes ; 3d/humanoid/ : danseuse, androïde, particules
+    art/                 Scènes de direction artistique (visages, Mercure, Cathédrale…)
+    2d/  shader/  3d/    Scènes classiques ; 3d/humanoid/ : danseuse, androïde, particules
   components/            Visualizer (boucle, sources, HUD), ControlPanel, settings
 public/models/           Michelle.glb (personnage Mixamo des exemples three.js)
 ```

@@ -488,7 +488,21 @@ button:disabled {
   margin-bottom: 10px;
 }
 
-.fx-head .hint {
+.fx-head .catalogue {
+  margin-top: 12px;
+}
+
+.catalogue summary {
+  cursor: pointer;
+  margin-bottom: 10px;
+  list-style: none;
+}
+
+.catalogue summary::-webkit-details-marker {
+  display: none;
+}
+
+.hint {
   margin: 0;
 }
 
@@ -611,6 +625,11 @@ button:disabled {
 .tag-shader {
   background: rgba(255, 60, 172, 0.2);
   color: #fbcfe8;
+}
+
+.tag-visage {
+  background: rgba(236, 231, 223, 0.16);
+  color: #f3efe8;
 }
 
 .tag-2d {

@@ -33,8 +33,10 @@ interface SceneMeta {
   name: string;
   description: string;
   /** Badge shown in the library. */
-  tag: "2D" | "Shader" | "3D";
+  tag: "2D" | "Shader" | "3D" | "Visage";
   energy: Energy;
+  /** Render offscreen at this fraction of the screen resolution (heavy shaders). Default 1. */
+  renderScale?: number;
   params: ParamDef[];
 }
 

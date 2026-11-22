@@ -88,6 +88,8 @@ export interface DirectorContext {
   /** Look-specific transition sets. */
   transitions?: { calm?: TransitionId[]; drop?: TransitionId[] };
   params: Record<string, ParamValues>;
+  /** Worlds take turns: at breakdowns, or every N phrases. */
+  worldCycle?: { enabled: boolean; rule: "breakdown" | "phrases4" | "phrases8" };
 }
 
 export interface Decision {
@@ -97,6 +99,8 @@ export interface Decision {
   params?: ParamValues;
   /** Scene to build ahead of time. */
   preload?: string;
+  /** Time to move on to the next world. */
+  changeWorld?: boolean;
 }
 
 const pickOne = <T>(xs: readonly T[]): T => xs[Math.floor(Math.random() * xs.length)];
@@ -120,6 +124,16 @@ export class Director {
   private plannedNext: string | null = null;
   private lastCutTime = 0;
   private now = 0;
+  private phrasesInWorld = 0;
+
+  /** The show just entered a new world. */
+  noteWorldChange(id: string) {
+    this.phrasesInWorld = 0;
+    this.burstUntil = -1;
+    this.plannedNext = null;
+    this.plannedDrop = null;
+    this.noteManualCut(id);
+  }
 
   /** A scene change that didn't come from the director (click, keyboard). */
   noteManualCut(id: string) {
@@ -155,10 +169,16 @@ export class Director {
       return this.cut(ctx, id, { type, duration: (SNAP_BEATS[type] ?? 1) * beat });
     }
     if (!auto) return null;
+    if (f.downbeat && f.phraseBar === 0) this.phrasesInWorld++;
+    const cycle = ctx.worldCycle?.enabled ? ctx.worldCycle.rule : null;
 
     // ---- Section changes
     if (f.section !== this.lastSection) {
       this.lastSection = f.section;
+      // A breakdown is the natural moment to change worlds (not too often though)
+      if (f.section === "breakdown" && cycle === "breakdown" && this.phrasesInWorld >= 2) {
+        return { changeWorld: true };
+      }
       if (f.section === "breakdown") {
         this.burstUntil = -1;
         return this.cut(ctx, this.pick(ctx, ["calm"]), { type: "fade", duration: pacing.breakdownBeats * beat });
@@ -184,6 +204,12 @@ export class Director {
     }
 
     if (f.section === "build") return null; // hold the shot, let the tension do the work
+
+    // ---- World rotation on phrase boundaries
+    if (cycle && f.downbeat && f.phraseBar === 0) {
+      const every = cycle === "phrases4" ? 4 : 8; // "breakdown" also changes after 8 phrases without one
+      if (this.phrasesInWorld >= every) return { changeWorld: true };
+    }
 
     // ---- Regular cuts, on half-phrase boundaries
     if (f.bpm > 0) {

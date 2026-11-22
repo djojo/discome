@@ -6,7 +6,8 @@ import { ParamControl } from "./ParamControl";
 import { BLEND_MODES, TRANSITIONS, type BlendModeId, type TransitionId } from "@/engine/transitions";
 import { DIRECTOR_MODES } from "@/engine/Director";
 import { FX_SLIDERS, MIRROR_OPTIONS, STROBE_OPTIONS, type FxSettings, type StrobeMode } from "@/engine/fx";
-import { allLooks, type Quality, type Settings } from "./settings";
+import { allLooks, findLook, WORLD_RULES, type Quality, type Settings, type WorldRule } from "./settings";
+import { lookScenes } from "@/looks";
 
 export const SOURCE_LABELS: Record<SourceKind, string> = {
   mic: "Micro / entrée",
@@ -35,6 +36,29 @@ interface Props {
   onResetFx: () => void;
 }
 
+function SceneButton({
+  s,
+  active,
+  hotkey,
+  onScene,
+}: {
+  s: SceneDef;
+  active: boolean;
+  hotkey?: number;
+  onScene: (id: string) => void;
+}) {
+  return (
+    <button
+      className={`scene-card ${active ? "scene-card-active" : ""}`}
+      onClick={() => onScene(s.id)}
+      title={hotkey ? `${s.description} (touche ${hotkey})` : s.description}
+    >
+      <span className="scene-name">{s.name}</span>
+      <span className={`tag tag-${s.tag.toLowerCase()}`}>{s.tag}</span>
+    </button>
+  );
+}
+
 export function ControlPanel({
   scene,
   params,
@@ -55,6 +79,9 @@ export function ControlPanel({
   onResetFx,
 }: Props) {
   const mode = DIRECTOR_MODES.find((m) => m.id === settings.director) ?? DIRECTOR_MODES[0];
+  const worldIds = lookScenes(findLook(settings)).map((e) => e.id);
+  const worldScenes = worldIds.map((id) => SCENES.find((x) => x.id === id)!).filter(Boolean);
+  const otherScenes = SCENES.filter((x) => !worldIds.includes(x.id));
   return (
     <div className="panel-inner">
       <section>
@@ -75,9 +102,9 @@ export function ControlPanel({
 
       <section>
         <div className="section-head">
-          <h2>Esthétique</h2>
-          <button className="link" onClick={onSaveLook} title="Garde les post-effets actuels dans un nouveau look">
-            Enregistrer mon look
+          <h2>Mondes</h2>
+          <button className="link" onClick={onSaveLook} title="Garde les post-effets actuels dans un nouveau monde">
+            Enregistrer mon monde
           </button>
         </div>
         <div className="look-grid">
@@ -99,6 +126,35 @@ export function ControlPanel({
             </div>
           ))}
         </div>
+        <p className="hint">{findLook(settings).description}</p>
+        <label className="field field-toggle">
+          <span>Enchaîner les mondes</span>
+          <input
+            type="checkbox"
+            role="switch"
+            checked={settings.worldCycle.enabled}
+            onChange={(e) => onSettings({ worldCycle: { ...settings.worldCycle, enabled: e.target.checked } })}
+          />
+        </label>
+        {settings.worldCycle.enabled && (
+          <label className="field">
+            <span className="field-head">
+              <span>Changer de monde</span>
+            </span>
+            <select
+              value={settings.worldCycle.rule}
+              onChange={(e) =>
+                onSettings({ worldCycle: { ...settings.worldCycle, rule: e.target.value as WorldRule } })
+              }
+            >
+              {WORLD_RULES.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </section>
 
       <section>
@@ -144,21 +200,21 @@ export function ControlPanel({
       </section>
 
       <section>
-        <h2>Scènes</h2>
+        <h2>Plans de ce monde</h2>
         <div className="scene-grid">
-          {SCENES.map((s, i) => (
-            <button
-              key={s.id}
-              className={`scene-card ${s.id === scene.id ? "scene-card-active" : ""}`}
-              onClick={() => onScene(s.id)}
-              title={`${s.description} (touche ${i + 1})`}
-            >
-              <span className="scene-name">{s.name}</span>
-              <span className={`tag tag-${s.tag.toLowerCase()}`}>{s.tag}</span>
-            </button>
+          {worldScenes.map((s, i) => (
+            <SceneButton key={s.id} s={s} active={s.id === scene.id} hotkey={i < 9 ? i + 1 : undefined} onScene={onScene} />
           ))}
         </div>
         <p className="hint">{scene.description}</p>
+        <details className="catalogue">
+          <summary className="link">Tout le catalogue ({SCENES.length} scènes)</summary>
+          <div className="scene-grid">
+            {otherScenes.map((s) => (
+              <SceneButton key={s.id} s={s} active={s.id === scene.id} onScene={onScene} />
+            ))}
+          </div>
+        </details>
       </section>
 
       <section>
@@ -366,7 +422,7 @@ export function ControlPanel({
       <section className="shortcuts">
         <h2>Raccourcis</h2>
         <p>
-          <kbd>←</kbd> <kbd>→</kbd> scènes · <kbd>1</kbd>–<kbd>{SCENES.length >= 10 ? 0 : SCENES.length}</kbd> accès direct ·{" "}
+          <kbd>←</kbd> <kbd>→</kbd> scènes · <kbd>1</kbd>–<kbd>9</kbd> plans du monde ·{" "}
           <kbd>Espace</kbd> drop · <kbd>T</kbd> tap tempo · <kbd>L</kbd> verrouiller · <kbd>F</kbd> plein écran ·{" "}
           <kbd>H</kbd> masquer l&apos;interface · <kbd>D</kbd> debug
         </p>

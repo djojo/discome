@@ -7,7 +7,18 @@ import { Compositor } from "@/engine/Compositor";
 import { Director } from "@/engine/Director";
 import type { Section } from "@/lib/audio/MusicAnalyzer";
 import { ControlPanel, SOURCE_LABELS } from "./ControlPanel";
-import { applyLook, findLook, loadSettings, QUALITY_DPR, saveCurrentLook, saveSettings, type Settings } from "./settings";
+import {
+  applyLook,
+  enterWorld,
+  findLook,
+  loadSettings,
+  nextWorldId,
+  QUALITY_DPR,
+  saveCurrentLook,
+  saveSettings,
+  type Settings,
+} from "./settings";
+import { NEUTRAL_FX, type FxSettings } from "@/engine/fx";
 import { lookScenes } from "@/looks";
 import { preloadDancer } from "@/scenes/3d/humanoid/dancerAsset";
 import type { DirectorContext } from "@/engine/Director";
@@ -28,6 +39,12 @@ function describeError(e: unknown): string {
     if (e.name === "NotSupportedError") return "Ce navigateur ne permet pas cette source.";
   }
   return e instanceof Error ? e.message : "Impossible de démarrer l'audio.";
+}
+
+/** Scenes of the current world (arrows and digits move through them). */
+function worldOrder(s: Settings) {
+  const own = lookScenes(findLook(s)).map((e) => e.id);
+  return own.length ? own : SCENES.map((x) => x.id);
 }
 
 export default function Visualizer() {
@@ -69,9 +86,9 @@ export default function Visualizer() {
 
   const stepScene = useCallback((delta: number) => {
     setSettings((s) => {
-      const i = SCENES.findIndex((x) => x.id === s.sceneId);
-      const next = SCENES[(i + delta + SCENES.length) % SCENES.length];
-      return { ...s, sceneId: next.id };
+      const order = worldOrder(s);
+      const i = order.indexOf(s.sceneId);
+      return { ...s, sceneId: order[(Math.max(0, i) + delta + order.length) % order.length] };
     });
   }, []);
 
@@ -129,6 +146,7 @@ export default function Visualizer() {
     measure();
 
     const director = new Director();
+    const fxShown: FxSettings = { ...NEUTRAL_FX, ...settingsRef.current.fx };
     // Director pool derived from the active look, rebuilt only when the look changes
     let lookKey = "";
     let lookCtx: Pick<DirectorContext, "scenes" | "weights" | "palettes" | "transitions"> = { scenes: SCENES };
@@ -174,11 +192,22 @@ export default function Visualizer() {
         layerId: s.layer.sceneId,
         inTransition: compositor.inTransition,
         params: s.params,
+        worldCycle: s.worldCycle,
         ...lookContext(s),
       });
       if (decision?.preload) {
         const id = decision.preload;
         compositor.preload(id, frame, s.params[id] ?? defaultParams(sceneById(id)));
+      }
+      if (decision?.changeWorld) {
+        // Next world: its look, its shots, and a dip to black between the two
+        const next = enterWorld(s, nextWorldId(s));
+        s = next;
+        settingsRef.current = next;
+        setSettings(next);
+        compositor.show(next.sceneId, { type: "dip", duration: (frame.bpm > 0 ? 60 / frame.bpm : 0.5) * 6 });
+        director.noteWorldChange(next.sceneId);
+        firstShow = false;
       }
       if (decision?.sceneId && decision.transition) {
         const id = decision.sceneId;
@@ -202,9 +231,19 @@ export default function Visualizer() {
       if (s.layer.sceneId !== compositor.layerId) compositor.setLayer(s.layer.sceneId);
 
       const params = s.params;
+      // Post-effects glide to the new world's values instead of jumping
+      const k = 1 - Math.exp(-dt * 1.2);
+      for (const key of Object.keys(fxShown) as (keyof FxSettings)[]) {
+        const target = s.fx[key];
+        if (typeof target === "number" && key !== "mirror") {
+          (fxShown[key] as number) += (target - (fxShown[key] as number)) * k;
+        } else {
+          (fxShown as unknown as Record<string, unknown>)[key] = target;
+        }
+      }
       compositor.render(frame, (id) => params[id] ?? defaultParams(sceneById(id)), dt, s.layer, {
         tension: director.tension,
-        fx: s.fx,
+        fx: fxShown,
         safeFlash: s.safeFlash,
       });
 
@@ -214,7 +253,7 @@ export default function Visualizer() {
         if (el) el.style.transform = `scaleY(${0.04 + levels[i] * 0.96})`;
       });
       if (beatRef.current) beatRef.current.style.opacity = String(0.15 + frame.beatPulse * 0.85);
-      const hud = `${frame.bpm > 0 ? Math.round(frame.bpm) : "—"} BPM · ${SECTION_LABELS[frame.section]}`;
+      const hud = `${frame.bpm > 0 ? Math.round(frame.bpm) : "—"} BPM · ${SECTION_LABELS[frame.section]} · ${findLook(s).name}`;
       if (hudRef.current && hud !== hudText) {
         hudText = hud;
         hudRef.current.textContent = hud;
@@ -317,9 +356,9 @@ export default function Visualizer() {
       } else if (e.key === "t" || e.key === "T") engine.tap();
       else if (e.key === "l" || e.key === "L") setSettings((s) => ({ ...s, locked: !s.locked }));
       else if (e.key === "d" || e.key === "D") setDebugOpen((v) => !v);
-      else if (/^[0-9]$/.test(e.key)) {
-        const s = SCENES[e.key === "0" ? 9 : Number(e.key) - 1];
-        if (s) goToScene(s.id);
+      else if (/^[1-9]$/.test(e.key)) {
+        const id = worldOrder(settingsRef.current)[Number(e.key) - 1];
+        if (id) goToScene(id);
       } else return;
       e.preventDefault();
     };
