@@ -18,6 +18,71 @@ float map(vec3 p) { return headD(toHead(p)); }
 ${MARCH}
 `;
 
+/**
+ * The face as a machine sees it: landmarks, a mesh between them, a box that follows it, a scan line on the
+ * kick. No words. Needs gYaw/gPitch (HEAD_MAP) and the camera uniforms.
+ */
+const RECOG_GLSL = /* glsl */ `
+float segD(vec2 p, vec2 a, vec2 b) { vec2 pa = p - a, ba = b - a; return length(pa - ba * clamp(dot(pa, ba) / dot(ba, ba), 0., 1.)); }
+float recognition(vec2 uv) {
+  const vec3 L[14] = vec3[14](
+    vec3(-.15, .02, .5), vec3(.15, .02, .5),      // eyes
+    vec3(-.16, .13, .48), vec3(.16, .13, .48),    // brows
+    vec3(0., -.2, .6),                             // nose
+    vec3(-.09, -.4, .5), vec3(.09, -.4, .5),      // mouth corners
+    vec3(0., -.37, .53),                           // lip
+    vec3(0., -.56, .42),                           // chin
+    vec3(-.3, -.35, .2), vec3(.3, -.35, .2),      // jaw
+    vec3(-.28, -.08, .38), vec3(.28, -.08, .38),  // cheekbones
+    vec3(0., .36, .45));                           // forehead
+  const ivec2 E[18] = ivec2[18](
+    ivec2(0, 1), ivec2(0, 2), ivec2(1, 3), ivec2(2, 13), ivec2(3, 13), ivec2(0, 4), ivec2(1, 4),
+    ivec2(4, 7), ivec2(5, 7), ivec2(6, 7), ivec2(5, 8), ivec2(6, 8), ivec2(8, 9), ivec2(8, 10),
+    ivec2(9, 11), ivec2(10, 12), ivec2(11, 0), ivec2(12, 1));
+  mat3 cam = lookAt(uCamPos, uCamTarget);
+  vec2 P[14];
+  float V[14];
+  vec2 bmin = vec2(1e3), bmax = vec2(-1e3);
+  for (int i = 0; i < 14; i++) {
+    vec3 hp = L[i];
+    hp.yz *= rot(-gPitch);
+    hp.xz *= rot(-gYaw);
+    hp.y -= .1;
+    vec3 v = hp - uCamPos;
+    vec3 c = vec3(dot(v, cam[0]), dot(v, cam[1]), dot(v, cam[2]));
+    P[i] = c.xy / c.z * uFocal;
+    V[i] = step(-.05, dot(normalize(hp - vec3(0., -.1, -.1)), normalize(uCamPos - hp)));
+    bmin = min(bmin, P[i]);
+    bmax = max(bmax, P[i]);
+  }
+  float flash = .5 + 1.5 * uDrop;
+  float o = 0.;
+  for (int i = 0; i < 18; i++) {
+    int a = E[i].x, b = E[i].y;
+    o += (1. - smoothstep(.0015, .0035, segD(uv, P[a], P[b]))) * V[a] * V[b] * .45 * flash;
+  }
+  for (int i = 0; i < 14; i++) {
+    float d = length(uv - P[i]);
+    float blink = .6 + .4 * step(.5, fract(uTime * 3. + float(i) * .37)) * uHat;
+    o += (1. - smoothstep(.004, .007, abs(d - .008))) * V[i] * blink + (1. - smoothstep(.002, .004, d)) * V[i];
+  }
+  // the box, by its corners
+  vec2 c0 = bmin - .04, c1 = bmax + .04;
+  vec2 q = uv;
+  float bx = min(abs(q.x - c0.x), abs(q.x - c1.x)), by = min(abs(q.y - c0.y), abs(q.y - c1.y));
+  bool inX = q.x > c0.x - .003 && q.x < c1.x + .003, inY = q.y > c0.y - .003 && q.y < c1.y + .003;
+  float arm = .05;
+  float nearCornerX = min(abs(q.x - c0.x), abs(q.x - c1.x)) < arm ? 1. : 0.;
+  float nearCornerY = min(abs(q.y - c0.y), abs(q.y - c1.y)) < arm ? 1. : 0.;
+  o += (1. - smoothstep(.002, .004, by)) * (inX ? 1. : 0.) * nearCornerX;
+  o += (1. - smoothstep(.002, .004, bx)) * (inY ? 1. : 0.) * nearCornerY;
+  // a scan line sweeping down the box on every kick
+  float sy = mix(c1.y, c0.y, clamp(uWave * 1.6, 0., 1.));
+  o += (1. - smoothstep(.001, .004, abs(q.y - sy))) * (inX ? 1. : 0.) * step(uWave, .65) * .8;
+  return o;
+}
+`;
+
 const FACE_FRAMINGS: Framing[] = [
   { az: 0, el: 0.05, dist: 3.4, target: [0, -0.12, 0], focal: 2.4, weight: 2 },
   { az: 0.55, el: 0.08, dist: 3.4, target: [0, -0.12, 0], focal: 2.4, weight: 3 },
@@ -53,10 +118,12 @@ export const topoHead = defineShaderScene({
     headParam(),
     { type: "range", key: "density", label: "Densité des lignes", min: 10, max: 60, step: 1, default: 26 },
     { type: "range", key: "turn", label: "Dérive du visage", min: 0, max: 1.5, step: 0.05, default: 1 },
+    { type: "toggle", key: "recog", label: "Reconnaissance faciale", default: false },
   ],
-  uniforms: () => ({ uDensity: { value: 26 }, uTurn: { value: 1 }, ...kickTimer(), ...headUniforms() }),
+  uniforms: () => ({ uDensity: { value: 26 }, uTurn: { value: 1 }, uRecog: { value: 0 }, ...kickTimer(), ...headUniforms() }),
   update(u, f, p, dt) {
     setHead(u, p.head);
+    u.uRecog.value = p.recog === true ? 1 : 0;
     u.uDensity.value = num(p.density, 26);
     u.uTurn.value = num(p.turn, 1);
     u.uWave.value = f.beat ? 0 : (u.uWave.value as number) + dt;
@@ -65,9 +132,11 @@ export const topoHead = defineShaderScene({
 uniform float uDensity;
 uniform float uTurn;
 uniform float uWave;
+uniform float uRecog;
 ${ART_LIB}
 ${CAMERA_GLSL}
 ${HEAD_MAP}
+${RECOG_GLSL}
 void main() {
   vec2 fc = gl_FragCoord.xy;
   vec2 uv = (fc - .5 * uRes) / uRes.y;
@@ -96,7 +165,13 @@ void main() {
     float band = exp(-pow(g - (-.75 + uWave * 1.3), 2.) * 400.) * exp(-uWave * 1.3);
     col += uAccent * line * band * 2.2;
   }
-  gl_FragColor = vec4(col, step(0., tt)); // alpha = silhouette, keeps the background behind the face
+  float alpha = step(0., tt);
+  if (uRecog > .5) {
+    float r = recognition(uv);
+    col = mix(col, uAccent * 1.3, clamp(r, 0., 1.));
+    alpha = max(alpha, clamp(r, 0., 1.));
+  }
+  gl_FragColor = vec4(col, alpha); // alpha = silhouette, keeps the background behind the face
 }
 `,
 });
