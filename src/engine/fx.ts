@@ -20,6 +20,8 @@ export interface FxSettings {
   mirror: number;
   /** 0 = off, 1 = very few colour levels. */
   posterize: number;
+  /** Big pixels and ordered dithering, like an old console. */
+  pixel: number;
   /** Feedback of the previous frame (light trails). */
   trails: number;
   /** Radial blur of travelling scenes, following their speed (nothing at cruise). */
@@ -41,6 +43,7 @@ export const NEUTRAL_FX: FxSettings = {
   brightness: 0,
   mirror: 0,
   posterize: 0,
+  pixel: 0,
   trails: 0,
   speedBlur: 0.5,
   strobe: "off",
@@ -59,6 +62,7 @@ export const FX_SLIDERS: { key: NumericFx; label: string; min: number; max: numb
   { key: "grain", label: "Grain", min: 0, max: 1, step: 0.01 },
   { key: "vignette", label: "Vignette", min: 0, max: 1, step: 0.01 },
   { key: "posterize", label: "Postérisation", min: 0, max: 1, step: 0.01 },
+  { key: "pixel", label: "Pixel (tramage)", min: 0, max: 1, step: 0.01 },
   { key: "hue", label: "Teinte", min: -180, max: 180, step: 1 },
   { key: "saturation", label: "Saturation", min: 0, max: 2, step: 0.01 },
   { key: "contrast", label: "Contraste", min: 0.5, max: 2, step: 0.01 },

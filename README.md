@@ -11,7 +11,7 @@ npm run dev   # http://localhost:3000
 
 - **Sources** : micro / entrée, son d'un onglet, fichier (glisser-déposer), démo (un morceau de 32 mesures synthétisé en direct).
 - **Horloge musicale** : BPM, temps, mesures et phrases de 8 mesures, avec tap tempo. Les sections (groove → breakdown → montée → drop) sont détectées automatiquement.
-- **Mondes** : Porcelaine, Signal, Mercure, Cathédrale, Monolithe, Canyon, Chair, et Classique (les premières scènes).
+- **Mondes** : Porcelaine, Signal, Mercure, Cathédrale, Monolithe, Canyon, Arcanes, Chair, et Classique (les premières scènes).
   - Un monde est une direction artistique complète : une sélection de plans (une scène du catalogue et ses réglages pour ce monde), des palettes, des post-effets, des transitions et un rythme de réalisation.
   - Une même scène est réutilisée d'un monde à l'autre avec d'autres réglages : Cathédrale en rouge ou en blanc, Profil en ivoire ou en argent…
   - **Enchaîner les mondes** : ils se succèdent, au breakdown (et au moins toutes les 8 phrases) ou toutes les 4 ou 8 phrases. Le passage se fait par le noir, et les effets glissent vers ceux du nouveau monde.
@@ -36,8 +36,8 @@ npm run dev   # http://localhost:3000
 - **Palettes** : 2 à 4 couleurs par palette, avec des rôles fixes (fond, encre, accent) au lieu d'arcs-en-ciel. Les scènes s'en servent pour se recolorer selon le monde.
 - **Réalisateur** (Manuel / Chill / Club / Rave) : fondu au breakdown, tension pendant la montée, impact et rafale de coupes au drop, variation des réglages à chaque coupe.
 - **Transitions** : cut, fondu, punch, glitch, volet lumineux, iris, flash blanc, passage au noir.
-- **Calque** : une 2e scène superposée, avec mode de fusion, opacité et option « pulse au beat ».
-- **Post-FX** : aberration chromatique, traînées, flou de vitesse, scanlines, CRT, VHS, grain, étalonnage, miroir, postérisation, strobo (option « Limiter les flashs »).
+- **Calque** : une 2e scène superposée, avec mode de fusion, opacité et option « pulse au beat ». Un monde peut poser son propre calque (Arcanes pose le Grimoire), retiré en quittant le monde.
+- **Post-FX** : aberration chromatique, traînées, flou de vitesse, pixel (tramage), scanlines, CRT, VHS, grain, étalonnage, miroir, postérisation, strobo (option « Limiter les flashs »).
 
 ## Scènes
 
@@ -54,6 +54,11 @@ npm run dev   # http://localhost:3000
 | Monolithe | Avenue brutaliste en béton banché, soleil rasant, poussière, monolithe à l'horizon | Décollage au-dessus des toits, le soleil change de côté |
 | Gorge | Vol dans une gorge étroite aux parois ondulées, strates colorées, rais de lumière | On sort de la fente, les couleurs des strates basculent |
 | Mesas | Vol au ras d'une rivière miroir entre des falaises en gradins, soleil en anneau | On monte au-dessus des mesas |
+| L'Architecte | Mage à tête de pyramide, robe de lignes et d'étoiles, cristal rouge, lac d'anneaux arc-en-ciel | La pyramide devient un prisme : rayon blanc entrant, arc-en-ciel sortant |
+| Le Nomade | Chapeau conique, orbe dans la main, désert martien, longue ombre, contour néon | L'orbe éclate et embrase le désert, le soleil tourne |
+| Les Trois | Moines rouge, bleu et or traversés par un rayon prismatique (une bande de couleur = une bande de fréquences) | Le rayon s'élargit, les robes s'embrasent |
+| Le Portail | Lac d'anneaux arc-en-ciel, colonne de lumière, minuscule silhouette | Le portail s'ouvre en vortex |
+| Grimoire | HUD de jeu ésotérique (2D) : chapitre, glyphes, orbites, texte japonais, vraies données du morceau | Le chapitre change, l'avertissement clignote |
 | Chair | Matière organique translucide et nacrée | Contraction |
 | Signal | Données en deux couleurs : codes-barres, balayage, onde | Inversion |
 
@@ -89,6 +94,7 @@ src/
     types.ts             Contrat d'une scène + paramètres déclaratifs
     art/                 Scènes de direction artistique (visages, Mercure, Cathédrale…)
     art/flight.ts        Vol partagé des travellings (vitesse selon la structure, figures, roulis)
+    art/arcane.glsl.ts   Figure sans visage et robe cosmique du monde Arcanes
     2d/  shader/  3d/    Scènes classiques ; 3d/humanoid/ : danseuse, androïde, particules
   components/            Visualizer (boucle, sources, HUD), ControlPanel, settings
 public/models/           Michelle.glb (personnage Mixamo des exemples three.js)
@@ -108,6 +114,8 @@ public/models/           Michelle.glb (personnage Mixamo des exemples three.js)
 3. L'ajouter à `SCENES` dans `src/scenes/index.ts`, et éventuellement à des looks dans `src/looks/index.ts`.
 
 Les `params` (range, toggle, select) génèrent automatiquement les contrôles du panneau et sont sauvegardés dans le navigateur.
+
+Les scènes shader reçoivent aussi `uBands[8]`, 8 bandes de fréquences de la basse (0) à l'aigu (7).
 
 Le plus rapide est un shader plein écran :
 

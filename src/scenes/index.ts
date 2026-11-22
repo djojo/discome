@@ -19,6 +19,7 @@ import { arcaneArchitect } from "./art/architect";
 import { arcaneNomad } from "./art/nomad";
 import { arcanePrism } from "./art/prism";
 import { arcanePortal } from "./art/portal";
+import { grimoire } from "./art/grimoire";
 import { flesh } from "./art/flesh";
 import { signal } from "./art/signal";
 
@@ -41,6 +42,7 @@ export const SCENES: SceneDef[] = [
   arcaneNomad,
   arcanePrism,
   arcanePortal,
+  grimoire,
   flesh,
   signal,
   // Classics, recoloured by the worlds' palettes

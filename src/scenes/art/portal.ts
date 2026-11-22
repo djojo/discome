@@ -120,7 +120,8 @@ void main() {
   float tf = figMarch(rof, rd, dmin);
   float tfw = tf > 0. ? tf * S : -1.;
   if (tfw > 0. && (tl < 0. || tfw < tl)) {
-    col = shadeFigure(rof + rd * tf, rd, 0.) * .3;
+    // a dark silhouette standing in the light
+    col = shadeFigure(rof + rd * tf, rd, 0.) * .12;
     solid = 1.;
   } else {
     if (tl > 0.) {
@@ -128,7 +129,7 @@ void main() {
       col = mix(lake(ro + rd * tl, rd), sky(rd), far);
       solid = 1. - far;
     }
-    col += figHalo(dmin) * .8;
+    col += figHalo(dmin) * .5;
   }
   col += column(ro, rd, tfw);
 

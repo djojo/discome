@@ -123,6 +123,7 @@ export class Compositor {
       uBright: { value: 0 },
       uMirror: { value: 0 },
       uPoster: { value: 0 },
+      uPixel: { value: 0 },
       uStrobe: { value: 0 },
       uStrobeMode: { value: 1 },
       uBg: { value: this.black as THREE.Texture },
@@ -349,6 +350,7 @@ export class Compositor {
     u.uBright.value = fx.brightness;
     u.uMirror.value = fx.mirror;
     u.uPoster.value = fx.posterize;
+    u.uPixel.value = fx.pixel ?? 0;
 
     // Strobe: fires on the kicks of the first seconds of a drop
     const armed = fx.strobe !== "off" && frame.section === "drop" && frame.sectionTime < 16;

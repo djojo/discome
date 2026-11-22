@@ -42,6 +42,7 @@ uniform float uContrast;
 uniform float uBright;
 uniform float uMirror;
 uniform float uPoster;
+uniform float uPixel;
 uniform float uStrobe;
 uniform int uStrobeMode;
 // background (fond)
@@ -170,6 +171,10 @@ vec3 composite(vec2 uv) {
   return col;
 }
 
+/** 4x4 ordered dither threshold, 0..1. */
+float bayer2(vec2 a) { a = floor(a); return fract(a.x / 2. + a.y * a.y * .75); }
+float bayer4(vec2 a) { return bayer2(.5 * a) * .25 + bayer2(a); }
+
 vec2 barrel(vec2 uv, float k) {
   vec2 c = uv * 2.0 - 1.0;
   c *= 1.0 + k * 0.18 * dot(c, c);
@@ -203,6 +208,13 @@ void main() {
   float inside = 1.0 - step(1.0, max(edge.x, edge.y));
   uv = mirrorFold(uv, uMirror);
 
+  // Pixel: sample the image on a coarse grid
+  float pxSize = 1.0 + floor(uPixel * 7.0);
+  if (uPixel > 0.001) {
+    vec2 cell = pxSize / uRes;
+    uv = (floor(uv / cell) + 0.5) * cell;
+  }
+
   // Tape: per-line jitter + a tracking band drifting up the screen
   if (uVhs > 0.0) {
     float line = floor(uv.y * 240.0);
@@ -231,6 +243,13 @@ void main() {
   if (uPoster > 0.0) {
     float levels = mix(12.0, 3.0, uPoster);
     col = floor(clamp(col, 0.0, 1.0) * levels + 0.5) / levels;
+  }
+
+  // Pixel: few colour levels with an ordered dither, cell by cell
+  if (uPixel > 0.001) {
+    float levels = mix(24.0, 5.0, uPixel);
+    float th = bayer4(floor(gl_FragCoord.xy / pxSize));
+    col = floor(clamp(col, 0.0, 1.0) * levels + th) / levels;
   }
 
   // Light trails: keep the brighter of now and a slightly zoomed previous frame

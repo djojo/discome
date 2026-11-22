@@ -1,6 +1,6 @@
 import { NEUTRAL_FX, type FxSettings } from "@/engine/fx";
 import type { DirectorMode } from "@/engine/Director";
-import type { TransitionId } from "@/engine/transitions";
+import type { BlendModeId, TransitionId } from "@/engine/transitions";
 import { SCENES, type ParamValues } from "@/scenes";
 
 /**
@@ -30,6 +30,8 @@ export interface Look {
   backgrounds?: Shot[];
   /** Default background presence for this world, 0..1. */
   bgOpacity?: number;
+  /** A layer (calque) laid over every shot while in this world, removed when leaving it. */
+  layer?: { id: string; mode?: BlendModeId; opacity?: number; params?: ParamValues };
   fx: Partial<FxSettings>;
   transitions?: { calm?: TransitionId[]; drop?: TransitionId[] };
   director?: DirectorMode;
@@ -166,6 +168,31 @@ export const LOOKS: Look[] = [
     director: "club",
   },
   {
+    id: "arcanes",
+    name: "Arcanes",
+    description: "Mages sans visage en robes de lignes et d'étoiles, prismes, orbes et portails arc-en-ciel, sous un HUD de jeu ésotérique.",
+    swatch: ["#04030C", "#5B7CFF", "#FFD34E"],
+    palettes: ["cosmos", "mars", "mousse"],
+    scenes: [
+      { id: "arcane-architect", weight: 3 },
+      { id: "arcane-nomad", weight: 2, params: { palette: "mars" } },
+      { id: "arcane-prism", weight: 2 },
+      { id: "arcane-portal", weight: 2 },
+      { id: "canyon-mesas", weight: 1, params: { palette: "mars", psy: 0.6 } },
+      { id: "topo-head", weight: 1, params: { palette: "cosmos", density: 30 } },
+    ],
+    backgrounds: [
+      { id: "nebula", weight: 2, params: { palette: "cosmos", trail: 0.9, amount: 0.6 } },
+      { id: "kaleido", weight: 1, params: { palette: "cosmos", segments: 6 } },
+      { id: "echoes", weight: 1, params: { palette: "cosmos", shape: "circle" } },
+    ],
+    bgOpacity: 0.35,
+    layer: { id: "grimoire", mode: "screen", opacity: 0.6 },
+    fx: { scanlines: 0.3, chroma: 0.2, grain: 0.2, vhs: 0.1, pixel: 0.15, vignette: 0.45 },
+    transitions: { calm: ["fade", "luma"], drop: ["flash", "glitch"] },
+    director: "club",
+  },
+  {
     id: "chair",
     name: "Chair",
     description: "Matière organique, translucide et nacrée. Lent, intime, dérangeant.",
@@ -191,7 +218,7 @@ export const LOOKS: Look[] = [
     description: "Les premières scènes et leurs couleurs vives, hors rotation des mondes.",
     swatch: ["#ff3cac", "#a855f7", "#22d3ee"],
     palettes: ["acid", "neon", "sunset", "ocean", "ice", "fire", "chrome", "vhs"],
-    scenes: SCENES.filter((s) => !["porcelain", "topo-head", "profile-head", "halftone-head", "mercury", "cathedral", "monolith", "canyon-gorge", "canyon-mesas", "flesh", "signal"].includes(s.id)).map((s) => ({ id: s.id, weight: 1 })),
+    scenes: SCENES.filter((s) => !["porcelain", "topo-head", "profile-head", "halftone-head", "mercury", "cathedral", "monolith", "canyon-gorge", "canyon-mesas", "arcane-architect", "arcane-nomad", "arcane-prism", "arcane-portal", "grimoire", "flesh", "signal"].includes(s.id)).map((s) => ({ id: s.id, weight: 1 })),
     fx: {},
     classic: true,
   },
@@ -203,6 +230,9 @@ export const lookFx = (look: Look): FxSettings => ({ ...NEUTRAL_FX, ...look.fx }
 export const lookScenes = (look: Look) => look.scenes.filter((s) => SCENES.some((d) => d.id === s.id));
 
 export const lookBackgrounds = (look: Look) => (look.backgrounds ?? []).filter((s) => SCENES.some((d) => d.id === s.id));
+
+/** Scenes that some world lays as its layer: they go away when leaving that world. */
+export const WORLD_LAYER_IDS = new Set(LOOKS.flatMap((l) => (l.layer ? [l.layer.id] : [])));
 
 /** Weighted random pick among shots, avoiding some ids when possible. */
 export function pickShot(shots: Shot[], avoid: (string | null)[] = []): Shot | null {

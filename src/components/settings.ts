@@ -2,7 +2,7 @@ import { defaultParams, SCENES, type ParamValues } from "@/scenes";
 import { BLEND_MODES, TRANSITIONS, type LayerSettings, type TransitionId } from "@/engine/transitions";
 import { DIRECTOR_MODES, type DirectorMode } from "@/engine/Director";
 import { NEUTRAL_FX, type FxSettings } from "@/engine/fx";
-import { LOOKS, lookBackgrounds, lookFx, lookScenes, pickShot, ROTATION, type Look } from "@/looks";
+import { LOOKS, lookBackgrounds, lookFx, lookScenes, pickShot, ROTATION, WORLD_LAYER_IDS, type Look } from "@/looks";
 
 export interface BackgroundSettings {
   /** The director picks and changes the background from the world's list. */
@@ -103,12 +103,22 @@ export function applyLook(s: Settings, look: Look): Settings {
     params[entry.id] = p;
   }
   const sceneId = pool.some((e) => e.id === s.sceneId) ? s.sceneId : (pool[0]?.id ?? s.sceneId);
+  // The world's own layer comes in with it; another world's layer leaves (a layer picked by hand stays)
+  let layer = s.layer;
+  const worldLayer = look.layer && SCENES.some((d) => d.id === look.layer!.id) ? look.layer : null;
+  if (worldLayer) {
+    const def = SCENES.find((d) => d.id === worldLayer.id)!;
+    params[worldLayer.id] = { ...defaultParams(def), ...(worldLayer.params ?? {}) };
+    layer = { ...layer, sceneId: worldLayer.id, mode: worldLayer.mode ?? layer.mode, opacity: worldLayer.opacity ?? layer.opacity, pulse: false };
+  } else if (layer.sceneId && WORLD_LAYER_IDS.has(layer.sceneId)) {
+    layer = { ...layer, sceneId: null };
+  }
   let background = s.background;
   if (background.auto) {
     const shot = pickShot(backgrounds, [sceneId, s.layer.sceneId]);
     background = { ...background, sceneId: shot?.id ?? null, opacity: look.bgOpacity ?? 0.4, tint: shot?.tint ?? true };
   }
-  return { ...s, lookId: look.id, fx: lookFx(look), params, sceneId, background, director: look.director ?? s.director };
+  return { ...s, lookId: look.id, fx: lookFx(look), params, sceneId, background, layer, director: look.director ?? s.director };
 }
 
 /** Enter a world and cut to one of its shots (weighted draw, avoiding the scene on screen). */
