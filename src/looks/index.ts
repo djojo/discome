@@ -275,7 +275,7 @@ export const LOOKS: Look[] = [
     ],
     bgOpacity: 0.35,
     layer: { id: "grimoire", mode: "screen", opacity: 0.6 },
-    fx: { scanlines: 0.3, chroma: 0.2, grain: 0.2, vhs: 0.1, pixel: 0.15, vignette: 0.45 },
+    fx: { scanlines: 0.3, chroma: 0.2, grain: 0.2, vhs: 0.1, pixel: 0.15, retroOnHits: true, vignette: 0.45 },
     transitions: { calm: ["fade", "luma", "dive"], drop: ["flash", "glitch", "dive"] },
     director: "club",
   },

@@ -46,7 +46,7 @@ npm run dev   # http://localhost:3000
 - **Réalisateur** (Manuel / Chill / Club / Rave) : fondu au breakdown, tension pendant la montée, impact et rafale de coupes au drop, variation des réglages à chaque coupe.
 - **Transitions** : cut, fondu, punch, glitch, volet lumineux, iris, flash blanc, passage au noir, plongée dans la fissure (on entre dans une fente de lumière et on ressort dans la scène suivante), plongée dans l'écran (un petit rectangle lumineux s'allume au milieu de l'image, on plonge dedans).
 - **Calque** : une 2e scène superposée, avec mode de fusion, opacité et option « pulse au beat ». Un monde peut poser son propre calque (Arcanes pose le Grimoire), retiré en quittant le monde.
-- **Post-FX** : aberration chromatique, traînées, flou de vitesse, pixel (tramage), scanlines, CRT, VHS, grain, étalonnage, miroir, postérisation, strobo (option « Limiter les flashs »).
+- **Post-FX** : aberration chromatique, traînées, flou de vitesse, pixel (tramage), scanlines, CRT, VHS, grain, étalonnage, miroir, postérisation, strobo (option « Limiter les flashs »). L'option « Pixel et VHS seulement sur les temps forts » les réserve au drop (l'image éclate en gros blocs qui se résolvent palier par palier en une seconde) et aux kicks forts du drop ; Arcanes l'active, pour garder son esthétique de jeu rétro sans sauts de pixels au repos.
 
 ## Scènes
 

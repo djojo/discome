@@ -469,6 +469,15 @@ export function ControlPanel({
               />
             </label>
           ))}
+          <label className="field field-toggle">
+            <span>Pixel et VHS seulement sur les temps forts</span>
+            <input
+              type="checkbox"
+              role="switch"
+              checked={settings.fx.retroOnHits}
+              onChange={(e) => onFx({ retroOnHits: e.target.checked })}
+            />
+          </label>
           <label className="field">
             <span className="field-head">
               <span>Miroir global</span>

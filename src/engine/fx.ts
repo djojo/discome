@@ -22,6 +22,8 @@ export interface FxSettings {
   posterize: number;
   /** Big pixels and ordered dithering, like an old console. */
   pixel: number;
+  /** Pixel and VHS only flare up on the big moments (the drop, the strong kicks), stronger and brief, instead of all the time. */
+  retroOnHits: boolean;
   /** Feedback of the previous frame (light trails). */
   trails: number;
   /** Radial blur of travelling scenes, following their speed (nothing at cruise). */
@@ -44,12 +46,13 @@ export const NEUTRAL_FX: FxSettings = {
   mirror: 0,
   posterize: 0,
   pixel: 0,
+  retroOnHits: false,
   trails: 0,
   speedBlur: 0.5,
   strobe: "off",
 };
 
-type NumericFx = Exclude<keyof FxSettings, "strobe" | "mirror">;
+type NumericFx = Exclude<keyof FxSettings, "strobe" | "mirror" | "retroOnHits">;
 
 /** Slider definitions for the Post-FX panel. */
 export const FX_SLIDERS: { key: NumericFx; label: string; min: number; max: number; step: number }[] = [

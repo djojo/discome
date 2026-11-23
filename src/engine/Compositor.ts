@@ -109,6 +109,10 @@ export class Compositor {
   private elapsed = 0;
   private time = 0;
   private strobeEnv = 0;
+  /** The big moments, for effects that only flare up then (FxSettings.retroOnHits): the drop (falls off linearly, so the
+   *  pixels resolve step by step) and the strong kicks (a short flash). */
+  private dropHit = 0;
+  private kickHit = 0;
   private lastStrobe = -10;
   /** Ping-pong buffers for the trails effect (allocated on first use). */
   private feedback: [THREE.WebGLRenderTarget, THREE.WebGLRenderTarget] | null = null;
@@ -458,7 +462,15 @@ export class Compositor {
     u.uScan.value = fx.scanlines;
     u.uCrt.value = fx.crt;
     u.uGrain.value = fx.grain;
-    u.uVhs.value = fx.vhs;
+    // Pixel and VHS: all the time, or only on the big moments, and stronger then since they are brief: on the drop the
+    // image breaks into big blocks that resolve step by step (4, 3, 2 pixels) in a little over a second; the strong
+    // kicks of the drop give a short flash of small blocks.
+    this.dropHit = frame.drop ? 1 : Math.max(0, this.dropHit - dt / 1.3);
+    this.kickHit = frame.beat && (frame.section === "drop" || frame.bass > 0.85) ? 0.5 : this.kickHit * Math.exp(-dt * 6);
+    const hit = Math.max(this.dropHit, this.kickHit);
+    const pixel = fx.retroOnHits ? (hit > 0.02 ? Math.min(1, fx.pixel * 4) * hit : 0) : fx.pixel;
+    const vhs = fx.retroOnHits ? (hit > 0.02 ? Math.min(1, fx.vhs * 3) * hit : 0) : fx.vhs;
+    u.uVhs.value = vhs;
     u.uVignette.value = fx.vignette;
     u.uHue.value = fx.hue;
     u.uSat.value = fx.saturation;
@@ -466,7 +478,7 @@ export class Compositor {
     u.uBright.value = fx.brightness;
     u.uMirror.value = fx.mirror;
     u.uPoster.value = fx.posterize;
-    u.uPixel.value = fx.pixel ?? 0;
+    u.uPixel.value = pixel;
 
     // Strobe: fires on the kicks of the first seconds of a drop
     const armed = fx.strobe !== "off" && frame.section === "drop" && frame.sectionTime < 16;
