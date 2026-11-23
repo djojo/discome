@@ -4,6 +4,7 @@ import { num } from "../utils";
 import { ART_LIB, MARCH } from "./lib.glsl";
 import { CAMERA_GLSL, type Framing } from "./camera";
 import { HEAD_GLSL, headParam, headUniforms, setHead } from "./heads";
+import { DETAIL_GLSL } from "./detail.glsl";
 
 /** Framings around the head (world space: the head centre sits near y = 0). "open" ones need the head open. */
 const FRAMINGS: Framing[] = [
@@ -135,6 +136,7 @@ uniform float uMode;   // 0: opens like a shell, 1: breaks into floating shards
 ${ART_LIB}
 ${HEAD_GLSL}
 ${CAMERA_GLSL}
+${DETAIL_GLSL}
 
 const float TH = .1;                    // shell thickness
 const vec3 HINGE = vec3(0., 0., -.58);  // back of the skull
@@ -330,7 +332,8 @@ void main() {
     vec3 p = ro + rd * tt;
     map(p);
     bool onCore = gCoreD < .003 && uOpen > .01; // (map sets gCoreD; normals and AO below overwrite it)
-    vec3 n = calcNormal(p);
+    // the normal sampled over about a pixel: relief finer than the screen averages out instead of shimmering
+    vec3 n = calcNormalE(p, clamp(tt / (uRes.y * uFocal) * .8, .0012, .003));
     vec3 h = toHead(p);
     float ao = calcAO(p, n);
     vec3 L = normalize(vec3(-.65, .6, .55));
@@ -370,12 +373,37 @@ void main() {
       float dOut = abs(sd), dIn = abs(sd + TH);
       float dCut = dn < dPiece ? abs(q.y - NECK) : min(cutPlane, abs(q.y - NECK));
       if (dOut <= dIn && dOut <= dCut) {
+        // Close up the glaze comes alive: a faint orange-peel ripple that breaks its highlights, a net of fine
+        // crazing here and there, a few pinholes. Each fades out before it is smaller than a few pixels.
+        float pix = pixelSize(tt, n, rd);
+        vec3 nm = bumpNoise(n, q, 30., .065, pix);
+        float difM = clamp(dot(nm, L) * .85 + .15, 0., 1.);
+        difM *= difM * (3. - 2. * difM);
+        float speM = pow(clamp(dot(reflect(-L, nm), -rd), 0., 1.), 56.);
         // Porcelain, with gold kintsugi cracks spreading over minutes
-        col = uInk * (dif * vec3(1.1, 1.04, .96) + vec3(.06, .065, .08) * (.5 + .5 * n.y)) * ao;
+        col = uInk * (difM * vec3(1.1, 1.04, .96) + vec3(.06, .065, .08) * (.5 + .5 * nm.y)) * ao;
         // soft fill from the camera, so every framing keeps the porcelain readable
-        col += uInk * .22 * clamp(dot(n, -rd), 0., 1.) * ao;
-        col += spe * .3 + fre * vec3(.22, .24, .28) * ao;
-        col += pow(clamp(dot(n, normalize(vec3(.9, .25, -.5))), 0., 1.), 3.) * .15;
+        col += uInk * .22 * clamp(dot(nm, -rd), 0., 1.) * ao;
+        col += speM * .34 + fre * vec3(.22, .24, .28) * ao;
+        col += pow(clamp(dot(nm, normalize(vec3(.9, .25, -.5))), 0., 1.), 3.) * .15;
+        // crazing: the hairlines of an old glaze, an irregular net, faintly tea-coloured, in a few patches
+        float zone = smoothstep(.5, .7, vnoise(q * 2.3 + uSeed + 11.)) * resolved(.012, pix);
+        if (zone > .01) {
+          vec3 wq = q * 24. + 5.3 + (vec3(vnoise(q * 9.), vnoise(q * 9. + 3.1), vnoise(q * 9. + 7.3)) - .5) * 1.4;
+          vec3 cz = cells(wq);
+          float ce = cz.y - cz.x;
+          float hair = 1. - smoothstep(0., .008 + fwidth(ce) * 1.2, ce);
+          col = mix(col, col * vec3(.78, .72, .65), hair * zone * .4);
+        }
+        // pinholes: tiny pits in the glaze, each holding a speck of shadow
+        float pin = resolved(.005, pix);
+        if (pin > .01) {
+          vec3 g = q * 60.;
+          vec3 gi = floor(g);
+          vec3 at = vec3(hash13(gi), hash13(gi + 1.7), hash13(gi + 2.9)) * .6 + .2;
+          float pit = smoothstep(.17, .1, length(fract(g) - at)) * step(.95, hash13(gi + 4.1));
+          col *= 1. - pit * pin * .4;
+        }
         vec3 cv = cells(q * 3. + uSeed);
         float edge = cv.y - cv.x;
         float fw = fwidth(edge);

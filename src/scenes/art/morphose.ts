@@ -2,6 +2,7 @@ import { defineShaderScene } from "../shader/defineShaderScene";
 import { paletteParam } from "../palettes";
 import { ART_LIB, MARCH } from "./lib.glsl";
 import { CAMERA_GLSL, type Framing } from "./camera";
+import { DETAIL_GLSL } from "./detail.glsl";
 
 const FRAMINGS: Framing[] = [
   { az: 0, el: 0.02, dist: 5.4, target: [0, 0, 0], focal: 1.9, weight: 3, tag: "open" },
@@ -99,6 +100,7 @@ uniform float uGlow;     // the bass: the inner light
 uniform float uSpin;
 ${ART_LIB}
 ${CAMERA_GLSL}
+${DETAIL_GLSL}
 float gR;                // distance from the heart, at the last evaluation
 
 /** A family's shape: branches count, length, thickness, curl, width, cup, heart radius, ring radius. */
@@ -183,7 +185,7 @@ float heartR() {
  * Flesh lit from behind: dark rose where it faces us, a bright rim around the silhouette, red light through the
  * thin parts, a pearly film, a wet highlight; the heart is a dark red bulb glowing from within.
  */
-vec3 shade(vec3 p, vec3 n, vec3 rd) {
+vec3 shade(vec3 p, vec3 n, vec3 rd, float pix) {
   vec3 Lb = normalize(vec3(.35, .55, -.75));
   vec3 Lf = normalize(vec3(-.5, .4, .8));
   float fre = pow(1. - abs(dot(n, -rd)), 2.);
@@ -208,6 +210,13 @@ vec3 shade(vec3 p, vec3 n, vec3 rd) {
   // fine veins running out from the heart
   float v = abs(sin(atan(q.y, q.x) * 34. + fbm3(q * 3.) * 4.));
   c = mix(c, uAccent * .4, (1. - smoothstep(.0, .08, v)) * .35 * smoothstep(hr, hr + .5, r));
+  // close up, a net of capillaries under the skin, finer and darker, carried by the form as it turns
+  vec3 qs = q;
+  qs.xy *= rot(uSpin);
+  // (soft-edged, and coming and going as if they dived under the surface)
+  float cap = abs(vnoise(qs * 16. + 3.7) - .5);
+  float capl = exp(-cap / (.012 + fwidth(cap))) * resolved(.015, pix) * smoothstep(.3, .6, vnoise(qs * 4. + 8.1));
+  c = mix(c, uAccent * .22 + uPal1 * .08, capl * .4 * (1. - heart));
   // the kick: a wave of light leaving the heart along the branches
   float w = uWave * 2.6;
   c += mix(uAccent, vec3(1., .85, .8), .4) * exp(-pow((r - w) * 5., 2.)) * exp(-uWave * 1.5) * 1.6;
@@ -225,8 +234,15 @@ void main() {
   float t = march(ro, rd, 12.);
   if (t > 0.) {
     vec3 p = ro + rd * t;
-    vec3 n = calcNormal(p);
-    col = shade(p, n, rd) * (.55 + .45 * calcAO(p, n));
+    // the normal sampled over about a pixel: relief finer than the screen averages out instead of shimmering
+    vec3 n = calcNormalE(p, clamp(t / (uRes.y * uFocal) * .8, .0008, .003));
+    float ao = .55 + .45 * calcAO(p, n);
+    // close up, the wet skin is finely uneven: its highlight breaks into a glisten (the relief turns with the form)
+    float pix = pixelSize(t, n, rd);
+    vec3 qs = tumble(p);
+    qs.xy *= rot(uSpin);
+    n = bumpNoise(n, qs, 28., .06, pix);
+    col = shade(p, n, rd, pix) * ao;
     solid = 1.;
   }
   col = aces(col * 1.1);

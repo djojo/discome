@@ -62,6 +62,9 @@ uniform float uMotionB;
 // texel counts of the two scenes: sharper (bicubic) upscaling when they render below the screen's resolution
 uniform vec2 uSizeA;
 uniform vec2 uSizeB;
+// the glow around the highlights (bloom), and how much of it
+uniform sampler2D uBloomTex;
+uniform float uBloomAmt;
 varying vec2 vUv;
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -289,6 +292,9 @@ void main() {
   } else {
     col = composite(uv);
   }
+
+  // Bloom: the light spills around the highlights, a lens rather than a drawing
+  if (uBloomAmt > 0.001) col += texture2D(uBloomTex, uv).rgb * uBloomAmt * 2.2;
 
   col += vec3(0.35) * uTension * uTension * uBeatPulse;
 

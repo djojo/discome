@@ -52,10 +52,12 @@ float sdHead(vec3 p) {
 
 /** Normal, ambient occlusion and sphere-tracing for a scene that defines \`float map(vec3)\`. */
 export const MARCH = /* glsl */ `
-vec3 calcNormal(vec3 p) {
-  const float h = .0015; const vec2 k = vec2(1, -1);
+/** The normal, sampled over a distance h: about a pixel (calcNormalE) averages out relief the screen cannot show. */
+vec3 calcNormalE(vec3 p, float h) {
+  const vec2 k = vec2(1, -1);
   return normalize(k.xyy * map(p + k.xyy * h) + k.yyx * map(p + k.yyx * h) + k.yxy * map(p + k.yxy * h) + k.xxx * map(p + k.xxx * h));
 }
+vec3 calcNormal(vec3 p) { return calcNormalE(p, .0015); }
 float calcAO(vec3 p, vec3 n) {
   float occ = 0., sca = 1.;
   for (int i = 0; i < 5; i++) { float h = .02 + .11 * float(i); float d = map(p + h * n); occ += (h - d) * sca; sca *= .85; }

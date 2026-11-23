@@ -4,6 +4,7 @@ import { num } from "../utils";
 import { ART_LIB, MARCH } from "./lib.glsl";
 import { CAMERA_GLSL, type Framing } from "./camera";
 import { HEAD_GLSL, headUniforms, preloadHeads, setHead, type HeadId } from "./heads";
+import { DETAIL_GLSL } from "./detail.glsl";
 
 const FRAMINGS: Framing[] = [
   { az: 0.35, el: 0.06, dist: 4.4, target: [0, -0.1, 0], focal: 1.95, weight: 3 },
@@ -168,6 +169,7 @@ uniform float uDying;   // extinction: the old head petrifies and cracks as the 
 ${ART_LIB}
 ${HEAD_GLSL}
 ${CAMERA_GLSL}
+${DETAIL_GLSL}
 const float K = .16;    // half width of the transformation front
 float gYaw;
 float gPitch = 0.;
@@ -228,9 +230,13 @@ void main() {
   float tt = march(ro, rd, 12.);
   if (tt > 0.) {
     vec3 p = ro + rd * tt;
-    vec3 n = calcNormal(p);
+    // the normal sampled over about a pixel: relief finer than the screen averages out instead of shimmering
+    vec3 n = calcNormalE(p, clamp(tt / (uRes.y * uFocal) * .8, .0012, .003));
     float ao = calcAO(p, n);
     vec3 h = toHead(p);
+    // close up, the surface is not quite even: the marble's polish, the long waves of the volcanic glass
+    float pix = pixelSize(tt, n, rd);
+    n = uMatter < .5 ? bumpNoise(n, h, 26., .035, pix) : bumpNoise(n, h, 11., .03, pix);
     vec3 L = normalize(vec3(-.6, .7, .5));
     vec3 R = normalize(vec3(.6, .35, -.75));
     float dif = clamp(dot(n, L), 0., 1.);
@@ -246,6 +252,14 @@ void main() {
       float vein = 1. - smoothstep(0., .1 + fwidth(s), s);
       vec3 tint = uInk * mix(vec3(1., .96, .9), vec3(.95, .93, 1.), vnoise(h * 1.3 + 3.));
       vec3 base = mix(tint, mix(gold, uAccent, .4) * .85, vein * .5);
+      // close up, wisps of grey between the big veins, fading in and out, and the crystalline grain of the stone
+      float near = resolved(.02, pix);
+      if (near > .01) {
+        float s2 = abs(sin(h.y * 7. - h.x * 4. + fbm3(h * 5.5 + uSeed + 7.) * 9.));
+        float wisp = pow(1. - s2, 14.) * smoothstep(.35, .7, fbm3(h * 3. + uSeed + 2.));
+        base = mix(base, base * vec3(.78, .79, .83), wisp * .6 * near);
+        base *= 1. + (vnoise(h * 110.) - .5) * .08 * resolved(.009, pix);
+      }
       col = base * (warm * dif * .95 + cool * (.14 + .22 * (1. - dif)) * (.6 + .4 * n.y)) * ao;
       col += base * .14 * clamp(dot(n, -rd), 0., 1.) * ao;
       // translucency: where the stone is thin, the light from behind glows through
@@ -264,6 +278,10 @@ void main() {
       float gv = abs(vnoise(h * 6. + uSeed * 2.) - .5);
       float gvein = 1. - smoothstep(0., .012 + fwidth(gv) * 1.5, gv);
       col += gold * gvein * (.15 + 1.1 * kick) * ao;
+      // close up, finer threads of gold branching off them, in patches
+      float gv2 = abs(vnoise(h * 19. + uSeed * 5.) - .5);
+      float gvein2 = (1. - smoothstep(0., .01 + fwidth(gv2) * 1.5, gv2)) * resolved(.012, pix) * smoothstep(.4, .65, vnoise(h * 3. + uSeed + 6.));
+      col += gold * gvein2 * (.08 + .5 * kick) * ao;
     }
     // Extinction: above the front, the head that is disappearing turns to grey stone and cracks
     if (uDying > .01 && uMorph > 0.) {

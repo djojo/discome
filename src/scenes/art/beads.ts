@@ -4,6 +4,7 @@ import { paletteParam } from "../palettes";
 import { ART_LIB, MARCH } from "./lib.glsl";
 import { CAMERA_GLSL, type Framing } from "./camera";
 import { STUDIO_GLSL } from "./studio.glsl";
+import { DETAIL_GLSL } from "./detail.glsl";
 
 /** Mercury drops on the plate. */
 const N = 8;
@@ -94,6 +95,7 @@ uniform float uSplash;   // seconds since the splash
 ${ART_LIB}
 ${CAMERA_GLSL}
 ${STUDIO_GLSL}
+${DETAIL_GLSL}
 
 /** A drop on the plate: flattened by its weight, trembling on the kick. */
 float drop(vec3 p, vec4 b, float i) {
@@ -165,6 +167,31 @@ vec3 mercury(vec3 p, vec3 n, vec3 rd) {
   return c;
 }
 
+/**
+ * Capillary ripples: fine rings running slowly out from the top of the nearest drop, never quite still, stirred by the
+ * kick. Only close up, where they are wider than a few pixels.
+ */
+vec3 ripples(vec3 p, vec3 n, float pix) {
+  const float F = 70.;
+  float vis = resolved(3.1416 / F, pix);
+  if (vis < .01) return n;
+  float best = 1e3;
+  vec4 bb = vec4(0.);
+  for (int i = 0; i < ${N}; i++) {
+    vec4 b = uB[i];
+    if (b.w < .005) continue;
+    float r = length(p.xz - b.xz) / b.w;
+    if (r < best) { best = r; bb = b; }
+  }
+  if (best > 1.1) return n;
+  vec2 dv = p.xz - bb.xz;
+  float rr = length(dv);
+  vec3 dir = vec3(dv.x, 0., dv.y) / max(rr, 1e-4);
+  dir -= n * dot(dir, n);
+  float amp = (.06 + .16 * uWob) * vis * smoothstep(1.1, .5, best) * smoothstep(.0, .3, best);
+  return normalize(n - dir * cos(rr * F - uTime * 1.5) * amp);
+}
+
 void main() {
   vec2 fc = gl_FragCoord.xy;
   vec2 uv = (fc - .5 * uRes) / uRes.y;
@@ -176,7 +203,8 @@ void main() {
   float t = march(ro, rd, min(tp, 20.));
   if (t > 0.) {
     vec3 p = ro + rd * t;
-    col = mercury(p, calcNormal(p), rd);
+    vec3 n = calcNormal(p);
+    col = mercury(p, ripples(p, n, pixelSize(t, n, rd)), rd);
     solid = 1.;
   } else if (tp < 40.) {
     // the plate: black glass, the drops mirrored in it, fading far away

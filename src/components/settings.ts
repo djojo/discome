@@ -236,7 +236,8 @@ export function loadSettings(): Settings {
       transition: TRANSITIONS.some((t) => t.id === saved.transition) ? saved.transition! : base.transition,
       quality: saved.quality && saved.quality in QUALITY_DPR ? saved.quality : base.quality,
       director: DIRECTOR_MODES.some((m) => m.id === saved.director) ? saved.director! : base.director,
-      fx: { ...NEUTRAL_FX, ...(saved.fx ?? {}) },
+      // effects added since the save take the world's value
+      fx: { ...lookFx(looks.find((l) => l.id === lookId) ?? LOOKS[0]), ...(saved.fx ?? {}) },
       customLooks: Array.isArray(saved.customLooks) ? saved.customLooks : [],
       lookId,
       params,

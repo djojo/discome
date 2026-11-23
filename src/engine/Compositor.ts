@@ -4,6 +4,7 @@ import { sceneById, type ParamValues, type SceneDef, type SceneInstance, type Vi
 import { COMPOSITOR_FRAG, COMPOSITOR_VERT } from "./compositorShader";
 import { blendCode, transitionCode, type LayerSettings, type TransitionSpec } from "./transitions";
 import { NEUTRAL_FX, type FxSettings } from "./fx";
+import { Bloom } from "./bloom";
 
 /** How the background (fond) sits behind the main scene. */
 export interface BackgroundLook {
@@ -117,6 +118,8 @@ export class Compositor {
   /** Ping-pong buffers for the trails effect (allocated on first use). */
   private feedback: [THREE.WebGLRenderTarget, THREE.WebGLRenderTarget] | null = null;
   private feedbackIndex = 0;
+  /** The glow around the highlights (allocated on first use). */
+  private bloom: Bloom | null = null;
   private readonly copyScene = new THREE.Scene();
   private readonly copyMaterial: THREE.ShaderMaterial;
   private readonly fxaaScene = new THREE.Scene();
@@ -198,6 +201,8 @@ export class Compositor {
       uMotionB: { value: 0 },
       uSizeA: { value: new THREE.Vector2(1, 1) },
       uSizeB: { value: new THREE.Vector2(1, 1) },
+      uBloomTex: { value: this.black as THREE.Texture },
+      uBloomAmt: { value: 0 },
     };
     this.material = new THREE.ShaderMaterial({
       uniforms: this.uniforms,
@@ -325,6 +330,7 @@ export class Compositor {
     for (const s of this.slots()) this.resizeSlot(s);
     const { w, h } = this.bufferSize();
     this.feedback?.forEach((t) => t.setSize(w, h));
+    this.bloom?.setSize(w, h);
   }
 
   /** Switch to a scene. A transition already running is completed first. */
@@ -420,6 +426,21 @@ export class Compositor {
       u.uHasL.value = 0;
     }
 
+    // Bloom: the glow around the highlights of the scene on screen (and of the incoming one)
+    const bloom = post.fx?.bloom ?? 0;
+    if (bloom > 0.005 && this.current) {
+      if (!this.bloom) {
+        this.bloom = new Bloom(this.renderer, this.targetType, this.black);
+        const { w, h } = this.bufferSize();
+        this.bloom.setSize(w, h);
+      }
+      const x = this.next ? Math.min(1, this.elapsed / Math.max(1e-3, this.transition.duration)) : 0;
+      u.uBloomTex.value = this.bloom.render(u.uA.value, this.next ? u.uB.value : null, x * x * (3 - 2 * x), 0.6);
+      u.uBloomAmt.value = bloom;
+    } else {
+      u.uBloomAmt.value = 0;
+    }
+
     // Travelling scenes report their speed: radial blur, at full resolution
     const blur = (post.fx?.speedBlur ?? NEUTRAL_FX.speedBlur) * 0.1;
     u.uMotionA.value = (this.current?.instance.motion?.() ?? 0) * blur;
@@ -500,6 +521,7 @@ export class Compositor {
     this.copyMaterial.dispose();
     this.fxaaMaterial.dispose();
     this.feedback?.forEach((t) => t.dispose());
+    this.bloom?.dispose();
     this.black.dispose();
     this.renderer.dispose();
   }

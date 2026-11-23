@@ -26,6 +26,8 @@ export interface FxSettings {
   retroOnHits: boolean;
   /** Feedback of the previous frame (light trails). */
   trails: number;
+  /** Glow of light around the highlights (bloom). */
+  bloom: number;
   /** Radial blur of travelling scenes, following their speed (nothing at cruise). */
   speedBlur: number;
   /** Strobe on the kicks of a drop. */
@@ -48,6 +50,7 @@ export const NEUTRAL_FX: FxSettings = {
   pixel: 0,
   retroOnHits: false,
   trails: 0,
+  bloom: 0,
   speedBlur: 0.5,
   strobe: "off",
 };
@@ -58,6 +61,7 @@ type NumericFx = Exclude<keyof FxSettings, "strobe" | "mirror" | "retroOnHits">;
 export const FX_SLIDERS: { key: NumericFx; label: string; min: number; max: number; step: number }[] = [
   { key: "chroma", label: "Aberration chromatique", min: 0, max: 1, step: 0.01 },
   { key: "trails", label: "Traînées", min: 0, max: 0.95, step: 0.01 },
+  { key: "bloom", label: "Halo lumineux (bloom)", min: 0, max: 1, step: 0.01 },
   { key: "speedBlur", label: "Flou de vitesse", min: 0, max: 1, step: 0.01 },
   { key: "scanlines", label: "Scanlines", min: 0, max: 1, step: 0.01 },
   { key: "crt", label: "Courbure CRT", min: 0, max: 1, step: 0.01 },
