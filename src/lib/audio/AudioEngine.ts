@@ -109,7 +109,10 @@ export class AudioEngine {
   private lastOnset = -1;
   private music = new MusicAnalyzer();
   private levels: StructureLevels | null = null;
-  /** The YouTube set opens with a drop on its first kick, as if Space had been pressed: no waiting for the first real one. */
+  /**
+   * Sources that play a piece from its start (the YouTube set, an audio file) open with a drop on their first kick,
+   * as if Space had been pressed: no waiting minutes for the first real one.
+   */
   private kickoff = false;
 
   constructor() {
@@ -273,7 +276,7 @@ export class AudioEngine {
     }
 
     this.kind = kind;
-    this.kickoff = kind === "youtube";
+    this.kickoff = kind === "youtube" || kind === "file";
     this.peaks = { bands: 0.4, bass: 0.4, mid: 0.4, treble: 0.4, volume: 0.1 };
   }
 
