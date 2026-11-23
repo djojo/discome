@@ -109,6 +109,8 @@ export class AudioEngine {
   private lastOnset = -1;
   private music = new MusicAnalyzer();
   private levels: StructureLevels | null = null;
+  /** The YouTube set opens with a drop on its first kick, as if Space had been pressed: no waiting for the first real one. */
+  private kickoff = false;
 
   constructor() {
     this.frame = {
@@ -271,6 +273,7 @@ export class AudioEngine {
     }
 
     this.kind = kind;
+    this.kickoff = kind === "youtube";
     this.peaks = { bands: 0.4, bass: 0.4, mid: 0.4, treble: 0.4, volume: 0.1 };
   }
 
@@ -278,6 +281,7 @@ export class AudioEngine {
     this.cleanup?.();
     this.cleanup = null;
     this.kind = null;
+    this.kickoff = false;
     this.levels = null;
     this.music.reset();
   }
@@ -329,6 +333,10 @@ export class AudioEngine {
       const step = Math.min(this.analysisAcc, 0.1);
       this.analysisAcc = 0;
       this.analyse(analyser, step);
+      if (this.kickoff && f.beat) {
+        this.kickoff = false;
+        this.music.triggerDrop();
+      }
     }
     // The beat clock runs every frame so ticks land on time even at 120 Hz.
     this.music.update(f, dt, this.levels);
