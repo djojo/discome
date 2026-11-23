@@ -25,6 +25,7 @@ export const mercury = defineShaderScene({
   name: "Mercure",
   tag: "Visage",
   energy: "medium",
+  hdr: true,
   renderScale: 0.7,
   mask: true,
   camera: { framings: FRAMINGS, glideBars: 2 },
@@ -138,9 +139,7 @@ void main() {
     col *= .55 + .45 * calcAO(p, n);
     col = mix(col, bg, smoothstep(4., 12., tt));
   }
-  col = aces(col);
-  col *= vignette(fc / uRes);
-  gl_FragColor = vec4(col, step(0., tt));
+  gl_FragColor = vec4(hdrOut(col), step(0., tt));
 }
 `,
 });

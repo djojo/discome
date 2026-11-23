@@ -28,6 +28,7 @@ export const downpour = defineShaderScene({
   id: "downpour",
   name: "Averse",
   energy: "calm",
+  hdr: true,
   renderScale: 0.9,
   camera: { framings: FRAMINGS, glideBars: 3 },
   description:
@@ -276,9 +277,7 @@ void main() {
   // the horizon: the faintest line where the water meets the night
   col += uAccent * .035 * exp(-abs(rd.y) * 70.);
   col += uInk * rain(ro, rd, tEnd, pa);
-  col = aces(col * 1.1);
-  col *= vignette(fc / uRes);
-  gl_FragColor = vec4(col, 1.);
+  gl_FragColor = vec4(hdrOut(col * 1.1), 1.);
 }
 `,
 });

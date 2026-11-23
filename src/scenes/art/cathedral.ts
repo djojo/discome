@@ -15,6 +15,7 @@ export const cathedral = defineShaderScene({
   id: "cathedral",
   name: "Cathédrale",
   energy: "intense",
+  hdr: true,
   renderScale: 0.85,
   // Alpha only marks the letterbox bars (option): the background may live in the dark nave, never in the bars
   mask: true,
@@ -227,10 +228,8 @@ void main() {
   float lum = dot(col, vec3(.3, .59, .11));
   col = mix(col, uAccent * lum * 1.4, smoothstep(.6, 2.4, lum));
   col += uInk * .02 * uHaze * (1. + 2. * uDrop + 2. * gWarp) * (1. - abs(uv.y) * 1.2);
-  col = 1. - exp(-col * 1.3);
-  col *= vignette(fc / uRes);
   float lb = uCinema > .5 ? letterbox(fc) : 1.;
-  gl_FragColor = vec4(col * lb, 1. - lb);
+  gl_FragColor = vec4(hdrOut(col * .8) * lb, 1. - lb);
 }
 `,
 });

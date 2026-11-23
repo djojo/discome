@@ -13,6 +13,7 @@ export const monolith = defineShaderScene({
   id: "monolith",
   name: "Monolithe",
   energy: "calm",
+  hdr: true,
   renderScale: 0.85,
   mask: true,
   // a lot (2.6 units) every ~1.7 s at cruise; each kick adds a gentle surge
@@ -525,11 +526,9 @@ void main() {
   float l = dot(col, vec3(.3, .59, .11));
   col = mix(vec3(l), col, .78);
   col = mix(col * vec3(.92, .96, 1.06), col * vec3(1.06, 1., .92), smoothstep(.1, .7, l));
-  col = aces(col * .95);
-  col *= vignette(fc / uRes);
   float lb = uCinema > .5 ? letterbox(fc) : 1.;
   // Letterbox bars stay opaque: the background never shows through them
-  gl_FragColor = vec4(col * lb, max(solid, 1. - lb));
+  gl_FragColor = vec4(hdrOut(col * .95) * lb, max(solid, 1. - lb));
 }
 `,
 });

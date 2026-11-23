@@ -34,6 +34,7 @@ export const wave = defineShaderScene({
   id: "mercury-wave",
   name: "Onde",
   energy: "medium",
+  hdr: true,
   renderScale: 0.8,
   mask: true,
   camera: { framings: FRAMINGS, glideBars: 3 },
@@ -289,9 +290,7 @@ void main() {
       solid = 1.;
     }
   }
-  col = aces(col);
-  col *= vignette(fc / uRes);
-  gl_FragColor = vec4(col, solid);
+  gl_FragColor = vec4(hdrOut(col), solid);
 }
 `,
 });

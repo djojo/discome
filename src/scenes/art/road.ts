@@ -18,6 +18,7 @@ export const arcaneRoad = defineShaderScene({
   id: "arcane-road",
   name: "La Voie",
   energy: "medium",
+  hdr: true,
   renderScale: 0.8,
   mask: true,
   flight: { cruise: 6, pump: 0.4 },
@@ -351,9 +352,7 @@ void main() {
     col += uBeam * shaft(ro, rd, gApex, normalize(vec3(-.3, 1., -.2)), 400., PS * .03, PS * .05, false, tEnd);
     col += uBeam * shaft(ro, rd, gApex, B, 300., PS * .05, PS * 1.2, true, tEnd);
   }
-  col = aces(col);
-  col *= vignette(fc / uRes);
-  gl_FragColor = vec4(col, solid);
+  gl_FragColor = vec4(hdrOut(col), solid);
 }
 `,
 });

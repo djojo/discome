@@ -22,6 +22,7 @@ export const arcaneNomad = defineShaderScene({
   id: "arcane-nomad",
   name: "Le Nomade",
   energy: "calm",
+  hdr: true,
   renderScale: 0.75,
   mask: true,
   camera: { framings: FRAMINGS, glideBars: 2 },
@@ -177,9 +178,7 @@ void main() {
     solid = max(solid, core);
   }
 
-  col = aces(col);
-  col *= vignette(fc / uRes);
-  gl_FragColor = vec4(col, solid);
+  gl_FragColor = vec4(hdrOut(col), solid);
 }
 `,
 });

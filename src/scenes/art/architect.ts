@@ -21,6 +21,7 @@ export const arcaneArchitect = defineShaderScene({
   id: "arcane-architect",
   name: "L'Architecte",
   energy: "medium",
+  hdr: true,
   renderScale: 0.8,
   mask: true,
   camera: { framings: FRAMINGS, glideBars: 2 },
@@ -232,9 +233,7 @@ void main() {
     col += sp * exp(-dot(uv * vec2(1.6, .9), uv * vec2(1.6, .9)) * 3.) * uDrop * mix(vec3(1.), spectral(h), .6) * 1.5;
   }
 
-  col = aces(col);
-  col *= vignette(fc / uRes);
-  gl_FragColor = vec4(col, solid);
+  gl_FragColor = vec4(hdrOut(col), solid);
 }
 `,
 });

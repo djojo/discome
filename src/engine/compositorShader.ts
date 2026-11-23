@@ -321,7 +321,9 @@ void main() {
   // Screen texture
   col *= 1.0 - uScan * 0.4 * (0.5 + 0.5 * sin(gl_FragCoord.y * 2.0));
   col += (hash(gl_FragCoord.xy + fract(uTime) * 413.0) - 0.5) * (0.18 * uGrain + 0.08 * uVhs);
-  col *= 1.0 - uVignette * smoothstep(0.25, 0.85, length((vUv - 0.5) * vec2(uRes.x / uRes.y, 1.0)) * 0.9);
+  // Vignette, the only one: every scene of a world is framed alike. It follows the frame, a little heavier on the sides.
+  vec2 vq = vUv * 2.0 - 1.0;
+  col *= max(1.0 - uVignette * 1.27 * vq.x * vq.x, 0.0) * max(1.0 - uVignette * 1.1 * vq.y * vq.y, 0.0);
 
   if (uStrobe > 0.0) {
     if (uStrobeMode == 1) col = mix(col, vec3(1.0), uStrobe);

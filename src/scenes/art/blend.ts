@@ -21,6 +21,7 @@ export const blend = defineShaderScene({
   id: "mercury-blend",
   name: "Mélange",
   energy: "calm",
+  hdr: true,
   renderScale: 0.8,
   mask: true,
   camera: { framings: FRAMINGS, glideBars: 2 },
@@ -153,9 +154,7 @@ void main() {
     col = metals(n, rd, mb);
     solid = 1.;
   }
-  col = aces(col);
-  col *= vignette(fc / uRes);
-  gl_FragColor = vec4(col, solid);
+  gl_FragColor = vec4(hdrOut(col), solid);
 }
 `,
 });

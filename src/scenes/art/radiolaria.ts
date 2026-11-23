@@ -21,6 +21,7 @@ export const radiolaria = defineShaderScene({
   id: "flesh-radiolaria",
   name: "Radiolaire",
   energy: "calm",
+  hdr: true,
   renderScale: 0.75,
   mask: true,
   camera: { framings: FRAMINGS, glideBars: 2 },
@@ -142,9 +143,7 @@ void main() {
     solid = 1.;
     col += heart * .25;
   } else col += heart;
-  col = aces(col * 1.1);
-  col *= vignette(fc / uRes);
-  gl_FragColor = vec4(col, max(solid, clamp(dot(heart, vec3(.3)) * 1.5, 0., 1.)));
+  gl_FragColor = vec4(hdrOut(col * 1.1), max(solid, clamp(dot(heart, vec3(.3)) * 1.5, 0., 1.)));
 }
 `,
 });

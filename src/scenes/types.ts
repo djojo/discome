@@ -53,6 +53,12 @@ interface SceneMeta {
   renderScale?: number;
   /** Alpha of the output is the subject's silhouette: the background stays behind it. */
   mask?: boolean;
+  /**
+   * Photographic scene: it hands over its light, linear and unbounded, and the compositor grades it (tone curve,
+   * vignette, bloom of its real highlights) like every other one. Graphic scenes (2D, line drawings, the classic 3D)
+   * write screen values themselves.
+   */
+  hdr?: boolean;
   params: ParamDef[];
 }
 

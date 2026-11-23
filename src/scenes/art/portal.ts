@@ -12,6 +12,7 @@ export const arcanePortal = defineShaderScene({
   id: "arcane-portal",
   name: "Le Portail",
   energy: "medium",
+  hdr: true,
   renderScale: 0.8,
   mask: true,
   description:
@@ -133,9 +134,7 @@ void main() {
   }
   col += column(ro, rd, tfw);
 
-  col = aces(col);
-  col *= vignette(fc / uRes);
-  gl_FragColor = vec4(col, solid);
+  gl_FragColor = vec4(hdrOut(col), solid);
 }
 `,
 });

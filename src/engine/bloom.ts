@@ -1,8 +1,13 @@
 import * as THREE from "three";
 import { COMPOSITOR_VERT } from "./compositorShader";
+import { TONE_GLSL } from "./tone";
 
 /**
- * The bright parts of the scene on screen (and of the incoming one during a transition), above a soft threshold.
+ * The bright parts of the scene on screen (and of the incoming one during a transition).
+ * - On screen values: a steep knee above a threshold, so that a merely light surface (white porcelain, pale stone)
+ *   hardly glows.
+ * - A photographic scene also hands its real light: what rises far above the screen's white (a spark, a glint, the
+ *   flash of a drop) glows as much as it rises, in its own colour, where the screen can only show white.
  * Nine bilinear taps spread over the destination pixel: a small highlight (a glint, a spark) is caught wherever it
  * falls, so the glow does not flicker as it moves.
  */
@@ -10,24 +15,39 @@ const PREFILTER_FRAG = /* glsl */ `
 precision highp float;
 uniform sampler2D uA;
 uniform sampler2D uB;
+uniform float uHdrA;
+uniform float uHdrB;
 uniform float uMixB;
-uniform float uThreshold;
+uniform float uHdrThreshold;
+uniform float uLdrThreshold;
 uniform vec2 uTexel;
 varying vec2 vUv;
-vec3 src(vec2 uv) {
-  vec3 a = texture2D(uA, uv).rgb;
-  return uMixB > 0.001 ? mix(a, texture2D(uB, uv).rgb, uMixB) : a;
+${TONE_GLSL}
+vec3 knee(vec3 d) {
+  float w = clamp((max(d.r, max(d.g, d.b)) - uLdrThreshold) / (1.0 - uLdrThreshold), 0.0, 1.0);
+  return d * w * w * w;
 }
-vec3 bright(vec3 c) {
-  float l = max(c.r, max(c.g, c.b));
-  // a steep knee: the highlights glow, a merely light surface (white porcelain, pale stone) hardly does
-  float w = clamp((l - uThreshold) / (1.0 - uThreshold), 0.0, 1.0);
-  return c * w * w * w;
+/**
+ * e: towards the frame's edges a photographic scene's light glows less (a column of light at the side does not flare,
+ * the eye stays inside), as when these scenes darkened their own edges before the glow.
+ */
+vec3 bright(vec3 c, float hdr, float e) {
+  if (hdr < 0.5) return knee(c);
+  float l = max(c.r, max(c.g, c.b)) * e;
+  // beyond the threshold, up to twice the screen's white more: a spark glows wide, but never into a white disc
+  float over = 2.0 * (1.0 - exp(-max(l - uHdrThreshold, 0.0) * 0.5));
+  return knee(aces(c) * e) + c * e * over / max(l, 1e-4);
+}
+float edge(vec2 uv) { vec2 q = (uv * 2.0 - 1.0) * vec2(0.62, 0.85); return 1.0 - dot(q, q) * 0.6; }
+vec3 src(vec2 uv) {
+  float e = edge(uv);
+  vec3 a = bright(texture2D(uA, uv).rgb, uHdrA, e);
+  return uMixB > 0.001 ? mix(a, bright(texture2D(uB, uv).rgb, uHdrB, e), uMixB) : a;
 }
 void main() {
   vec3 c = vec3(0.0);
   for (int y = -1; y <= 1; y++)
-    for (int x = -1; x <= 1; x++) c += bright(src(vUv + vec2(float(x), float(y)) * uTexel * 0.66));
+    for (int x = -1; x <= 1; x++) c += src(vUv + vec2(float(x), float(y)) * uTexel * 0.66);
   gl_FragColor = vec4(c / 9.0, 1.0);
 }
 `;
@@ -62,6 +82,11 @@ void main() {
 }
 `;
 
+export interface BloomSource {
+  texture: THREE.Texture;
+  hdr: boolean;
+}
+
 /** Levels of the chain: from half the screen (at most 540 px high) down to a thirty-second. */
 const LEVELS = 5;
 const MAX_FIRST_HEIGHT = 540;
@@ -95,8 +120,14 @@ export class Bloom {
       uniforms: {
         uA: { value: blank },
         uB: { value: blank },
+        uHdrA: { value: 0 },
+        uHdrB: { value: 0 },
         uMixB: { value: 0 },
-        uThreshold: { value: 0.6 },
+        // the screen value where the glow starts
+        uLdrThreshold: { value: 0.6 },
+        // photographic scenes: the light above this glows on top, as much as it rises (2.5 is .94 on screen: the
+        // scenes' usual highlights stay below, only sparks, glints and flashes go beyond)
+        uHdrThreshold: { value: 2.5 },
         uTexel: { value: new THREE.Vector2() },
       },
     });
@@ -145,8 +176,8 @@ export class Bloom {
     this.renderer.render(this.scene, this.camera);
   }
 
-  /** The halo of the scene a (mixed toward b by mixB during a transition). */
-  render(a: THREE.Texture, b: THREE.Texture | null, mixB: number, threshold: number): THREE.Texture {
+  /** The halo of the scene a (mixed toward b by mixB during a transition); hdr: the texture holds linear light. */
+  render(a: BloomSource, b: BloomSource | null, mixB: number): THREE.Texture {
     if (!this.levels.length) this.allocate();
     const r = this.renderer;
     const autoClear = r.autoClear;
@@ -154,10 +185,11 @@ export class Bloom {
     r.autoClear = false;
     const L = this.levels;
     const pu = this.prefilter.uniforms;
-    pu.uA.value = a;
-    pu.uB.value = b ?? a;
+    pu.uA.value = a.texture;
+    pu.uHdrA.value = a.hdr ? 1 : 0;
+    pu.uB.value = (b ?? a).texture;
+    pu.uHdrB.value = (b ?? a).hdr ? 1 : 0;
     pu.uMixB.value = b ? mixB : 0;
-    pu.uThreshold.value = threshold;
     pu.uTexel.value.set(1 / L[0].width, 1 / L[0].height);
     this.pass(this.prefilter, L[0]);
     for (let i = 1; i < L.length; i++) {

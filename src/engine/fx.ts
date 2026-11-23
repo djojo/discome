@@ -40,7 +40,7 @@ export const NEUTRAL_FX: FxSettings = {
   crt: 0,
   grain: 0,
   vhs: 0,
-  vignette: 0.25,
+  vignette: 0.18,
   hue: 0,
   saturation: 1,
   contrast: 1,

@@ -12,6 +12,7 @@ export const arcanePrism = defineShaderScene({
   id: "arcane-prism",
   name: "Les Trois",
   energy: "intense",
+  hdr: true,
   renderScale: 0.8,
   mask: true,
   description:
@@ -105,9 +106,7 @@ void main() {
   }
   col += prismBeam(ro, rd, tbest);
 
-  col = aces(col);
-  col *= vignette(fc / uRes);
-  gl_FragColor = vec4(col, solid);
+  gl_FragColor = vec4(hdrOut(col), solid);
 }
 `,
 });

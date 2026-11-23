@@ -61,6 +61,7 @@ export const metamorphosis = defineShaderScene({
   name: "Métamorphose",
   tag: "Visage",
   energy: "calm",
+  hdr: true,
   renderScale: 0.75,
   mask: true,
   camera: { framings: FRAMINGS, glideBars: 2 },
@@ -326,9 +327,7 @@ void main() {
     col += gold * sparks * 1.6;
   }
 
-  col = aces(col * 1.05);
-  col *= vignette(fc / uRes);
-  gl_FragColor = vec4(col, max(step(0., tt), clamp(sparks, 0., 1.)));
+  gl_FragColor = vec4(hdrOut(col * 1.05), max(step(0., tt), clamp(sparks, 0., 1.)));
 }
 `,
 });

@@ -32,6 +32,7 @@ export const race = defineShaderScene({
   id: "race",
   name: "La Course",
   energy: "medium",
+  hdr: true,
   renderScale: 0.75,
   camera: { framings: FRAMINGS, glideBars: 2 },
   description:
@@ -365,9 +366,7 @@ void main() {
   col += uInk * smallHearts(ro, rd, tEnd, pa, cam[0], cam[1]);
   // the burst lights up the night for an instant
   col += uInk * .3 * exp(-uBurst * 3.);
-  col = aces(col * 1.1);
-  col *= vignette(fc / uRes);
-  gl_FragColor = vec4(col, 1.);
+  gl_FragColor = vec4(hdrOut(col * 1.1), 1.);
 }
 `,
 });

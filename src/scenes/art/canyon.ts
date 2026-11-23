@@ -18,6 +18,7 @@ function canyonScene(id: string, name: string, relief: "gorge" | "mesas", palett
     id,
     name,
     energy: "medium",
+    hdr: true,
     renderScale: 0.7,
     mask: true,
     flight: { cruise: 2.2 },
@@ -319,9 +320,7 @@ void main() {
     col += uAccent * beams / 6. * (.35 + 1.2 * uBeat + uDrop) * .6;
   }
 
-  col = aces(col);
-  col *= vignette(fc / uRes);
-  gl_FragColor = vec4(col, step(0., t));
+  gl_FragColor = vec4(hdrOut(col), step(0., t));
 }
 `;
 

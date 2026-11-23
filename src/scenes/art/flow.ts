@@ -13,6 +13,7 @@ export const flow = defineShaderScene({
   id: "mercury-flow",
   name: "Coulée",
   energy: "calm",
+  hdr: true,
   renderScale: 0.85,
   description:
     "Un mur de métal liquide vu de face : le mercure et un second métal (la couleur du monde) y coulent très lentement et se mélangent en descendant, en filets qui s'enroulent jusqu'à se fondre ; au drop, une coulée d'or descend du haut.",
@@ -109,9 +110,7 @@ void main() {
   vec3 col = mix(silver, metal2, c0.y);
   // the kick: the crests catch the light
   col += mix(vec3(1.), other, c0.y * .5) * uGlint * .35 * smoothstep(.6, .95, h0);
-  col = aces(col * 1.05);
-  col *= vignette(fc / uRes);
-  gl_FragColor = vec4(col, 1.);
+  gl_FragColor = vec4(hdrOut(col * 1.05), 1.);
 }
 `,
 });

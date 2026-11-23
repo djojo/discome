@@ -26,6 +26,7 @@ export const panopticon = defineShaderScene({
   id: "panopticon",
   name: "Panoptique",
   energy: "medium",
+  hdr: true,
   renderScale: 0.8,
   mask: true,
   camera: { framings: FRAMINGS, glideBars: 2 },
@@ -196,9 +197,7 @@ void main() {
     }
   }
   if (hitT > 0.) col = mix(col, uBase * .4, 1. - exp(-hitT * .02));
-  col = aces(col * 1.1);
-  col *= vignette(fc / uRes);
-  gl_FragColor = vec4(col, step(0., hitT));
+  gl_FragColor = vec4(hdrOut(col * 1.1), step(0., hitT));
 }
 `,
 });

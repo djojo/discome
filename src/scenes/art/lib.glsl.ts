@@ -1,3 +1,5 @@
+import { TONE_GLSL } from "@/engine/tone";
+
 /**
  * Shared GLSL for the "art direction" scenes (ported from the mood-board mock-ups).
  * The shader-scene header already provides the audio uniforms, `pal()`, palette roles
@@ -19,8 +21,19 @@ float sdBox(vec3 p, vec3 b) { vec3 q = abs(p) - b; return length(max(q, 0.)) + m
 float smin(float a, float b, float k) { float h = clamp(.5 + .5 * (b - a) / k, 0., 1.); return mix(b, a, h) - k * h * (1. - h); }
 float smax(float a, float b, float k) { return -smin(-a, -b, k); }
 mat3 lookAt(vec3 ro, vec3 ta) { vec3 f = normalize(ta - ro); vec3 r = normalize(cross(f, vec3(0, 1, 0))); vec3 u = cross(r, f); return mat3(r, u, f); }
-vec3 aces(vec3 x) { return clamp((x * (2.51 * x + .03)) / (x * (2.43 * x + .59) + .14), 0., 1.); }
-float vignette(vec2 q) { q = q * 2. - 1.; return 1. - dot(q * vec2(.62, .85), q * vec2(.62, .85)) * .6; }
+${TONE_GLSL}
+/**
+ * The end of a photographic scene (SceneMeta.hdr): its light, linear and unbounded. The compositor tone-maps it like
+ * every other scene, frames it with the world's vignette and lets its real highlights bloom. Where the GPU has no float
+ * targets (LDR_OUT), the scene tone-maps itself.
+ */
+vec3 hdrOut(vec3 c) {
+#ifdef LDR_OUT
+  return aces(c);
+#else
+  return clamp(c, 0., 64.);
+#endif
+}
 float letterbox(vec2 fc) {
   if (uRes.x / uRes.y < 1.5) return 1.;
   float lb = (1. - (uRes.x / 2.39) / uRes.y) * .5;

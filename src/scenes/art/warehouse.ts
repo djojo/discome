@@ -13,6 +13,7 @@ export const warehouse = defineShaderScene({
   id: "warehouse",
   name: "Entrepôt",
   energy: "medium",
+  hdr: true,
   renderScale: 0.8,
   mask: true,
   flight: { cruise: 2, pump: 0.3 },
@@ -199,9 +200,7 @@ void main() {
     col += lamp * (1.2 + 1.8 * kick) * (1. - smoothstep(.05, .1, abs(p.x))) * step(.3, fract(p.z / 3.));
   } else hitT = 60.;
   col = mix(col, uBase * .5 + lamp * .04, 1. - exp(-hitT * .04));
-  col = aces(col * 1.1);
-  col *= vignette(fc / uRes);
-  gl_FragColor = vec4(col, 1.);
+  gl_FragColor = vec4(hdrOut(col * 1.1), 1.);
 }
 `,
 });

@@ -26,6 +26,7 @@ export const spirit = defineShaderScene({
   id: "canyon-spirit",
   name: "L'Esprit",
   energy: "calm",
+  hdr: true,
   renderScale: 0.7,
   mask: true,
   camera: { framings: FRAMINGS, glideBars: 2 },
@@ -248,9 +249,7 @@ void main() {
   col = col * (1. - fcol.a) + fcol.rgb;
   solid = max(solid, fcol.a);
   col += embers(ro, rd, tEnd, pa);
-  col = aces(col * 1.1);
-  col *= vignette(fc / uRes);
-  gl_FragColor = vec4(col, solid);
+  gl_FragColor = vec4(hdrOut(col * 1.1), solid);
 }
 `,
 });

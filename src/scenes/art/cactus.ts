@@ -28,6 +28,7 @@ export const cactus = defineShaderScene({
   id: "canyon-cactus",
   name: "Le Cactus",
   energy: "calm",
+  hdr: true,
   renderScale: 0.75,
   mask: true,
   camera: { framings: FRAMINGS, glideBars: 2 },
@@ -223,9 +224,7 @@ void main() {
     }
     solid = 1.;
   }
-  col = aces(col * 1.15);
-  col *= vignette(fc / uRes);
-  gl_FragColor = vec4(col, solid);
+  gl_FragColor = vec4(hdrOut(col * 1.15), solid);
 }
 `,
 });

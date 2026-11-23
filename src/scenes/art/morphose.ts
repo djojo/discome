@@ -27,6 +27,7 @@ export const morphose = defineShaderScene({
   id: "flesh-morph",
   name: "Morphose",
   energy: "medium",
+  hdr: true,
   renderScale: 0.75,
   mask: true,
   camera: { framings: FRAMINGS, glideBars: 2 },
@@ -245,9 +246,7 @@ void main() {
     col = shade(p, n, rd, pix) * ao;
     solid = 1.;
   }
-  col = aces(col * 1.1);
-  col *= vignette(fc / uRes);
-  gl_FragColor = vec4(col, solid);
+  gl_FragColor = vec4(hdrOut(col * 1.1), solid);
 }
 `,
 });

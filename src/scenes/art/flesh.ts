@@ -22,6 +22,7 @@ export const flesh = defineShaderScene({
   id: "flesh",
   name: "Chair",
   energy: "calm",
+  hdr: true,
   renderScale: 0.7,
   mask: true,
   camera: { framings: FRAMINGS, glideBars: 2 },
@@ -252,9 +253,7 @@ void main() {
     }
   }
 
-  col = aces(col * 1.1);
-  col *= vignette(fc / uRes);
-  gl_FragColor = vec4(col, step(0., tt));
+  gl_FragColor = vec4(hdrOut(col * 1.1), step(0., tt));
 }
 `,
 });

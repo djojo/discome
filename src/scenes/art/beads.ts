@@ -33,6 +33,7 @@ export const beads = defineShaderScene({
   id: "mercury-beads",
   name: "Billes",
   energy: "calm",
+  hdr: true,
   renderScale: 0.8,
   mask: true,
   camera: { framings: FRAMINGS, glideBars: 3 },
@@ -221,9 +222,7 @@ void main() {
     col = mix(col, c, fade);
     solid = fade;
   }
-  col = aces(col);
-  col *= vignette(fc / uRes);
-  gl_FragColor = vec4(col, solid);
+  gl_FragColor = vec4(hdrOut(col), solid);
 }
 `,
 });

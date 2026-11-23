@@ -29,6 +29,7 @@ export const porcelain = defineShaderScene({
   name: "Porcelaine",
   tag: "Visage",
   energy: "calm",
+  hdr: true,
   renderScale: 0.75,
   mask: true,
   camera: { framings: FRAMINGS, glideBars: 2 },
@@ -471,12 +472,12 @@ void main() {
     col += vec3(1., .97, .9) * exp(-d * 380.) * glint;
   }
 
-  col = aces(col * 1.05);
-  col *= vignette(fc / uRes);
+  col *= 1.05;
   float alpha = step(0., tt);
   if (uSelfie > .5) {
     // A phone held up to the face: a portrait screen, its grid, a focus square that follows the face,
-    // the recording dot blinking on the beat. The drop is the shutter.
+    // the recording dot blinking on the beat. The drop is the shutter. Its marks are drawn in screen values.
+    col = aces(col);
     vec2 fsz = vec2(.43 * 9. / 19.5, .43);
     vec2 dq = abs(uv) - fsz + .05;
     float frame = length(max(dq, 0.)) + min(max(dq.x, dq.y), 0.) - .05;
@@ -502,10 +503,11 @@ void main() {
       col += vec3(1.) * pow(uDrop, 3.) * .7;
       alpha = 1.;
     }
+    col = acesInv(col);
   }
   float lb = uCinema > .5 ? letterbox(fc) : 1.;
   // Letterbox bars stay opaque: the background never shows through them
-  gl_FragColor = vec4(col * lb, max(alpha, 1. - lb));
+  gl_FragColor = vec4(hdrOut(col) * lb, max(alpha, 1. - lb));
 }
 `,
 });

@@ -44,6 +44,8 @@ interface ShaderSceneOptions {
   renderScale?: number;
   /** The shader writes its subject's silhouette in alpha (keeps the background behind it). */
   mask?: boolean;
+  /** Photographic scene: ends with `hdrOut(col)` (ART_LIB), the compositor grades it (see SceneMeta.hdr). */
+  hdr?: boolean;
   params: ParamDef[];
   /** Fragment shader body. Has access to the header uniforms above and `pal(t)`. */
   fragment: string;
@@ -79,6 +81,7 @@ export function defineShaderScene(opts: ShaderSceneOptions): SceneGLDef {
     energy: opts.energy,
     renderScale: opts.renderScale,
     mask: opts.mask,
+    hdr: opts.hdr,
     params: opts.params,
     create({ renderer, target }) {
       const scene = new THREE.Scene();
@@ -113,6 +116,8 @@ export function defineShaderScene(opts: ShaderSceneOptions): SceneGLDef {
         uniforms,
         vertexShader: "void main() { gl_Position = vec4(position.xy, 0.0, 1.0); }",
         fragmentShader: HEADER + opts.fragment,
+        // no float target to hand the light over in: the scene tone-maps itself
+        ...(opts.hdr && target.texture.type === THREE.UnsignedByteType ? { defines: { LDR_OUT: "" } } : {}),
         depthTest: false,
         depthWrite: false,
       });

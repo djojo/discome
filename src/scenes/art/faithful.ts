@@ -26,6 +26,7 @@ export const faithful = defineShaderScene({
   id: "faithful",
   name: "Les Fidèles",
   energy: "calm",
+  hdr: true,
   renderScale: 0.8,
   mask: true,
   camera: { framings: FRAMINGS, glideBars: 2 },
@@ -254,9 +255,7 @@ void main() {
     }
   }
 
-  col = aces(col * 1.1);
-  col *= vignette(fc / uRes);
-  gl_FragColor = vec4(col, step(0., hitT));
+  gl_FragColor = vec4(hdrOut(col * 1.1), step(0., hitT));
 }
 `,
 });

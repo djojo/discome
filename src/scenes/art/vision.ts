@@ -12,6 +12,7 @@ export const vision = defineShaderScene({
   id: "canyon-vision",
   name: "La Vision",
   energy: "calm",
+  hdr: true,
   description:
     "La transe du breakdown : une plongée lente et sans fin dans un mandala de fils, de côtes de cactus, de pétales et d'yeux, replié en kaléidoscope ; les anneaux respirent au kick.",
   params: [paletteParam("peyote"), { type: "range", key: "symmetry", label: "Symétrie", min: 5, max: 12, step: 1, default: 8 }],
@@ -89,9 +90,7 @@ void main() {
   // the heart of the vision: a soft glow where everything comes from
   col += mix(uAccent, vec3(1.), .3) * exp(-r * 9.) * (.6 + uBeat);
   col *= smoothstep(.0, .06, r) * .9 + .1;
-  col = aces(col * 1.05);
-  col *= vignette(fc / uRes);
-  gl_FragColor = vec4(col, 1.);
+  gl_FragColor = vec4(hdrOut(col * 1.05), 1.);
 }
 `,
 });

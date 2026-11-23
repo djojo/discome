@@ -5,6 +5,7 @@ import { COMPOSITOR_FRAG, COMPOSITOR_VERT } from "./compositorShader";
 import { blendCode, transitionCode, type LayerSettings, type TransitionSpec } from "./transitions";
 import { NEUTRAL_FX, type FxSettings } from "./fx";
 import { Bloom } from "./bloom";
+import { TONE_GLSL } from "./tone";
 
 /** How the background (fond) sits behind the main scene. */
 export interface BackgroundLook {
@@ -35,30 +36,40 @@ void main() { gl_FragColor = vec4(texture2D(tMap, vUv).rgb, 1.0); }
 `;
 
 /**
- * FXAA (the classic Lottes version): smooths the stair-steps of a shader scene's edges at its own resolution, before
- * it is enlarged to the screen. Keeps the alpha (the scene's silhouette mask) untouched.
+ * Developing a scene, at its own resolution, before it is enlarged to the screen:
+ * - a photographic scene's light goes through the tone curve every such scene shares (uHdr);
+ * - FXAA (the classic Lottes version) smooths the stair-steps of a shader scene's edges (uAA), on the developed
+ *   values, as the eye sees them (a highlight's edge is smoothed like any other).
+ * The alpha (the scene's silhouette mask) is kept untouched.
  */
-const FXAA_FRAG = /* glsl */ `
+const DEVELOP_FRAG = /* glsl */ `
 precision highp float;
 uniform sampler2D tMap;
 uniform vec2 uTexel;
+uniform float uHdr;
+uniform float uAA;
 varying vec2 vUv;
+${TONE_GLSL}
+vec3 tone(vec3 c) { return uHdr > 0.5 ? aces(c) : c; }
+vec3 tap(vec2 uv) { return tone(texture2D(tMap, uv).rgb); }
 float lum(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
 void main() {
   vec4 cM = texture2D(tMap, vUv);
-  float lM = lum(cM.rgb);
-  float lNW = lum(texture2D(tMap, vUv + vec2(-1.0, -1.0) * uTexel).rgb);
-  float lNE = lum(texture2D(tMap, vUv + vec2(1.0, -1.0) * uTexel).rgb);
-  float lSW = lum(texture2D(tMap, vUv + vec2(-1.0, 1.0) * uTexel).rgb);
-  float lSE = lum(texture2D(tMap, vUv + vec2(1.0, 1.0) * uTexel).rgb);
+  vec3 m = tone(cM.rgb);
+  if (uAA < 0.5) { gl_FragColor = vec4(m, cM.a); return; }
+  float lM = lum(m);
+  float lNW = lum(tap(vUv + vec2(-1.0, -1.0) * uTexel));
+  float lNE = lum(tap(vUv + vec2(1.0, -1.0) * uTexel));
+  float lSW = lum(tap(vUv + vec2(-1.0, 1.0) * uTexel));
+  float lSE = lum(tap(vUv + vec2(1.0, 1.0) * uTexel));
   float lMin = min(lM, min(min(lNW, lNE), min(lSW, lSE)));
   float lMax = max(lM, max(max(lNW, lNE), max(lSW, lSE)));
-  if (lMax - lMin < max(0.0312, lMax * 0.125)) { gl_FragColor = cM; return; }
+  if (lMax - lMin < max(0.0312, lMax * 0.125)) { gl_FragColor = vec4(m, cM.a); return; }
   vec2 dir = vec2(-((lNW + lNE) - (lSW + lSE)), (lNW + lSW) - (lNE + lSE));
   float reduce = max((lNW + lNE + lSW + lSE) * 0.03125, 1.0 / 128.0);
   dir = clamp(dir / (min(abs(dir.x), abs(dir.y)) + reduce), -8.0, 8.0) * uTexel;
-  vec3 a = 0.5 * (texture2D(tMap, vUv - dir / 6.0).rgb + texture2D(tMap, vUv + dir / 6.0).rgb);
-  vec3 b = a * 0.5 + 0.25 * (texture2D(tMap, vUv - dir * 0.5).rgb + texture2D(tMap, vUv + dir * 0.5).rgb);
+  vec3 a = 0.5 * (tap(vUv - dir / 6.0) + tap(vUv + dir / 6.0));
+  vec3 b = a * 0.5 + 0.25 * (tap(vUv - dir * 0.5) + tap(vUv + dir * 0.5));
   float lB = lum(b);
   gl_FragColor = vec4((lB < lMin || lB > lMax) ? a : b, cM.a);
 }
@@ -75,8 +86,13 @@ interface Slot {
   canvasTexture?: THREE.CanvasTexture;
   /** WebGL scenes: an offscreen render target. */
   target?: THREE.WebGLRenderTarget;
-  /** Shader scenes: the anti-aliased copy of target (FXAA), what the final pass reads. */
-  aa?: THREE.WebGLRenderTarget;
+  /** The scene's light is in target, linear and unbounded (a photographic scene, float targets): tone-mapped here. */
+  hdr: boolean;
+  /**
+   * Shader scenes on screen and photographic backgrounds: target developed (tone curve, FXAA on screen), what the
+   * final pass reads.
+   */
+  developed?: THREE.WebGLRenderTarget;
   /** Resolution factor: 1 for the main scenes, BG_SCALE for backgrounds (soft and cheap). */
   scale: number;
   lastUsed: number;
@@ -122,8 +138,8 @@ export class Compositor {
   private bloom: Bloom | null = null;
   private readonly copyScene = new THREE.Scene();
   private readonly copyMaterial: THREE.ShaderMaterial;
-  private readonly fxaaScene = new THREE.Scene();
-  private readonly fxaaMaterial: THREE.ShaderMaterial;
+  private readonly developScene = new THREE.Scene();
+  private readonly developMaterial: THREE.ShaderMaterial;
   /**
    * How a scene's resolution is chosen: "fixed" (its own renderScale), "full" (every scene at full resolution) or
    * "adaptive" (learnt per scene: each finds the highest resolution that stays fluid, remembered across sessions).
@@ -220,14 +236,19 @@ export class Compositor {
       depthWrite: false,
     });
     this.copyScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.copyMaterial));
-    this.fxaaMaterial = new THREE.ShaderMaterial({
-      uniforms: { tMap: { value: this.black as THREE.Texture }, uTexel: { value: new THREE.Vector2(1, 1) } },
+    this.developMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        tMap: { value: this.black as THREE.Texture },
+        uTexel: { value: new THREE.Vector2(1, 1) },
+        uHdr: { value: 0 },
+        uAA: { value: 1 },
+      },
       vertexShader: COMPOSITOR_VERT,
-      fragmentShader: FXAA_FRAG,
+      fragmentShader: DEVELOP_FRAG,
       depthTest: false,
       depthWrite: false,
     });
-    this.fxaaScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.fxaaMaterial));
+    this.developScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.developMaterial));
     this.targetType = this.renderer.extensions.has("EXT_color_buffer_float") ? THREE.HalfFloatType : THREE.UnsignedByteType;
     try {
       const saved = JSON.parse(localStorage.getItem(LEARNT_KEY) ?? "{}") as Record<string, number>;
@@ -426,7 +447,8 @@ export class Compositor {
       u.uHasL.value = 0;
     }
 
-    // Bloom: the glow around the highlights of the scene on screen (and of the incoming one)
+    // Bloom: the glow around the highlights of the scene on screen (and of the incoming one), from their real light
+    // when they are photographic
     const bloom = post.fx?.bloom ?? 0;
     if (bloom > 0.005 && this.current) {
       if (!this.bloom) {
@@ -435,7 +457,9 @@ export class Compositor {
         this.bloom.setSize(w, h);
       }
       const x = this.next ? Math.min(1, this.elapsed / Math.max(1e-3, this.transition.duration)) : 0;
-      u.uBloomTex.value = this.bloom.render(u.uA.value, this.next ? u.uB.value : null, x * x * (3 - 2 * x), 0.6);
+      const a = { texture: this.lightOf(this.current, u.uA.value), hdr: this.current.hdr };
+      const b = this.next ? { texture: this.lightOf(this.next, u.uB.value), hdr: this.next.hdr } : null;
+      u.uBloomTex.value = this.bloom.render(a, b, x * x * (3 - 2 * x));
       u.uBloomAmt.value = bloom;
     } else {
       u.uBloomAmt.value = 0;
@@ -519,7 +543,7 @@ export class Compositor {
     this.current = this.next = this.layer = this.bg = this.bgNext = null;
     this.material.dispose();
     this.copyMaterial.dispose();
-    this.fxaaMaterial.dispose();
+    this.developMaterial.dispose();
     this.feedback?.forEach((t) => t.dispose());
     this.bloom?.dispose();
     this.black.dispose();
@@ -590,17 +614,19 @@ export class Compositor {
       canvasTexture.generateMipmaps = false;
       canvasTexture.minFilter = THREE.LinearFilter;
       const instance = def.create({ canvas, ctx, viewport });
-      return { key, def, instance, canvas, canvasTexture, scale, lastUsed: 0 };
+      return { key, def, instance, canvas, canvasTexture, hdr: false, scale, lastUsed: 0 };
     }
     // 3D scenes get MSAA (rendering offscreen loses the canvas antialiasing); fullscreen shaders get FXAA instead
-    // (main scenes only: backgrounds are soft anyway)
+    // (main scenes only: backgrounds are soft anyway). Photographic scenes are developed even as backgrounds.
     const is3D = def.tag === "3D";
+    const hdr = def.hdr === true && this.targetType !== THREE.UnsignedByteType;
     const k = this.scaleOf(def, scale);
     const tw = Math.max(1, Math.floor(w * k)), th = Math.max(1, Math.floor(h * k));
     const target = new THREE.WebGLRenderTarget(tw, th, { samples: is3D ? 4 : 0, depthBuffer: is3D, type: this.targetType });
-    const aa = !is3D && scale === 1 ? new THREE.WebGLRenderTarget(tw, th, { depthBuffer: false, type: this.targetType }) : undefined;
+    const developed =
+      !is3D && (scale === 1 || hdr) ? new THREE.WebGLRenderTarget(tw, th, { depthBuffer: false, type: this.targetType }) : undefined;
     const instance = def.create({ renderer: this.renderer, viewport, target });
-    return { key, def, instance, target, aa, scale, lastUsed: 0 };
+    return { key, def, instance, target, hdr, developed, scale, lastUsed: 0 };
   }
 
   private resizeSlot(s: Slot) {
@@ -612,7 +638,7 @@ export class Compositor {
     }
     const k = this.scaleOf(s.def, s.scale);
     s.target?.setSize(Math.max(1, Math.floor(w * k)), Math.max(1, Math.floor(h * k)));
-    s.aa?.setSize(Math.max(1, Math.floor(w * k)), Math.max(1, Math.floor(h * k)));
+    s.developed?.setSize(Math.max(1, Math.floor(w * k)), Math.max(1, Math.floor(h * k)));
     s.instance.resize?.(this.viewportFor(s.scale));
   }
 
@@ -626,13 +652,21 @@ export class Compositor {
     this.renderer.setRenderTarget(s.target!);
     s.instance.render(frame, params, dt);
     const out = s.instance.output?.() ?? s.target!.texture;
-    if (!s.aa || s.instance.output) return out;
-    // FXAA at the scene's own resolution
-    this.fxaaMaterial.uniforms.tMap.value = out;
-    (this.fxaaMaterial.uniforms.uTexel.value as THREE.Vector2).set(1 / s.aa.width, 1 / s.aa.height);
-    this.renderer.setRenderTarget(s.aa);
-    this.renderer.render(this.fxaaScene, this.quadCamera);
-    return s.aa.texture;
+    if (!s.developed || s.instance.output) return out;
+    // tone curve and FXAA at the scene's own resolution
+    const m = this.developMaterial.uniforms;
+    m.tMap.value = out;
+    (m.uTexel.value as THREE.Vector2).set(1 / s.developed.width, 1 / s.developed.height);
+    m.uHdr.value = s.hdr ? 1 : 0;
+    m.uAA.value = s.scale === 1 ? 1 : 0;
+    this.renderer.setRenderTarget(s.developed);
+    this.renderer.render(this.developScene, this.quadCamera);
+    return s.developed.texture;
+  }
+
+  /** What the bloom reads: a photographic scene's light before the tone curve, else what the final pass reads. */
+  private lightOf(s: Slot, shown: THREE.Texture) {
+    return s.hdr && !s.instance.output ? s.target!.texture : shown;
   }
 
   /** The texel size of what a slot hands to the final pass. */
@@ -645,6 +679,6 @@ export class Compositor {
     s.instance.dispose?.();
     s.canvasTexture?.dispose();
     s.target?.dispose();
-    s.aa?.dispose();
+    s.developed?.dispose();
   }
 }
