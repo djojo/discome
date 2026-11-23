@@ -59,6 +59,9 @@ uniform float uMaskB;
 // radial speed blur of travelling scenes (0 = none)
 uniform float uMotionA;
 uniform float uMotionB;
+// texel counts of the two scenes: sharper (bicubic) upscaling when they render below the screen's resolution
+uniform vec2 uSizeA;
+uniform vec2 uSizeB;
 varying vec2 vUv;
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -76,8 +79,31 @@ vec3 zoomTap(sampler2D t, vec2 uv, float amount) {
   return acc / 8.0;
 }
 
-vec3 A(vec2 uv) { return uMotionA > 0.001 ? zoomTap(uA, uv, uMotionA) : texture2D(uA, uv).rgb; }
-vec3 B(vec2 uv) { return uMotionB > 0.001 ? zoomTap(uB, uv, uMotionB) : texture2D(uB, uv).rgb; }
+/**
+ * Catmull-Rom bicubic sampling from 5 bilinear taps (the four corner taps are negligible): crisper than bilinear when
+ * a scene rendered at a lower resolution is enlarged to the screen.
+ */
+vec3 bicubic(sampler2D t, vec2 uv, vec2 size) {
+  vec2 sp = uv * size;
+  vec2 tc = floor(sp - 0.5) + 0.5;
+  vec2 f = sp - tc;
+  vec2 w0 = f * (-0.5 + f * (1.0 - 0.5 * f));
+  vec2 w1 = 1.0 + f * f * (-2.5 + 1.5 * f);
+  vec2 w2 = f * (0.5 + f * (2.0 - 1.5 * f));
+  vec2 w3 = f * f * (-0.5 + 0.5 * f);
+  vec2 w12 = w1 + w2;
+  vec2 tc0 = (tc - 1.0) / size, tc3 = (tc + 2.0) / size, tc12 = (tc + w2 / w12) / size;
+  vec3 c = texture2D(t, vec2(tc12.x, tc0.y)).rgb * (w12.x * w0.y)
+         + texture2D(t, vec2(tc0.x, tc12.y)).rgb * (w0.x * w12.y)
+         + texture2D(t, tc12).rgb * (w12.x * w12.y)
+         + texture2D(t, vec2(tc3.x, tc12.y)).rgb * (w3.x * w12.y)
+         + texture2D(t, vec2(tc12.x, tc3.y)).rgb * (w12.x * w3.y);
+  return max(c / ((w12.x * w0.y) + (w0.x * w12.y) + (w12.x * w12.y) + (w3.x * w12.y) + (w12.x * w3.y)), 0.0);
+}
+vec3 sharpTap(sampler2D t, vec2 uv, vec2 size) { return size.x < uRes.x * 0.98 ? bicubic(t, uv, size) : texture2D(t, uv).rgb; }
+
+vec3 A(vec2 uv) { return uMotionA > 0.001 ? zoomTap(uA, uv, uMotionA) : sharpTap(uA, uv, uSizeA); }
+vec3 B(vec2 uv) { return uMotionB > 0.001 ? zoomTap(uB, uv, uMotionB) : sharpTap(uB, uv, uSizeB); }
 vec3 zoomBlurB(vec2 uv, float amount) { return zoomTap(uB, uv, amount + uMotionB); }
 
 vec3 transition(vec2 uv) {
@@ -296,6 +322,8 @@ void main() {
     else col = mix(col, 1.0 - clamp(col, 0.0, 1.0), step(0.5, uStrobe));
   }
 
+  // a dither of half a level (triangular, changing every frame): no bands in dark gradients once quantised to 8 bits
+  col += (hash(gl_FragCoord.xy + fract(uTime * 7.3) * 91.0) + hash(gl_FragCoord.xy * 1.37 + 4.7 + fract(uTime * 3.1) * 57.0) - 1.0) / 255.0;
   gl_FragColor = vec4(max(col, 0.0) * inside, 1.0);
 }
 `;

@@ -530,6 +530,7 @@ export function ControlPanel({
             <option value="low">Basse (fluide)</option>
             <option value="normal">Normale</option>
             <option value="high">Haute (Retina)</option>
+            <option value="ultra">Ultra (pleine résolution)</option>
           </select>
         </label>
       </section>

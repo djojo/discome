@@ -38,10 +38,13 @@ export const WORLD_RULES: { id: WorldRule; label: string }[] = [
   { id: "phrases8", label: "Toutes les 8 phrases (64 mesures)" },
 ];
 
-export type Quality = "auto" | "low" | "normal" | "high";
+export type Quality = "auto" | "low" | "normal" | "high" | "ultra";
 
-/** Max device-pixel-ratio per quality level ("auto" starts at "normal" and adapts to the frame rate). */
-export const QUALITY_DPR: Record<Quality, number> = { auto: 1.25, low: 0.75, normal: 1.25, high: 2 };
+/**
+ * Max device-pixel-ratio per quality level ("auto" starts at "normal" and adapts to the frame rate, up to the screen's
+ * own density; "ultra" is the screen's density with every scene at full resolution).
+ */
+export const QUALITY_DPR: Record<Quality, number> = { auto: 1.25, low: 0.75, normal: 1.25, high: 2, ultra: 3 };
 
 export interface Settings {
   /** What is on screen: a world plan "world:plan", or a plain scene id picked from the catalogue. */

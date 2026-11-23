@@ -33,6 +33,36 @@ varying vec2 vUv;
 void main() { gl_FragColor = vec4(texture2D(tMap, vUv).rgb, 1.0); }
 `;
 
+/**
+ * FXAA (the classic Lottes version): smooths the stair-steps of a shader scene's edges at its own resolution, before
+ * it is enlarged to the screen. Keeps the alpha (the scene's silhouette mask) untouched.
+ */
+const FXAA_FRAG = /* glsl */ `
+precision highp float;
+uniform sampler2D tMap;
+uniform vec2 uTexel;
+varying vec2 vUv;
+float lum(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
+void main() {
+  vec4 cM = texture2D(tMap, vUv);
+  float lM = lum(cM.rgb);
+  float lNW = lum(texture2D(tMap, vUv + vec2(-1.0, -1.0) * uTexel).rgb);
+  float lNE = lum(texture2D(tMap, vUv + vec2(1.0, -1.0) * uTexel).rgb);
+  float lSW = lum(texture2D(tMap, vUv + vec2(-1.0, 1.0) * uTexel).rgb);
+  float lSE = lum(texture2D(tMap, vUv + vec2(1.0, 1.0) * uTexel).rgb);
+  float lMin = min(lM, min(min(lNW, lNE), min(lSW, lSE)));
+  float lMax = max(lM, max(max(lNW, lNE), max(lSW, lSE)));
+  if (lMax - lMin < max(0.0312, lMax * 0.125)) { gl_FragColor = cM; return; }
+  vec2 dir = vec2(-((lNW + lNE) - (lSW + lSE)), (lNW + lSW) - (lNE + lSE));
+  float reduce = max((lNW + lNE + lSW + lSE) * 0.03125, 1.0 / 128.0);
+  dir = clamp(dir / (min(abs(dir.x), abs(dir.y)) + reduce), -8.0, 8.0) * uTexel;
+  vec3 a = 0.5 * (texture2D(tMap, vUv - dir / 6.0).rgb + texture2D(tMap, vUv + dir / 6.0).rgb);
+  vec3 b = a * 0.5 + 0.25 * (texture2D(tMap, vUv - dir * 0.5).rgb + texture2D(tMap, vUv + dir * 0.5).rgb);
+  float lB = lum(b);
+  gl_FragColor = vec4((lB < lMin || lB > lMax) ? a : b, cM.a);
+}
+`;
+
 /** A live scene instance plus the surface it draws into. */
 interface Slot {
   /** What the slot shows: a world plan key ("world:plan") or a plain scene id. */
@@ -44,10 +74,15 @@ interface Slot {
   canvasTexture?: THREE.CanvasTexture;
   /** WebGL scenes: an offscreen render target. */
   target?: THREE.WebGLRenderTarget;
+  /** Shader scenes: the anti-aliased copy of target (FXAA), what the final pass reads. */
+  aa?: THREE.WebGLRenderTarget;
   /** Resolution factor: 1 for the main scenes, BG_SCALE for backgrounds (soft and cheap). */
   scale: number;
   lastUsed: number;
 }
+
+/** Where the adaptive resolution of each scene is remembered. */
+const LEARNT_KEY = "discome.sceneScale";
 
 /** Backgrounds render at a fraction of the screen resolution: naturally soft, and cheap. */
 const BG_SCALE = 0.4;
@@ -80,6 +115,16 @@ export class Compositor {
   private feedbackIndex = 0;
   private readonly copyScene = new THREE.Scene();
   private readonly copyMaterial: THREE.ShaderMaterial;
+  private readonly fxaaScene = new THREE.Scene();
+  private readonly fxaaMaterial: THREE.ShaderMaterial;
+  /**
+   * How a scene's resolution is chosen: "fixed" (its own renderScale), "full" (every scene at full resolution) or
+   * "adaptive" (learnt per scene: each finds the highest resolution that stays fluid, remembered across sessions).
+   */
+  private resMode: "fixed" | "full" | "adaptive" = "fixed";
+  private readonly learnt = new Map<string, number>();
+  /** Offscreen images in half float when the GPU allows: no banding in dark gradients. */
+  private readonly targetType: THREE.TextureDataType;
 
   private readonly black: THREE.DataTexture;
   private readonly quadScene = new THREE.Scene();
@@ -147,6 +192,8 @@ export class Compositor {
       uMaskB: { value: 0 },
       uMotionA: { value: 0 },
       uMotionB: { value: 0 },
+      uSizeA: { value: new THREE.Vector2(1, 1) },
+      uSizeB: { value: new THREE.Vector2(1, 1) },
     };
     this.material = new THREE.ShaderMaterial({
       uniforms: this.uniforms,
@@ -164,6 +211,64 @@ export class Compositor {
       depthWrite: false,
     });
     this.copyScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.copyMaterial));
+    this.fxaaMaterial = new THREE.ShaderMaterial({
+      uniforms: { tMap: { value: this.black as THREE.Texture }, uTexel: { value: new THREE.Vector2(1, 1) } },
+      vertexShader: COMPOSITOR_VERT,
+      fragmentShader: FXAA_FRAG,
+      depthTest: false,
+      depthWrite: false,
+    });
+    this.fxaaScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.fxaaMaterial));
+    this.targetType = this.renderer.extensions.has("EXT_color_buffer_float") ? THREE.HalfFloatType : THREE.UnsignedByteType;
+    try {
+      const saved = JSON.parse(localStorage.getItem(LEARNT_KEY) ?? "{}") as Record<string, number>;
+      for (const [id, k] of Object.entries(saved)) if (typeof k === "number" && k >= 0.4 && k <= 1) this.learnt.set(id, k);
+    } catch {
+      // nothing learnt yet
+    }
+  }
+
+  setResolutionMode(mode: "fixed" | "full" | "adaptive") {
+    if (mode === this.resMode) return;
+    this.resMode = mode;
+    for (const s of this.slots()) this.resizeSlot(s);
+  }
+
+  /**
+   * Adaptive resolution: nudge the scene on screen down (too slow) or up (headroom). Returns false when it can't go
+   * further (then the caller lowers the screen density instead). Ignored during transitions (two scenes render).
+   */
+  adaptCurrent(dir: -1 | 1): boolean {
+    const s = this.current;
+    if (this.resMode !== "adaptive" || !s || this.next || !s.target) return false;
+    const id = s.def.id;
+    const k = this.scaleOf(s.def, 1);
+    const nk = dir < 0 ? Math.max(0.4, k * 0.85) : Math.min(1, k * 1.06);
+    if (Math.abs(nk - k) < 1e-3) return false;
+    this.learnt.set(id, nk);
+    this.resizeSlot(s);
+    this.saveLearnt();
+    return true;
+  }
+
+  /** A scene's resolution factor now. Backgrounds keep their own (they are soft and small anyway). */
+  private scaleOf(def: SceneDef, slotScale: number) {
+    const k = def.renderScale ?? 1;
+    if (slotScale !== 1 || this.resMode === "fixed") return k;
+    if (this.resMode === "full") return 1;
+    return this.learnt.get(def.id) ?? k;
+  }
+
+  private saveTimer = 0;
+  private saveLearnt() {
+    window.clearTimeout(this.saveTimer);
+    this.saveTimer = window.setTimeout(() => {
+      try {
+        localStorage.setItem(LEARNT_KEY, JSON.stringify(Object.fromEntries(this.learnt)));
+      } catch {
+        // private mode or full storage: the scales are simply learnt again next time
+      }
+    }, 2000);
   }
 
   /** Scene shown once the current transition (if any) completes. */
@@ -288,11 +393,13 @@ export class Compositor {
     }
 
     u.uA.value = this.current ? this.renderSlot(this.current, frame, paramsFor, dt) : this.black;
+    if (this.current) this.sizeOf(this.current, u.uSizeA.value);
     u.uMaskA.value = this.current?.def.mask ? 1 : 0;
     u.uMaskB.value = this.next?.def.mask ? 1 : 0;
 
     if (this.next) {
       u.uB.value = this.renderSlot(this.next, frame, paramsFor, dt);
+      this.sizeOf(this.next, u.uSizeB.value);
       u.uHasB.value = 1;
       u.uProgress.value = this.elapsed / this.transition.duration;
       u.uTransition.value = transitionCode(this.transition.type);
@@ -324,7 +431,7 @@ export class Compositor {
       // Render into a feedback buffer (which reads the previous one), then copy to the screen.
       if (!this.feedback) {
         const { w, h } = this.bufferSize();
-        this.feedback = [new THREE.WebGLRenderTarget(w, h), new THREE.WebGLRenderTarget(w, h)];
+        this.feedback = [new THREE.WebGLRenderTarget(w, h, { type: this.targetType }), new THREE.WebGLRenderTarget(w, h, { type: this.targetType })];
       }
       const prev = this.feedback[this.feedbackIndex];
       const next = this.feedback[1 - this.feedbackIndex];
@@ -379,6 +486,7 @@ export class Compositor {
     this.current = this.next = this.layer = this.bg = this.bgNext = null;
     this.material.dispose();
     this.copyMaterial.dispose();
+    this.fxaaMaterial.dispose();
     this.feedback?.forEach((t) => t.dispose());
     this.black.dispose();
     this.renderer.dispose();
@@ -450,15 +558,15 @@ export class Compositor {
       const instance = def.create({ canvas, ctx, viewport });
       return { key, def, instance, canvas, canvasTexture, scale, lastUsed: 0 };
     }
-    // 3D scenes get MSAA (rendering offscreen loses the canvas antialiasing); fullscreen shaders don't need it.
+    // 3D scenes get MSAA (rendering offscreen loses the canvas antialiasing); fullscreen shaders get FXAA instead
+    // (main scenes only: backgrounds are soft anyway)
     const is3D = def.tag === "3D";
-    const k = def.renderScale ?? 1;
-    const target = new THREE.WebGLRenderTarget(Math.max(1, Math.floor(w * k)), Math.max(1, Math.floor(h * k)), {
-      samples: is3D ? 4 : 0,
-      depthBuffer: is3D,
-    });
+    const k = this.scaleOf(def, scale);
+    const tw = Math.max(1, Math.floor(w * k)), th = Math.max(1, Math.floor(h * k));
+    const target = new THREE.WebGLRenderTarget(tw, th, { samples: is3D ? 4 : 0, depthBuffer: is3D, type: this.targetType });
+    const aa = !is3D && scale === 1 ? new THREE.WebGLRenderTarget(tw, th, { depthBuffer: false, type: this.targetType }) : undefined;
     const instance = def.create({ renderer: this.renderer, viewport, target });
-    return { key, def, instance, target, scale, lastUsed: 0 };
+    return { key, def, instance, target, aa, scale, lastUsed: 0 };
   }
 
   private resizeSlot(s: Slot) {
@@ -468,8 +576,9 @@ export class Compositor {
       s.canvas.height = h;
       s.canvasTexture!.dispose(); // reallocate the GPU texture at the new size
     }
-    const k = s.def.renderScale ?? 1;
+    const k = this.scaleOf(s.def, s.scale);
     s.target?.setSize(Math.max(1, Math.floor(w * k)), Math.max(1, Math.floor(h * k)));
+    s.aa?.setSize(Math.max(1, Math.floor(w * k)), Math.max(1, Math.floor(h * k)));
     s.instance.resize?.(this.viewportFor(s.scale));
   }
 
@@ -482,12 +591,26 @@ export class Compositor {
     }
     this.renderer.setRenderTarget(s.target!);
     s.instance.render(frame, params, dt);
-    return s.instance.output?.() ?? s.target!.texture;
+    const out = s.instance.output?.() ?? s.target!.texture;
+    if (!s.aa || s.instance.output) return out;
+    // FXAA at the scene's own resolution
+    this.fxaaMaterial.uniforms.tMap.value = out;
+    (this.fxaaMaterial.uniforms.uTexel.value as THREE.Vector2).set(1 / s.aa.width, 1 / s.aa.height);
+    this.renderer.setRenderTarget(s.aa);
+    this.renderer.render(this.fxaaScene, this.quadCamera);
+    return s.aa.texture;
+  }
+
+  /** The texel size of what a slot hands to the final pass. */
+  private sizeOf(s: Slot, out: THREE.Vector2) {
+    if (s.canvas) out.set(s.canvas.width, s.canvas.height);
+    else if (s.target) out.set(s.target.width, s.target.height);
   }
 
   private destroySlot(s: Slot) {
     s.instance.dispose?.();
     s.canvasTexture?.dispose();
     s.target?.dispose();
+    s.aa?.dispose();
   }
 }

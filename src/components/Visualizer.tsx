@@ -112,13 +112,14 @@ export default function Visualizer() {
     // any of them (or another world) without a head popping in late. ~25 Mo, read once.
     const headsTimer = window.setTimeout(() => preloadHeads(HEADS.map((h) => h.id)), 4000);
 
-    // "Auto" quality: lower the resolution when frames get slow, raise it back when there's headroom.
+    // "Auto" quality: the screen's own density, and each scene at the highest resolution that stays fluid (learnt per
+    // scene by the compositor); the density itself only drops when a scene can't go any lower.
     const AUTO_MIN = 0.6;
-    const autoMax = Math.min(window.devicePixelRatio || 1, 1.5);
-    let autoDpr = Math.min(QUALITY_DPR.auto, autoMax);
+    const autoMax = Math.min(window.devicePixelRatio || 1, 2);
+    let autoDpr = autoMax;
+    let sceneGood = 0;
     let frameAvg = 1 / 60;
     let nextCheck = performance.now() + 2500;
-    let goodChecks = 0;
 
     const measure = () => {
       const q = settingsRef.current.quality;
@@ -129,20 +130,27 @@ export default function Visualizer() {
         dpr: Math.min(window.devicePixelRatio || 1, cap),
       };
       compositor.setViewport(viewport);
+      compositor.setResolutionMode(q === "ultra" ? "full" : q === "auto" ? "adaptive" : "fixed");
     };
 
     const adaptQuality = (now: number, interval: number) => {
-      if (interval < 0.25) frameAvg += (interval - frameAvg) * 0.05; // ignore pauses (hidden tab)
+      if (interval < 0.25) frameAvg += (interval - frameAvg) * 0.08; // ignore pauses (hidden tab)
       if (settingsRef.current.quality !== "auto" || now < nextCheck) return;
-      nextCheck = now + 2000;
-      if (frameAvg > 1 / 45 && autoDpr > AUTO_MIN) {
-        autoDpr = Math.max(AUTO_MIN, autoDpr * 0.85);
-        goodChecks = 0;
-        measure();
-      } else if (frameAvg < 1 / 57 && autoDpr < autoMax && ++goodChecks >= 4) {
-        autoDpr = Math.min(autoMax, autoDpr * 1.1);
-        goodChecks = 0;
-        measure();
+      nextCheck = now + 700;
+      if (frameAvg > 1 / 50) {
+        // too slow: the scene on screen gives up some resolution; if it can't, the whole screen does
+        sceneGood = 0;
+        if (!compositor.adaptCurrent(-1) && autoDpr > AUTO_MIN) {
+          autoDpr = Math.max(AUTO_MIN, autoDpr * 0.85);
+          nextCheck = now + 2000;
+          measure();
+        }
+      } else if (frameAvg < 1 / 58 && ++sceneGood >= 3) {
+        sceneGood = 0;
+        if (autoDpr < autoMax) {
+          autoDpr = Math.min(autoMax, autoDpr * 1.1);
+          measure();
+        } else compositor.adaptCurrent(1);
       }
     };
 
