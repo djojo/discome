@@ -1,7 +1,28 @@
 import { createDemoSource } from "./demoSource";
 import { emptyMusicState, MusicAnalyzer, type MusicState, type StructureLevels } from "./MusicAnalyzer";
 
-export type SourceKind = "mic" | "tab" | "file" | "demo";
+/** "youtube": the set of the start screen, played in an embedded player and heard by capturing this very tab. */
+export type SourceKind = "mic" | "tab" | "file" | "demo" | "youtube";
+
+/** getDisplayMedia options Chrome understands but TypeScript's DOM types don't list yet. */
+type DisplayMediaOptions = DisplayMediaStreamOptions & {
+  preferCurrentTab?: boolean;
+  selfBrowserSurface?: "include" | "exclude";
+  surfaceSwitching?: "include" | "exclude";
+  systemAudio?: "include" | "exclude";
+  monitorTypeSurfaces?: "include" | "exclude";
+};
+
+/** This tab only, sound included: Chrome then asks a plain « share this tab? » instead of the full picker. */
+const OWN_TAB: DisplayMediaOptions = {
+  video: true,
+  audio: true,
+  preferCurrentTab: true,
+  selfBrowserSurface: "include",
+  surfaceSwitching: "exclude",
+  systemAudio: "exclude",
+  monitorTypeSurfaces: "exclude",
+};
 
 /**
  * Snapshot of the analysed audio, refreshed every animation frame.
@@ -196,13 +217,23 @@ export class AudioEngine {
         node.disconnect();
         stream.getTracks().forEach((t) => t.stop());
       };
-    } else if (kind === "tab") {
-      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+    } else if (kind === "tab" || kind === "youtube") {
+      const ownTab = kind === "youtube";
+      if (!navigator.mediaDevices?.getDisplayMedia) {
+        throw new Error("Ce navigateur ne sait pas capturer le son d'un onglet : ouvre Discome dans Chrome ou Edge sur ordinateur.");
+      }
+      const stream = await navigator.mediaDevices.getDisplayMedia(ownTab ? OWN_TAB : { video: true, audio: true });
       const audioTracks = stream.getAudioTracks();
       if (audioTracks.length === 0) {
         stream.getTracks().forEach((t) => t.stop());
-        throw new Error("Aucun son partagé : coche « Partager aussi l'audio de l'onglet » dans la fenêtre de partage.");
+        throw new Error(
+          ownTab
+            ? "Aucun son capturé : laisse « Partager aussi l'audio de l'onglet » coché (Chrome ou Edge seulement)."
+            : "Aucun son partagé : coche « Partager aussi l'audio de l'onglet » dans la fenêtre de partage.",
+        );
       }
+      // Only the sound of our own tab is wanted: no need to keep copying the page's pixels.
+      if (ownTab) stream.getVideoTracks().forEach((t) => t.stop());
       const node = ctx.createMediaStreamSource(new MediaStream(audioTracks));
       node.connect(analyser); // the shared tab already plays its own sound
       audioTracks[0].addEventListener("ended", () => {

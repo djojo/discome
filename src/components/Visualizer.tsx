@@ -7,6 +7,8 @@ import { Compositor } from "@/engine/Compositor";
 import { Director } from "@/engine/Director";
 import type { Section } from "@/lib/audio/MusicAnalyzer";
 import { ControlPanel, SOURCE_LABELS } from "./ControlPanel";
+import { YouTubePlayer } from "./YouTubePlayer";
+import { YOUTUBE_SET } from "@/lib/audio/youtube";
 import {
   allLooks,
   applyLook,
@@ -36,8 +38,11 @@ const SECTION_LABELS: Record<Section, string> = {
   drop: "Drop",
 };
 
-function describeError(e: unknown): string {
+function describeError(e: unknown, kind: SourceKind): string {
   if (e instanceof DOMException) {
+    if (e.name === "NotAllowedError" && kind === "youtube") {
+      return "Partage refusé : pour suivre la vidéo, Discome doit écouter le son de cet onglet. Clique sur « Autoriser » dans Chrome.";
+    }
     if (e.name === "NotAllowedError") return "Accès refusé : autorise le micro ou le partage d'écran dans le navigateur.";
     if (e.name === "NotFoundError") return "Aucune entrée audio détectée.";
     if (e.name === "NotSupportedError") return "Ce navigateur ne permet pas cette source.";
@@ -62,6 +67,8 @@ export default function Visualizer() {
   const [error, setError] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [filePaused, setFilePaused] = useState(false);
+  /** The YouTube player is on screen: from the click on « play » (it loads while Chrome asks to share the tab) until the source stops. */
+  const [youtubeOn, setYoutubeOn] = useState(false);
   const [panelOpen, setPanelOpen] = useState(true);
   const [uiHidden, setUiHidden] = useState(false);
   const [idle, setIdle] = useState(false);
@@ -393,7 +400,10 @@ export default function Visualizer() {
   }, []);
 
   useEffect(() => {
-    engine.setOnEnded(() => setSource(null));
+    engine.setOnEnded(() => {
+      setSource(null);
+      setYoutubeOn(false);
+    });
     return () => {
       engine.setOnEnded(null);
       engine.stop();
@@ -409,15 +419,17 @@ export default function Visualizer() {
       }
       setBusy(true);
       setError(null);
+      if (kind === "youtube") setYoutubeOn(true);
       try {
         await engine.start(kind, file);
         setSource(kind);
-        setFileName(file?.name ?? null);
+        setFileName(file?.name ?? (kind === "youtube" ? YOUTUBE_SET.title : null));
         setFilePaused(false);
       } catch (e) {
-        setError(describeError(e));
+        setError(describeError(e, kind));
         setSource(engine.kind);
       } finally {
+        setYoutubeOn(engine.kind === "youtube");
         setBusy(false);
       }
     },
@@ -428,7 +440,16 @@ export default function Visualizer() {
     engine.stop();
     setSource(null);
     setFileName(null);
+    setYoutubeOn(false);
   }, [engine]);
+
+  const onYoutubeError = useCallback(
+    (message: string) => {
+      stopSource();
+      setError(message);
+    },
+    [stopSource],
+  );
 
   const onFile = (f: File | undefined) => {
     if (!f) return;
@@ -533,6 +554,22 @@ export default function Visualizer() {
               <button className="start-btn start-btn-accent" disabled={busy} onClick={() => startSource("demo")}>
                 <strong>Démo</strong>
                 <span>Boucle techno générée en direct</span>
+              </button>
+              <button
+                className="start-btn start-btn-play"
+                disabled={busy}
+                onClick={() => startSource("youtube")}
+                aria-label={`Lire ${YOUTUBE_SET.title} sur YouTube`}
+              >
+                <span className="play-icon" aria-hidden>
+                  <svg width="18" height="20" viewBox="0 0 18 20">
+                    <path d="M0 0 L18 10 L0 20 Z" fill="currentColor" />
+                  </svg>
+                </span>
+                <span className="play-text">
+                  <strong>{YOUTUBE_SET.title}</strong>
+                  <span>Set YouTube · Chrome te demande de partager cet onglet pour en écouter le son</span>
+                </span>
               </button>
             </div>
           </div>
@@ -640,6 +677,14 @@ export default function Visualizer() {
         </>
       )}
 
+      {youtubeOn && (
+        <YouTubePlayer
+          videoId={YOUTUBE_SET.videoId}
+          title={YOUTUBE_SET.title}
+          play={source === "youtube"}
+          onError={onYoutubeError}
+        />
+      )}
       {source && debugOpen && <pre ref={debugRef} className="debug" />}
       {dragging && <div className="dropzone">Dépose ton fichier audio</div>}
       {error && (

@@ -169,6 +169,62 @@ button:disabled {
   border: 1px solid transparent;
 }
 
+/* the YouTube set: one wide « play » card under the four sources */
+.start-btn-play {
+  grid-column: 1 / -1;
+  flex-direction: row;
+  align-items: center;
+  gap: 16px;
+}
+
+.start-btn .play-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: var(--grad);
+  color: #fff;
+}
+
+.start-btn .play-icon svg {
+  margin-left: 3px;
+}
+
+.start-btn .play-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  font-size: inherit;
+  color: inherit;
+}
+
+/* ------------------------------------------------------------------ YouTube player */
+
+/* YouTube wants embedded players visible and at least 200 × 200 px: a corner of the screen, not hidden with the HUD. */
+.yt-player {
+  position: absolute;
+  left: 16px;
+  bottom: 80px;
+  width: 356px;
+  max-width: calc(100% - 32px);
+  height: 200px;
+  border-radius: 10px;
+  border: 1px solid var(--line-strong);
+  background: #000;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.yt-player iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
 /* ------------------------------------------------------------------ HUD */
 
 .hud {
@@ -387,6 +443,10 @@ button:disabled {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 6px;
+}
+
+.source-grid .chip:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
 }
 
 .chip {

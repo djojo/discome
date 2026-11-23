@@ -14,6 +14,7 @@ export const SOURCE_LABELS: Record<SourceKind, string> = {
   tab: "Son d'un onglet",
   file: "Fichier",
   demo: "Démo",
+  youtube: "Set YouTube",
 };
 
 interface Props {
