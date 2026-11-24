@@ -21,7 +21,16 @@ npm run dev   # http://localhost:3000
   - Tes retouches sont gardées par plan et par monde ; « Réinitialiser le plan » revient aux réglages du monde.
   - **Enchaîner les mondes** : ils se succèdent, au breakdown (et au moins toutes les 8 phrases) ou toutes les 4 ou 8 phrases. Le passage se fait par le noir, et les effets glissent vers ceux du nouveau monde.
   - **Mondes actifs** : un interrupteur sur chaque carte met le monde dans la rotation ou l'en sort (tous y sont par défaut). Le dernier monde actif ne peut pas être éteint ; éteindre le monde à l'écran passe tout de suite au suivant.
-- **Ta soirée** (Réglages, ou sur l'accueil) : le nom de la soirée, une deuxième ligne pour le DJ ou la date, ou un logo. Chaque monde le montre dans son style, sur un plan « Titre » : en porcelaine qui se brise en bandes au drop (Porcelaine), en inscription de béton au-dessus de l'avenue (Monolithe), en lignes de niveau sous un cadre de reconnaissance (Signal).
+- **Ta soirée** (Réglages, ou sur l'accueil) : le nom de la soirée, une deuxième ligne pour le DJ ou la date, ou un logo. Chaque monde le montre dans son style, sur un plan « Titre » :
+    - Porcelaine : en céramique fendue de vermillon, qui se brise en bandes au drop ;
+    - Monolithe : en inscription de béton au-dessus de l'avenue ;
+    - Signal : en lignes de niveau sous un cadre de reconnaissance ;
+    - Bestiaire : en capitales de marbre ou d'obsidienne, qui se changent lentement en bustes et reviennent ;
+    - Mercure : en lettres de chrome dressées dans le bain de métal ;
+    - Canyon : en fumée et en fils de laine lumineuse au-dessus du feu ;
+    - Arcanes : en relique de verre et de pixels, pleine de cosmos, au-dessus du mage ;
+    - Cathédrale : en lettres de lumière au bout de la nef, reflétées par le sol ;
+    - Chair : sous la peau de la Membrane, qui respire et le laisse transparaître.
   - Le réalisateur le montre à un moment fort : à l'entrée dans un monde ou à son premier drop, une fois par monde, un monde sur deux, ou souvent. Il reste à l'écran le temps d'un plan. `N` ou « Afficher maintenant » le montre tout de suite.
   - Un logo est réduit à sa silhouette (sa transparence, ou ce qui se détache de la couleur de ses bords) ; chaque monde lui donne sa matière. Un aperçu montre la forme retenue, « Inverser » corrige un logo lu à l'envers.
   - Le titre est écrit dans la police du monde, servie par l'application (aucun appel externe pendant la soirée). Il devient un champ de distance en relief, bombé ou taillé, que les scènes à têtes sculptent comme une tête (`src/brand/`).
@@ -91,6 +100,7 @@ npm run dev   # http://localhost:3000
 | Morphose | Le Halo en 3D : une forme de chair translucide en deux couronnes rayonnantes, dont chaque branche suit une bande du spectre ; elle passe lentement d'une famille à l'autre (oursin, fleur, étoile, anneau) ; une vague de lumière part du cœur au kick | Elle s'ouvre en corolle et se referme en une nouvelle famille |
 | Radiolaire | Squelette de verre d'un micro-organisme : sphère en dentelle hérissée d'épines dont le maillage se transforme, une coque dans la coque, une lueur rouge au cœur sur les basses ; les épines s'allument au kick | La coque s'ouvre en deux sur la coque intérieure |
 | Méduse | Méduse bioluminescente dont l'ombrelle bat à son rythme, filaments ondulants, neige marine ; ses canaux s'allument au kick | Un essaim de petites méduses s'élève |
+| Membrane | Une peau de nacre qui respire, filmée de près ; quelque chose pousse dessous (un visage, ou le titre de la soirée) et la tend jusqu'à laisser passer la lumière ; une impulsion court dans les veines au kick | La lumière inonde la peau |
 | Signal | Données sur une grille suisse : spectrogramme qui défile, grands chiffres, code-barres, onde ; la mise en page change à chaque phrase | Inversion |
 | Flux | Fil infini de cartes sans un mot, qui défile par coups de pouce, de plus en plus vite ; stories, cœurs au kick | Le fil se fige et se déchire en pixels ; au breakdown, il ralentit et s'assombrit |
 | La Course | Silhouettes qui courent sur une piste sans fin vers un grand cœur lumineux qui ne se rapproche jamais, chacune suivie d'une file de petites silhouettes (ses followers) ; le cœur bat en double coup au kick, les foulées accélèrent pendant la montée ; au fil de la soirée, plus de coureurs, et certains s'épuisent | Le cœur éclate en pluie de petits cœurs, un coureur tombe et sa file passe à ses voisins |

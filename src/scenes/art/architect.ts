@@ -3,7 +3,7 @@ import { paletteParam } from "../palettes";
 import { ART_LIB } from "./lib.glsl";
 import { ARCANE_GLSL, arcaneParams, arcaneUniforms, updateArcane } from "./arcane.glsl";
 import { CAMERA_GLSL, type Framing } from "./camera";
-import { HEAD_GLSL, headUniforms, setHead } from "./heads";
+import { HEAD_GLSL, headUniforms, setHead, TITLE_HEAD } from "./heads";
 
 const FRAMINGS: Framing[] = [
   { az: -0.45, el: 0.04, dist: 6.2, target: [0, 0.05, 0], focal: 1.55, weight: 3 },
@@ -11,6 +11,11 @@ const FRAMINGS: Framing[] = [
   { az: -0.2, el: -0.12, dist: 4.6, target: [0, 0.5, 0], focal: 1.7, weight: 2 },
   { az: 0.5, el: 0.1, dist: 2.6, target: [0.45, 0.7, 0.45], focal: 1.9, weight: 2 },
   { az: -0.6, el: 0.45, dist: 8.5, target: [0, -0.6, 0], focal: 1.6, weight: 1 },
+  // The night's title floating above the mage: from the front, the mage and the title in the frame
+  { az: 0, el: 0.06, dist: 7.6, target: [0, 0.85, 0], focal: 1.55, weight: 3, tag: "title" },
+  { az: 0.24, el: 0.12, dist: 7.8, target: [0, 0.85, 0], focal: 1.55, weight: 2, tag: "title" },
+  { az: -0.22, el: -0.06, dist: 7, target: [0, 1, 0], focal: 1.55, weight: 2, tag: "title" },
+  { az: 0.05, el: 0.02, dist: 5.4, target: [0, 1.7, 0], focal: 1.6, weight: 1, tag: "title" },
 ];
 
 /**
@@ -49,6 +54,7 @@ export const arcaneArchitect = defineShaderScene({
       options: [
         { value: "crystal", label: "Cristal" },
         { value: "slab", label: "Dalle lumineuse" },
+        { value: "titre", label: "Le titre de la soirée (au-dessus de lui)" },
       ],
       default: "crystal",
     },
@@ -63,14 +69,20 @@ export const arcaneArchitect = defineShaderScene({
     uCloak: { value: 0 },
     uFigHead: { value: 1 },
     uRelic: { value: 0 },
+    uTitle: { value: 0 },
     ...headUniforms(),
   }),
-  update(u, f, p, dt) {
+  update(u, f, p, dt, ctx) {
     updateArcane(u, f, p, dt);
     // a statue head once it is loaded, the pyramid until then
     u.uRelic.value = p.relic === "slab" ? 1 : 0;
-    const head = p.head ?? "pyramide";
-    u.uFigHead.value = setHead(u, head) && head !== "pyramide" ? 3 : 1;
+    // The night's title: it floats above the mage like a relic of prism glass (the mage keeps his pyramid)
+    const title = p.relic === "titre";
+    u.uTitle.value = title ? 1 : 0;
+    if (ctx.camera) ctx.camera.allow = title ? (fr) => fr.tag === "title" : (fr) => fr.tag !== "title";
+    const head = title ? "pyramide" : (p.head ?? "pyramide");
+    if (title) setHead(u, TITLE_HEAD, "", p);
+    u.uFigHead.value = !title && setHead(u, head) && head !== "pyramide" ? 3 : 1;
     // Each kick sends the rings a step outward
     if (f.beat) u.uRingTarget.value = (u.uRingTarget.value as number) + 1;
     const r = u.uRing.value as number;
@@ -97,6 +109,7 @@ uniform float uLift;
 uniform float uCloak;
 uniform float uFigHead;
 uniform float uRelic;  // the crystal becomes a black slab with a glowing face, held up like a relic
+uniform float uTitle;  // the night's title floats above the mage instead
 ${ART_LIB}
 #define FIG_BAKED_HEAD
 ${HEAD_GLSL}
@@ -146,6 +159,51 @@ vec3 lake(vec3 p, vec3 rd) {
   c += rc * smoothstep(1.3, 2., r) * exp(-r * .12) * lines * (.42 + .45 * uBeat + uDrop);
   // the figure's shadow
   c *= .3 + .7 * smoothstep(.3, 1.3, length(p.xz - vec2(.1, .2)));
+  return c;
+}
+
+// ---- the night's title: a relic of prism glass floating above the mage
+const vec3 TC = vec3(0., 2.15, .05);
+vec3 toTitle(vec3 p) {
+  vec3 h = p - TC - vec3(0., .06 * sin(uTime * .4), 0.);
+  h.xz *= rot(.14 * sin(uTime * .11 + uSeed));
+  return h;
+}
+float titleD(vec3 p) { return headD(toTitle(p)); }
+float titleMarch(vec3 ro, vec3 rd, out float dmin) {
+  dmin = 1e3;
+  vec3 oc = ro - TC;
+  float R = length(uHeadSize.xy) * .5 + .15;
+  float b = dot(oc, rd), h = b * b - dot(oc, oc) + R * R;
+  if (h < 0. || uHeadOn < 1.5 || uHeadOn > 2.5) return -1.;
+  h = sqrt(h);
+  float t = max(-b - h, 0.), t1 = -b + h;
+  for (int i = 0; i < 64; i++) {
+    float d = titleD(ro + rd * t);
+    dmin = min(dmin, d);
+    if (d < .0006 * t) return t;
+    t += d * .95;
+    if (t > t1) break;
+  }
+  return -1.;
+}
+vec3 titleN(vec3 p) {
+  const vec2 k = vec2(1, -1);
+  const float e = .002;
+  return normalize(k.xyy * titleD(p + k.xyy * e) + k.yyx * titleD(p + k.yyx * e) + k.yxy * titleD(p + k.yxy * e) + k.xxx * titleD(p + k.xxx * e));
+}
+/** Glass full of the cosmos, a rainbow round its edges; the drop (and the beam) turns it into a prism. */
+vec3 shadeTitle(vec3 p, vec3 rd) {
+  vec3 n = titleN(p);
+  vec3 h = toTitle(p);
+  float facing = clamp(dot(n, -rd), 0., 1.);
+  float fre = pow(1. - facing, 3.);
+  vec3 inside = uBase * .35 + pal(.35 + uShift) * .28 + starfield(refract(rd, n, .7), .35) * .9;
+  vec3 edge = spectral(fract(h.x * .35 + h.y * .5 + uTime * .03));
+  vec3 c = inside * (.55 + .45 * facing) + edge * (.25 + 1.6 * fre) * (1. + .8 * uBeat);
+  // the beam and the drop: the whole relic becomes a prism
+  c = mix(c, spectral(fract(h.x * .45 - h.y * .3 + uTime * .1)) * 1.7 + vec3(.3), clamp(uBeam * .7 + uDrop * .5, 0., .85));
+  c += vec3(1.) * pow(clamp(dot(reflect(rd, n), normalize(vec3(-.4, .8, .5))), 0., 1.), 40.) * .8;
   return c;
 }
 
@@ -200,9 +258,19 @@ void main() {
     col += figHalo(dmin);
   }
 
-  // The crystal and its glow
+  // The night's title, and its glow
+  if (uTitle > .5) {
+    float dt;
+    float tt = titleMarch(ro, rd, dt);
+    if (tt > 0. && (tf < 0. || tt < tf)) {
+      col = shadeTitle(ro + rd * tt, rd);
+      solid = 1.;
+    } else col += mix(pal(.35 + uShift), spectral(fract(uTime * .05)), .4) * exp(-dt * 7.) * (.2 + .25 * uBeat + .6 * uBeam);
+  }
+
+  // The crystal and its glow (none under the title)
   vec3 red = uRelic > .5 ? vec3(.75, .86, 1.) : vec3(1., .16, .22);
-  float tc = crystalMarch(ro, rd);
+  float tc = uTitle > .5 ? -1. : crystalMarch(ro, rd);
   if (tc > 0. && (tf < 0. || tc < tf)) {
     vec3 p = ro + rd * tc;
     if (uRelic > .5) {
@@ -219,7 +287,7 @@ void main() {
     solid = 1.;
   }
   float dc = length(cross(rd, gCrystal - ro));
-  col += red * exp(-dc * 9.) * (.25 + .7 * uBeat + uBeam);
+  col += red * exp(-dc * 9.) * (.25 + .7 * uBeat + uBeam) * (1. - uTitle);
 
   col += beam(ro, rd, tf);
 

@@ -4,7 +4,7 @@ import { paletteParam } from "../palettes";
 import { num } from "../utils";
 import { ART_LIB, MARCH } from "./lib.glsl";
 import { CAMERA_GLSL, type Framing } from "./camera";
-import { HEAD_GLSL, headParam, headUniforms, setHead } from "./heads";
+import { HEAD_GLSL, headParam, headUniforms, setHead, TITLE_HEAD } from "./heads";
 
 const FRAMINGS: Framing[] = [
   { az: 0, el: 0.12, dist: 3.6, target: [0, -0.05, 0], focal: 2.1, weight: 2 },
@@ -13,6 +13,11 @@ const FRAMINGS: Framing[] = [
   { az: 0.2, el: 0.03, dist: 2.2, target: [0, 0, 0.3], focal: 2.3, weight: 2 },
   { az: 1.6, el: 0.45, dist: 4.2, target: [0, -0.25, 0], focal: 2, weight: 2 },
   { az: -2.2, el: 0.25, dist: 3.8, target: [0, -0.05, 0], focal: 2.1, weight: 1 },
+  // The night's title, standing in the bath: from the front, a little from above to see the rings
+  { az: 0, el: 0.1, dist: 4.3, target: [0, -0.08, 0], focal: 2.1, weight: 3, tag: "title" },
+  { az: 0.25, el: 0.16, dist: 4.5, target: [0, -0.08, 0], focal: 2.1, weight: 2, tag: "title" },
+  { az: -0.28, el: 0.06, dist: 4.2, target: [0, -0.08, 0], focal: 2.1, weight: 2, tag: "title" },
+  { az: 0.08, el: 0.32, dist: 4.7, target: [0, -0.15, 0], focal: 2.1, weight: 1, tag: "title" },
 ];
 
 /**
@@ -38,9 +43,14 @@ export const mercury = defineShaderScene({
     uSweep: { value: 9 },
     uChart: { value: 0.15 },
     uCrash: { value: 0 },
+    uTitle: { value: 0 },
   }),
-  update(u, f, p, dt) {
+  update(u, f, p, dt, ctx) {
+    // The night's title instead of the mask: chrome letters standing in the bath, their foot melting into it
+    const title = p.head === TITLE_HEAD;
     setHead(u, p.head, "", p);
+    u.uTitle.value = title ? 1 : 0;
+    if (ctx.camera) ctx.camera.allow = title ? (fr) => fr.tag === "title" : (fr) => fr.tag !== "title";
     // The swell follows the track: a mirror in the breakdown, rising through the build, strongest on the drop
     const sw = num(p.swell, 1) * (f.section === "breakdown" ? 0.2 : f.section === "build" ? 0.5 + 0.7 * f.buildProgress : f.section === "drop" ? 1.5 : 0.8);
     const cur = u.uSwell.value as number;
@@ -66,6 +76,7 @@ uniform vec4 uKicks;
 uniform float uSweep;
 uniform float uChart;  // level of the price chart, 0..1 (the mask sinks as it climbs)
 uniform float uCrash;  // 1 on the drop: the chart collapses
+uniform float uTitle;  // the night's title instead of the mask
 ${ART_LIB}
 ${HEAD_GLSL}
 ${CAMERA_GLSL}
@@ -82,6 +93,12 @@ float liquidH(vec2 xz) {
 }
 float map(vec3 p) {
   float lq = (p.y - liquidH(p.xz)) * .75;
+  if (uTitle > .5) {
+    // the letters stand upright, their foot a little under the surface; they sink a little as the chart climbs
+    vec3 h = p - vec3(0., -.29 - (uHeadMin.y + .11) - uChart * .06 + .02 * sin(uTime * .3), 0.);
+    h.xz *= rot(sin(uTime * .1 + uSeed) * .12);
+    return smin(lq, headD(h), .07);
+  }
   vec3 h = p - vec3(0., .02 + .04 * sin(uTime * .3) - uChart * .4, 0.);
   h.xz *= rot(sin(uTime * .1 + uSeed) * .35);
   h.yz *= rot(.5);
@@ -114,6 +131,13 @@ vec3 env(vec3 r) {
   float a2 = abs(mod(az + 2.3 + PI, 2. * PI) - PI);
   c += uPal1 * 3. * (1. - smoothstep(.02, .05, abs(el - .08))) * (1. - smoothstep(.7, .95, a2));
   c += vec3(1.) * 1.1 * smoothstep(.9, .98, el);
+  // the title's studio: a big softbox behind the camera, so the letters' faces read as bright chrome
+  if (uTitle > .5) {
+    vec3 sb = normalize(uCamPos - uCamTarget + vec3(0., .8, 0.));
+    float k = dot(r, sb);
+    c += mix(uInk, vec3(1.), .5) * 1.5 * smoothstep(.55, .9, k) * (.75 + .25 * smoothstep(-.2, .5, r.y));
+    c += uTint * .9 * smoothstep(.15, .3, k) * (1. - smoothstep(.3, .45, k));
+  }
   c += chart(r);
   // The drop: a vertical blade of light sweeping once around the room
   if (uSweep < 1.3) {

@@ -1,4 +1,14 @@
-import { Anton, JetBrains_Mono, Playfair_Display } from "next/font/google";
+import {
+  Anton,
+  Caveat_Brush,
+  Cinzel,
+  Fraunces,
+  JetBrains_Mono,
+  Pirata_One,
+  Playfair_Display,
+  Press_Start_2P,
+  Unbounded,
+} from "next/font/google";
 
 /*
  * The typefaces of the night's title: each world writes it in its own (part of its style). Served by the app itself
@@ -7,6 +17,12 @@ import { Anton, JetBrains_Mono, Playfair_Display } from "next/font/google";
 const playfair = Playfair_Display({ weight: "800", subsets: ["latin", "latin-ext"], preload: false });
 const anton = Anton({ weight: "400", subsets: ["latin", "latin-ext"], preload: false });
 const jetbrains = JetBrains_Mono({ weight: "800", subsets: ["latin", "latin-ext"], preload: false });
+const cinzel = Cinzel({ weight: "800", subsets: ["latin", "latin-ext"], preload: false });
+const unbounded = Unbounded({ weight: "800", subsets: ["latin", "latin-ext"], preload: false });
+const caveat = Caveat_Brush({ weight: "400", subsets: ["latin", "latin-ext"], preload: false });
+const pressStart = Press_Start_2P({ weight: "400", subsets: ["latin", "latin-ext"], preload: false });
+const pirata = Pirata_One({ weight: "400", subsets: ["latin", "latin-ext"], preload: false });
+const fraunces = Fraunces({ weight: "800", subsets: ["latin", "latin-ext"], preload: false });
 
 export interface TitleFont {
   /** CSS font-family, as next/font named it. */
@@ -27,6 +43,18 @@ export const TITLE_FONTS = {
   monument: { family: anton.style.fontFamily, weight: "400", upper: true, spacing: 0.06, second: 0.42 },
   /** Signal: monospaced, data. */
   mono: { family: jetbrains.style.fontFamily, weight: "800", upper: true, spacing: 0.02, second: 0.45 },
+  /** Bestiaire: Roman capitals, cut in stone like a museum's inscription. */
+  roman: { family: cinzel.style.fontFamily, weight: "800", upper: true, spacing: 0.06, second: 0.45 },
+  /** Mercure: wide and round, a shape liquid metal can hold. */
+  liquid: { family: unbounded.style.fontFamily, weight: "800", spacing: 0.01, second: 0.45 },
+  /** Canyon: a brush line, drawn by hand. */
+  brush: { family: caveat.style.fontFamily, weight: "400", second: 0.55 },
+  /** Arcanes: the pixels of an old game's title screen. */
+  pixel: { family: pressStart.style.fontFamily, weight: "400", upper: true, spacing: 0.04, second: 0.5 },
+  /** Cathédrale: gothic letters. */
+  gothic: { family: pirata.style.fontFamily, weight: "400", spacing: 0.02, second: 0.5 },
+  /** Chair: a soft, fleshy serif. */
+  soft: { family: fraunces.style.fontFamily, weight: "800", second: 0.5 },
 } satisfies Record<string, TitleFont>;
 
 export type TitleFontId = keyof typeof TITLE_FONTS;

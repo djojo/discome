@@ -2,7 +2,7 @@ import { defineShaderScene } from "../shader/defineShaderScene";
 import { paletteParam } from "../palettes";
 import { ART_LIB } from "./lib.glsl";
 import { CAMERA_GLSL, type Framing } from "./camera";
-import { HEAD_GLSL, headUniforms, setHead } from "./heads";
+import { HEAD_GLSL, headUniforms, setHead, TITLE_HEAD } from "./heads";
 import { NIGHT_GLSL } from "./night.glsl";
 
 const FRAMINGS: Framing[] = [
@@ -12,6 +12,11 @@ const FRAMINGS: Framing[] = [
   { az: -0.35, el: -0.12, dist: 5.2, target: [0, 2.4, 0], focal: 1.7, weight: 2, tag: "open" },
   // close on the face of smoke
   { az: 0.2, el: 0.06, dist: 3.4, target: [0, 3.5, 0], focal: 1.9, weight: 2 },
+  // The night's title above the fire: from the front, the flames at the foot of the frame
+  { az: 0, el: 0.04, dist: 6.6, target: [0, 3.1, 0], focal: 1.7, weight: 3, tag: "title" },
+  { az: 0.22, el: 0.1, dist: 7, target: [0, 3.1, 0], focal: 1.7, weight: 2, tag: "title" },
+  { az: -0.22, el: -0.08, dist: 6, target: [0, 3.2, 0], focal: 1.7, weight: 2, tag: "title" },
+  { az: 0.1, el: 0.03, dist: 9.5, target: [0, 2.4, 0], focal: 1.7, weight: 2, tag: "title-open" },
 ];
 
 /** The animal spirits (heads of the library), in the order they come. */
@@ -32,8 +37,21 @@ export const spirit = defineShaderScene({
   camera: { framings: FRAMINGS, glideBars: 2 },
   description:
     "Un feu dans la nuit du désert ; de sa fumée naît un esprit animal (loup, aigle, bélier, hibou) dessiné en fumée et en lignes de lumière ; le feu crache des braises au kick, l'esprit change d'animal au drop.",
-  params: [paletteParam("peyote")],
+  params: [
+    paletteParam("peyote"),
+    {
+      type: "select",
+      key: "spirit",
+      label: "Esprit",
+      options: [
+        { value: "animals", label: "Les animaux" },
+        { value: "titre", label: "Le titre de la soirée" },
+      ],
+      default: "animals",
+    },
+  ],
   uniforms: () => ({
+    uTitle: { value: 0 },
     ...headUniforms(),
     ...headUniforms("B"),
     uMorph: { value: 0 },
@@ -44,7 +62,14 @@ export const spirit = defineShaderScene({
     uIdx: { value: Math.floor(Math.random() * ANIMALS.length) },
     uHold: { value: 0 },
   }),
-  update(u, f, _p, dt, ctx) {
+  update(u, f, p, dt, ctx) {
+    // The night's title instead of the animals: it stays, drawn in smoke; the drop only bursts into sparks round it
+    const title = p.spirit === "titre";
+    u.uTitle.value = title ? 1 : 0;
+    if (ctx.camera)
+      ctx.camera.allow = title
+        ? (fr) => fr.tag === "title" || fr.tag === "title-open"
+        : (fr) => !fr.tag?.startsWith("title");
     const n = ANIMALS.length;
     let idx = u.uIdx.value as number;
     let m = u.uMorph.value as number;
@@ -54,7 +79,7 @@ export const spirit = defineShaderScene({
       if (m === 0) m = 0.0001;
       hold = 0;
       u.uBurst.value = 0;
-      if (f.drop) ctx.camera?.request("open");
+      if (f.drop) ctx.camera?.request(title ? "title-open" : "open");
     }
     if (m > 0) {
       m += dt / 2.6;
@@ -66,8 +91,8 @@ export const spirit = defineShaderScene({
     u.uIdx.value = idx;
     u.uMorph.value = m;
     u.uHold.value = hold;
-    setHead(u, ANIMALS[idx]);
-    setHead(u, ANIMALS[(idx + 1) % n], "B");
+    setHead(u, title ? TITLE_HEAD : ANIMALS[idx], "", p);
+    setHead(u, title ? TITLE_HEAD : ANIMALS[(idx + 1) % n], "B", p);
     u.uBurst.value = (u.uBurst.value as number) + dt;
     u.uFlare.value = f.beat ? 1 : (u.uFlare.value as number) * Math.exp(-dt * 3.5);
     const tw = f.section === "build" ? 0.3 + 2 * f.buildProgress : f.section === "drop" ? 2.2 : 0.3;
@@ -79,6 +104,7 @@ uniform float uMorph;    // 0..1 from one animal to the next
 uniform float uFlare;    // the kick: the fire flares
 uniform float uBurst;    // seconds since the change of animal
 uniform float uTwist;
+uniform float uTitle;    // the night's title instead of the animals
 uniform highp sampler3D uHeadTexB;
 uniform float uHeadOnB;
 uniform vec3 uHeadMinB;
@@ -111,7 +137,7 @@ vec3 toHead(vec3 p) {
 
 float spiritD(vec3 p) {
   vec3 h = toHead(p);
-  float b = sdBox(h - vec3(0., .02, 0.), vec3(.85, 1., .92));
+  float b = sdBox(h - vec3(0., .02, 0.), vec3(.85 + .36 * uTitle, 1., .92));
   if (b > .2) return b * HS;
   float m = smoothstep(0., 1., uMorph);
   float d = headD(h);

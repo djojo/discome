@@ -3,7 +3,7 @@ import { paletteParam } from "../palettes";
 import { num } from "../utils";
 import { ART_LIB, MARCH } from "./lib.glsl";
 import { CAMERA_GLSL, type Framing } from "./camera";
-import { HEAD_GLSL, headUniforms, preloadHeads, setHead, type HeadId } from "./heads";
+import { HEAD_GLSL, headUniforms, preloadHeads, setHead, TITLE_HEAD, type HeadId } from "./heads";
 import { DETAIL_GLSL } from "./detail.glsl";
 
 const FRAMINGS: Framing[] = [
@@ -12,6 +12,10 @@ const FRAMINGS: Framing[] = [
   { az: 1.4, el: 0.03, dist: 4.2, target: [0, -0.1, 0], focal: 2.1, weight: 2 },
   { az: 0.15, el: 0, dist: 2.6, target: [0, 0.05, 0.25], focal: 2.2, weight: 2 },
   { az: 0.4, el: 0.35, dist: 5.2, target: [0, -0.3, 0], focal: 1.8, weight: 1 },
+  // The night's title (and the busts it turns into): from the front, so that it always reads
+  { az: 0, el: 0.05, dist: 4.4, target: [0, -0.05, 0], focal: 1.95, weight: 3, tag: "title" },
+  { az: 0.22, el: 0.12, dist: 4.6, target: [0, -0.05, 0], focal: 1.95, weight: 2, tag: "title" },
+  { az: -0.24, el: 0.02, dist: 4.4, target: [0, -0.05, 0], focal: 1.95, weight: 2, tag: "title" },
 ];
 
 /** The heads each cycle goes through, in an order drawn from the scene's seed. */
@@ -26,7 +30,8 @@ const CYCLES: Record<string, HeadId[]> = {
 interface MorphState {
   seed: number;
   cycle: string;
-  order: HeadId[];
+  /** Heads of the library, or the night's title. */
+  order: string[];
   i: number;
   /** Progress of the current transformation, 0..1. */
   t: number;
@@ -88,6 +93,7 @@ export const metamorphosis = defineShaderScene({
         { value: "egypte", label: "Égypte" },
         { value: "tout", label: "Toutes" },
         { value: "extinction", label: "Extinction" },
+        { value: "titre", label: "Le titre de la soirée" },
       ],
       default: "bestiaire",
     },
@@ -102,13 +108,20 @@ export const metamorphosis = defineShaderScene({
     uFlare: { value: 0 },
     uMatter: { value: 0 },
     uDying: { value: 0 },
+    uTitle: { value: 0 },
   }),
-  update(u, f, p, dt) {
+  update(u, f, p, dt, ctx) {
     const seed = u.uSeed.value as number;
     const cycle = String(p.cycle ?? "bestiaire");
+    // The night's title: it opens the plan, turns into a bust, comes back, turns into another bust…
+    const title = cycle === "titre";
+    u.uTitle.value = title ? 1 : 0;
+    if (ctx.camera) ctx.camera.allow = title ? (fr) => fr.tag === "title" : (fr) => fr.tag !== "title";
     let s = states.get(u);
     if (!s || s.seed !== seed || s.cycle !== cycle) {
-      const order: HeadId[] = shuffled(CYCLES[cycle] ?? CYCLES.bestiaire, seed);
+      const order: string[] = title
+        ? shuffled(CYCLES.bestiaire, seed).flatMap((a) => [TITLE_HEAD, a])
+        : shuffled(CYCLES[cycle] ?? CYCLES.bestiaire, seed);
       if (cycle === "extinction") order.push("humain");
       s = { seed, cycle, order, i: 0, t: 0, rate: 0, morphing: false, held: 0, lastBar: f.bar };
       preloadHeads(order);
@@ -118,7 +131,7 @@ export const metamorphosis = defineShaderScene({
     const n = s.order.length;
     const a = s.order[s.i % n];
     const b = s.order[(s.i + 1) % n];
-    const ready = setHead(u, a) && setHead(u, b, "B");
+    const ready = setHead(u, a, "", p) && setHead(u, b, "B", p);
     const bar = f.bpm > 0 ? 240 / f.bpm : 2;
     const newBar = f.bar !== s.lastBar;
     s.lastBar = f.bar;
@@ -128,15 +141,16 @@ export const metamorphosis = defineShaderScene({
       // a new transformation starts on a phrase once the bust has held long enough, or right away on a drop
       const phrase = newBar && f.phraseBar === 0 && s.held >= num(p.hold, 8);
       // Extinction: only the drops change the head, and once only the human head is left, it stays
-      const go = extinction ? f.drop && n > 1 : f.drop || phrase;
+      // The title: a drop brings a bust back to it, but never takes it away before it has been held
+      const go = extinction ? f.drop && n > 1 : title ? phrase || (f.drop && a !== TITLE_HEAD) : f.drop || phrase;
       if (ready && go) {
         s.morphing = true;
         s.t = 0;
         s.rate = 1 / (bar * (f.drop ? 2 : num(p.pace, 6)));
       }
     } else {
-      // the drop hurries a transformation under way: it ends within two bars
-      if (f.drop) s.rate = Math.max(s.rate, (1 - s.t) / (bar * 2));
+      // the drop hurries a transformation under way: it ends within two bars (unless it is taking the title away)
+      if (f.drop && !(title && a === TITLE_HEAD)) s.rate = Math.max(s.rate, (1 - s.t) / (bar * 2));
       s.t += s.rate * dt;
       if (s.t >= 1) {
         // the head that just went extinct leaves the cycle for good
@@ -145,8 +159,8 @@ export const metamorphosis = defineShaderScene({
         s.t = 0;
         s.morphing = false;
         s.held = 0;
-        setHead(u, s.order[s.i % n]);
-        setHead(u, s.order[(s.i + 1) % n], "B");
+        setHead(u, s.order[s.i % n], "", p);
+        setHead(u, s.order[(s.i + 1) % n], "B", p);
       }
     }
     const t = s.t;
@@ -168,6 +182,7 @@ uniform float uWave;    // seconds since the last kick
 uniform float uFlare;   // the drop, decaying
 uniform float uMatter;  // 0: marble, 1: obsidian and gold
 uniform float uDying;   // extinction: the old head petrifies and cracks as the new one rises
+uniform float uTitle;   // the night's title takes turns with the busts
 ${ART_LIB}
 ${HEAD_GLSL}
 ${CAMERA_GLSL}
@@ -195,8 +210,8 @@ float morphD(vec3 h) {
 
 float map(vec3 p) {
   vec3 h = toHead(p);
-  // both heads fit in the common box
-  float b = sdBox(h - vec3(0., .025, 0.), vec3(.84, 1., .92));
+  // both heads fit in the common box (wider for the title)
+  float b = sdBox(h - vec3(0., .025, 0.), vec3(.84 + .36 * uTitle, 1., .92));
   if (b > .2) return b;
   return max(morphD(h), CUT - h.y);
 }
@@ -219,8 +234,9 @@ vec3 env(vec3 r) {
 void main() {
   vec2 fc = gl_FragCoord.xy;
   vec2 uv = (fc - .5 * uRes) / uRes.y;
-  gYaw = .3 * sin(uTime * .045 + uSeed) + .07 * sin(uTime * .11 + uSeed * 2.);
-  gPitch = .05 * sin(uTime * .06 + uSeed * 3.);
+  // (the title only sways: it must keep reading)
+  gYaw = (.3 * sin(uTime * .045 + uSeed) + .07 * sin(uTime * .11 + uSeed * 2.)) * (1. - .65 * uTitle);
+  gPitch = .05 * sin(uTime * .06 + uSeed * 3.) * (1. - .65 * uTitle);
   gFront = mix(-1.25, 1.3, uMorph);
   vec3 ro = uCamPos;
   vec3 rd = lookAt(ro, uCamTarget) * normalize(vec3(uv, uFocal));

@@ -43,6 +43,8 @@ export class Cadrage {
   private pending: string | null = null;
   /** Seconds since the last new framing. */
   private held = 0;
+  /** Just built or back on screen: a framing the scene does not allow is replaced at once, without a glide. */
+  private fresh = true;
 
   constructor(
     private readonly framings: Framing[],
@@ -57,6 +59,7 @@ export class Cadrage {
     this.to = this.from = this.draw(null) ?? this.framings[0];
     this.k = 1;
     this.held = 0;
+    this.fresh = true;
   }
 
   /** Glide to a framing with this tag as soon as possible (e.g. "open" on the drop). */
@@ -69,6 +72,12 @@ export class Cadrage {
     this.held += dt;
     // A new framing on every phrase; without a tempo (quiet passages, no clear beat) every ~16 s anyway
     const phrase = (f.downbeat && f.phraseBar === 0) || this.held > (f.bpm > 0 ? 12 * bar : 16);
+    if (this.fresh && !this.allow(this.to)) {
+      const first = this.draw(null);
+      if (first) this.to = this.from = first;
+      this.k = 1;
+    }
+    this.fresh = false;
     if (this.pending || phrase || !this.allow(this.to)) {
       if (phrase) this.held = 0;
       const next = this.draw(this.pending) ?? this.draw(null);

@@ -39,6 +39,7 @@ import { spirit } from "./art/spirit";
 import { vision } from "./art/vision";
 import { grimoire } from "./art/grimoire";
 import { flesh } from "./art/flesh";
+import { skin } from "./art/skin";
 import { signal } from "./art/signal";
 
 /**
@@ -79,6 +80,7 @@ export const SCENES: SceneDef[] = [
   vision,
   grimoire,
   flesh,
+  skin,
   signal,
   flux,
   // Classics, recoloured by the worlds' palettes

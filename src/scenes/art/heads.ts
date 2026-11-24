@@ -233,6 +233,12 @@ float headSlot(highp sampler3D tex, float on, vec3 bmin, vec3 bsize, vec2 relief
   return 10.;
 }
 float headD(vec3 p) { return headSlot(uHeadTex, uHeadOn, uHeadMin, uHeadSize, uHeadRelief, p); }
+/** The title's outline in its own plane (2D distance, negative inside; one fetch): for titles made of light. */
+float titleD2(vec2 xy) {
+  vec2 uv = (xy - uHeadMin.xy) / uHeadSize.xy;
+  vec2 c = clamp(uv, 0., 1.);
+  return textureLod(uHeadTex, vec3(c, .5), 0.).r + length((uv - c) * uHeadSize.xy);
+}
 float headBound(vec3 p) {
   if (uHeadOn < .5) return sdEllipsoid(p - vec3(0., -.05, -.02), vec3(.56, .95, .75));
   if (uHeadOn > 2.5) return 10.;
