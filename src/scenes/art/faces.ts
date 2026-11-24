@@ -3,7 +3,7 @@ import { paletteParam } from "../palettes";
 import { num } from "../utils";
 import { ART_LIB, MARCH } from "./lib.glsl";
 import { CAMERA_GLSL, type Framing } from "./camera";
-import { HEAD_GLSL, headParam, headUniforms, setHead } from "./heads";
+import { HEAD_GLSL, headParam, headUniforms, setHead, TITLE_HEAD } from "./heads";
 
 /**
  * The sculpted head, nearly still: only a very slow drift (`turn` scales it). The framings move instead.
@@ -23,6 +23,7 @@ ${MARCH}
  * kick. No words. Needs gYaw/gPitch (HEAD_MAP) and the camera uniforms.
  */
 const RECOG_GLSL = /* glsl */ `
+float recogBox(vec2 uv, vec2 c0, vec2 c1);
 float segD(vec2 p, vec2 a, vec2 b) { vec2 pa = p - a, ba = b - a; return length(pa - ba * clamp(dot(pa, ba) / dot(ba, ba), 0., 1.)); }
 float recognition(vec2 uv) {
   const vec3 L[14] = vec3[14](
@@ -66,8 +67,12 @@ float recognition(vec2 uv) {
     float blink = .6 + .4 * step(.5, fract(uTime * 3. + float(i) * .37)) * uHat;
     o += (1. - smoothstep(.004, .007, abs(d - .008))) * V[i] * blink + (1. - smoothstep(.002, .004, d)) * V[i];
   }
-  // the box, by its corners
-  vec2 c0 = bmin - .04, c1 = bmax + .04;
+  return o + recogBox(uv, bmin - .04, bmax + .04);
+}
+
+/** A detection box, by its corners, and a scan line sweeping down it on every kick. */
+float recogBox(vec2 uv, vec2 c0, vec2 c1) {
+  float o = 0.;
   vec2 q = uv;
   float bx = min(abs(q.x - c0.x), abs(q.x - c1.x)), by = min(abs(q.y - c0.y), abs(q.y - c1.y));
   bool inX = q.x > c0.x - .003 && q.x < c1.x + .003, inY = q.y > c0.y - .003 && q.y < c1.y + .003;
@@ -81,9 +86,43 @@ float recognition(vec2 uv) {
   o += (1. - smoothstep(.001, .004, abs(q.y - sy))) * (inX ? 1. : 0.) * step(uWave, .65) * .8;
   return o;
 }
+
+/** The night's title as a machine reads it: a box around it, a ruler of ticks along its foot. */
+float recognitionTitle(vec2 uv) {
+  mat3 cam = lookAt(uCamPos, uCamTarget);
+  vec2 bmin = vec2(1e3), bmax = vec2(-1e3);
+  vec3 lo = vec3(uHeadMin.xy + .09, -uHeadRelief.x), hi = vec3(uHeadMin.xy + uHeadSize.xy - .09, uHeadRelief.x);
+  for (int i = 0; i < 8; i++) {
+    float fi = float(i);
+    vec3 hp = vec3(mod(fi, 2.) < .5 ? lo.x : hi.x, mod(floor(fi * .5), 2.) < .5 ? lo.y : hi.y, fi < 3.5 ? lo.z : hi.z);
+    hp.yz *= rot(-gPitch);
+    hp.xz *= rot(-gYaw);
+    hp.y -= .1;
+    vec3 v = hp - uCamPos;
+    vec3 c = vec3(dot(v, cam[0]), dot(v, cam[1]), dot(v, cam[2]));
+    vec2 P = c.xy / c.z * uFocal;
+    bmin = min(bmin, P);
+    bmax = max(bmax, P);
+  }
+  vec2 c0 = bmin - .03, c1 = bmax + .03;
+  float o = recogBox(uv, c0, c1);
+  // the ruler: a tick every twentieth of the width, longer every fifth; one lights up on each attack
+  float tx = (uv.x - c0.x) / (c1.x - c0.x) * 20.;
+  float k = floor(tx + .5);
+  float len = mod(k, 5.) < .5 ? .022 : .011;
+  float tick = (1. - smoothstep(.0015, .003, abs(tx - k) * (c1.x - c0.x) / 20.)) * step(0., tx) * step(tx, 20.);
+  tick *= step(c0.y - .012 - len, uv.y) * step(uv.y, c0.y - .012);
+  float lit = step(.85, hash12(vec2(k, floor(uTime * 6.)))) * uHat;
+  return o + tick * (.55 + 1.2 * lit);
+}
 `;
 
 const FACE_FRAMINGS: Framing[] = [
+  // The night's title: from the front, so that it always reads (its centre sits at y = -.05)
+  { az: 0, el: 0.04, dist: 4.8, target: [0, -0.05, 0], focal: 2.2, weight: 3, tag: "title" },
+  { az: 0.22, el: 0.1, dist: 5, target: [0, -0.05, 0], focal: 2.2, weight: 2, tag: "title" },
+  { az: -0.25, el: 0.02, dist: 4.8, target: [0, -0.05, 0], focal: 2.2, weight: 2, tag: "title" },
+  { az: 0.05, el: 0.3, dist: 5.2, target: [0, -0.05, 0], focal: 2.2, weight: 1, tag: "title" },
   { az: 0, el: 0.05, dist: 3.4, target: [0, -0.12, 0], focal: 2.4, weight: 2 },
   { az: 0.55, el: 0.08, dist: 3.4, target: [0, -0.12, 0], focal: 2.4, weight: 3 },
   { az: -0.6, el: 0.02, dist: 3.5, target: [0, -0.12, 0], focal: 2.4, weight: 2 },
@@ -120,9 +159,20 @@ export const topoHead = defineShaderScene({
     { type: "range", key: "turn", label: "Dérive du visage", min: 0, max: 1.5, step: 0.05, default: 1 },
     { type: "toggle", key: "recog", label: "Reconnaissance faciale", default: false },
   ],
-  uniforms: () => ({ uDensity: { value: 26 }, uTurn: { value: 1 }, uRecog: { value: 0 }, ...kickTimer(), ...headUniforms() }),
-  update(u, f, p, dt) {
-    setHead(u, p.head);
+  uniforms: () => ({
+    uDensity: { value: 26 },
+    uTurn: { value: 1 },
+    uRecog: { value: 0 },
+    uTitle: { value: 0 },
+    ...kickTimer(),
+    ...headUniforms(),
+  }),
+  update(u, f, p, dt, ctx) {
+    // The night's title instead of a face: read from the front, by its contour lines
+    const title = p.head === TITLE_HEAD;
+    setHead(u, p.head, "", p);
+    u.uTitle.value = title ? 1 : 0;
+    if (ctx.camera) ctx.camera.allow = title ? (fr) => fr.tag === "title" : (fr) => fr.tag !== "title";
     u.uRecog.value = p.recog === true ? 1 : 0;
     u.uDensity.value = num(p.density, 26);
     u.uTurn.value = num(p.turn, 1);
@@ -133,6 +183,7 @@ uniform float uDensity;
 uniform float uTurn;
 uniform float uWave;
 uniform float uRecog;
+uniform float uTitle;
 ${ART_LIB}
 ${CAMERA_GLSL}
 ${HEAD_MAP}
@@ -140,8 +191,10 @@ ${RECOG_GLSL}
 void main() {
   vec2 fc = gl_FragCoord.xy;
   vec2 uv = (fc - .5 * uRes) / uRes.y;
-  gYaw = (.3 * sin(uTime * .045 + uSeed) + .07 * sin(uTime * .11 + uSeed * 2.)) * uTurn;
-  gPitch = .05 * sin(uTime * .06 + uSeed * 3.) * uTurn;
+  // (the title only sways: it must keep reading)
+  float turn = uTurn * (1. - .7 * uTitle);
+  gYaw = (.3 * sin(uTime * .045 + uSeed) + .07 * sin(uTime * .11 + uSeed * 2.)) * turn;
+  gPitch = .05 * sin(uTime * .06 + uSeed * 3.) * turn;
   vec3 ro = uCamPos;
   vec3 rd = lookAt(ro, uCamTarget) * normalize(vec3(uv, uFocal));
   vec3 col = uBase;
@@ -154,6 +207,8 @@ void main() {
     float a = uTime * .018 + uSeed;
     vec3 dir = normalize(vec3(.6 * sin(a * .7), cos(a), .8 * sin(a * 1.3)));
     float g = mix(dot(h, dir), length(h - vec3(0., -.1, .55)) * 1.1, .5 + .5 * sin(a * .45));
+    // the title: mostly its depth, whose contour lines follow the letters' outlines
+    g = mix(g, mix(dot(h, dir) * .5, h.z * 3., .7), uTitle);
     g = mix(g, h.z, smoothstep(.35, .8, uDrop));
     // the lines flow slowly across the face at their own pace (one every ~8 s), deaf to the music
     float f = g * uDensity - uTime * .12;
@@ -168,7 +223,7 @@ void main() {
   }
   float alpha = step(0., tt);
   if (uRecog > .5) {
-    float r = recognition(uv);
+    float r = uTitle > .5 ? recognitionTitle(uv) : recognition(uv);
     col = mix(col, uAccent * 1.3, clamp(r, 0., 1.));
     alpha = max(alpha, clamp(r, 0., 1.));
   }
@@ -194,7 +249,7 @@ export const profileHead = defineShaderScene({
   ],
   uniforms: () => ({ uSweep: { value: 1 }, ...kickTimer(), ...headUniforms() }),
   update(u, f, p, dt) {
-    setHead(u, p.head);
+    setHead(u, p.head, "", p);
     u.uSweep.value = num(p.sweep, 1);
     u.uWave.value = f.beat ? 0 : (u.uWave.value as number) + dt;
   },
@@ -261,7 +316,7 @@ export const halftoneHead = defineShaderScene({
   ],
   uniforms: () => ({ uCells: { value: 62 }, uTurn: { value: 1 }, ...kickTimer(), ...headUniforms() }),
   update(u, f, p, dt) {
-    setHead(u, p.head);
+    setHead(u, p.head, "", p);
     u.uCells.value = num(p.cells, 62);
     u.uTurn.value = num(p.turn, 1);
     u.uWave.value = f.beat ? 0 : (u.uWave.value as number) + dt;

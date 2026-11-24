@@ -61,6 +61,12 @@ export interface Look {
    * few minutes); every scene of the world follows it (frame.tint, uTint in the shaders).
    */
   tints?: string[];
+  /**
+   * The plan that shows the night's title or logo in this world's style (a head scene with head "titre", its
+   * typeface and relief in titleFont / titleRelief / titleDepth). Only on screen when a title is set; the director
+   * has its own rule for it.
+   */
+  title?: Shot;
   /** Legacy look, outside the art-directed rotation. */
   classic?: boolean;
   custom?: boolean;
@@ -86,6 +92,13 @@ export const LOOKS: Look[] = [
       { id: "echoes", weight: 1, params: { palette: "bone", shape: "circle", zoom: 0.5, spin: 0.3 } },
     ],
     bgOpacity: 0.35,
+    title: {
+      id: "porcelain",
+      key: "titre",
+      label: "Titre",
+      role: "calm",
+      params: { head: "titre", titleFont: "didone", titleRelief: "puffy", style: "shards", kintsugi: 0.6 },
+    },
     fx: { grain: 0.18, vignette: 0.45, saturation: 0.9, contrast: 1.05, bloom: 0.3 },
     transitions: { calm: ["fade", "luma", "dive", "screen"], drop: ["flash", "fade"] },
     director: "chill",
@@ -112,6 +125,13 @@ export const LOOKS: Look[] = [
       { id: "tunnel", weight: 1, params: { palette: "mono", segments: 16 } },
     ],
     bgOpacity: 0.5,
+    title: {
+      id: "topo-head",
+      key: "titre",
+      label: "Titre",
+      role: "calm",
+      params: { palette: "mono", recog: true, head: "titre", titleFont: "mono", titleRelief: "puffy", density: 34 },
+    },
     fx: { vignette: 0, contrast: 1.2, saturation: 0, strobe: "invert" },
     transitions: { calm: ["cut", "glitch", "screen"], drop: ["cut", "flash"] },
     director: "rave",
@@ -219,6 +239,23 @@ export const LOOKS: Look[] = [
       { id: "echoes", weight: 1, params: { palette: "concrete", shape: "circle" } },
     ],
     bgOpacity: 0.35,
+    title: {
+      id: "monolith",
+      key: "titre",
+      label: "Titre",
+      role: "calm",
+      params: {
+        palette: "concrete",
+        monument: "head",
+        head: "titre",
+        titleFont: "monument",
+        titleRelief: "cut",
+        titleDepth: 0.16,
+        sun: 0.14,
+        dynamics: 0.5,
+      },
+      vary: { palettes: ["concrete", "sodium"] },
+    },
     fx: { grain: 0.08, vignette: 0.45, saturation: 0.85, speedBlur: 0.5, bloom: 0.3 },
     transitions: { calm: ["luma", "fade", "screen"], drop: ["flash", "fade"] },
     director: "chill",
@@ -392,6 +429,8 @@ export interface Plan {
   scene: SceneDef;
   label: string;
   energy: Energy;
+  /** The night's title (shown only when one is set, by the director's own rule). */
+  title?: boolean;
 }
 
 const ROLE_ENERGY: Record<Role, Energy> = { calm: "calm", build: "medium", drop: "intense", after: "calm" };
@@ -400,8 +439,10 @@ export const shotKey = (s: Shot) => s.key ?? s.id;
 
 export const planKey = (look: Look, s: Shot) => `${look.id}:${shotKey(s)}`;
 
+/** Every plan of a world, its title plan included (see shownPlans for the ones on offer). */
 export function lookPlans(look: Look): Plan[] {
-  return lookScenes(look).map((shot) => {
+  const title = look.title && SCENES.some((d) => d.id === look.title!.id) ? [look.title] : [];
+  return [...lookScenes(look), ...title].map((shot) => {
     const scene = sceneById(shot.id);
     return {
       key: planKey(look, shot),
@@ -410,9 +451,16 @@ export function lookPlans(look: Look): Plan[] {
       scene,
       label: shot.label ? `${scene.name} · ${shot.label}` : scene.name,
       energy: shot.role ? ROLE_ENERGY[shot.role] : scene.energy,
+      ...(shot === look.title ? { title: true } : {}),
     };
   });
 }
+
+/** The plans on offer (panel, arrows, digits): the title plan only when the night has a title. */
+export const shownPlans = (look: Look, withTitle: boolean) => lookPlans(look).filter((p) => withTitle || !p.title);
+
+/** The world's title plan, if it has one. */
+export const titlePlan = (look: Look) => lookPlans(look).find((p) => p.title) ?? null;
 
 /** The world plan behind a key "world:plan" (null for a plain scene id or an unknown plan). */
 export function findPlan(key: string, looks: Look[]): Plan | null {

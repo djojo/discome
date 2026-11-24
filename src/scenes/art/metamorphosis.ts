@@ -162,6 +162,7 @@ uniform highp sampler3D uHeadTexB;
 uniform float uHeadOnB;
 uniform vec3 uHeadMinB;
 uniform vec3 uHeadSizeB;
+uniform vec2 uHeadReliefB;
 uniform float uMorph;   // 0..1: the current transformation (0: head A only)
 uniform float uWave;    // seconds since the last kick
 uniform float uFlare;   // the drop, decaying
@@ -184,7 +185,7 @@ const float CUT = -.82;  // the busts float, cut just under the neck; the light 
 float morphD(vec3 h) {
   if (uMorph <= 0.) return headD(h);
   float w = 1. - smoothstep(gFront - K, gFront + K, frontY(h));
-  float dB = w > .001 ? headSlot(uHeadTexB, uHeadOnB, uHeadMinB, uHeadSizeB, h) : 0.;
+  float dB = w > .001 ? headSlot(uHeadTexB, uHeadOnB, uHeadMinB, uHeadSizeB, uHeadReliefB, h) : 0.;
   if (w >= .999) return dB;
   float dA = headD(h);
   if (w <= .001) return dA;

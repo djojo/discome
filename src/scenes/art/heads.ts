@@ -1,5 +1,6 @@
 import * as THREE from "three";
-import type { ParamDef } from "../types";
+import { titleShape } from "@/brand/shape";
+import type { ParamDef, ParamValues } from "../types";
 
 /**
  * The head library: real sculpted busts (Printables, see public/heads/CREDITS.md) baked by scripts/bake-heads.mjs
@@ -20,11 +21,17 @@ export const HEADS = [
 
 export type HeadId = (typeof HEADS)[number]["id"];
 
+/**
+ * Not a head: the night's title or logo (brand/shape.ts), sculpted like one. Its typeface and relief come from the
+ * plan's settings (titleFont, titleRelief "cut" | "puffy", titleDepth).
+ */
+export const TITLE_HEAD = "titre";
+
 export const headParam = (def: HeadId = "humain"): ParamDef => ({
   type: "select",
   key: "head",
   label: "Tête",
-  options: HEADS.map((h) => ({ value: h.id, label: h.label })),
+  options: [...HEADS.map((h) => ({ value: h.id, label: h.label })), { value: TITLE_HEAD, label: "Titre de la soirée" }],
   default: def,
 });
 
@@ -117,14 +124,37 @@ export function headUniforms(suffix = "") {
     [`uHeadOn${suffix}`]: { value: 0 },
     [`uHeadMin${suffix}`]: { value: new THREE.Vector3() },
     [`uHeadSize${suffix}`]: { value: new THREE.Vector3(1, 1, 1) },
+    [`uHeadRelief${suffix}`]: { value: new THREE.Vector2(0.1, 0.01) },
   };
 }
 
+/** The title's relief: half its depth and the radius of its edges (scene units). */
+function titleRelief(stroke: number, p?: ParamValues): [number, number] {
+  if (p?.titleRelief === "puffy") {
+    const r = Math.min(stroke * 0.9, 0.1);
+    return [r, r];
+  }
+  const depth = typeof p?.titleDepth === "number" ? p.titleDepth : 0.12;
+  return [depth, Math.min(0.012, stroke * 0.3)];
+}
+
 /**
- * Point a head slot at a head. While a baked head is still loading, the slot shows the sculpted one.
- * Returns whether the requested head is on screen.
+ * Point a head slot at a head. While a baked head is still loading, the slot shows the sculpted one; while the title
+ * is being drawn, nothing. Returns whether the requested head is on screen. `p`: the plan's settings (the title's
+ * typeface and relief).
  */
-export function setHead(u: Record<string, THREE.IUniform>, id: unknown, suffix = "") {
+export function setHead(u: Record<string, THREE.IUniform>, id: unknown, suffix = "", p?: ParamValues) {
+  if (id === TITLE_HEAD) {
+    const t = titleShape(p?.titleFont);
+    u[`uHeadOn${suffix}`].value = t ? 2 : 3;
+    if (t) {
+      u[`uHeadTex${suffix}`].value = t.tex;
+      (u[`uHeadMin${suffix}`].value as THREE.Vector3).copy(t.min);
+      (u[`uHeadSize${suffix}`].value as THREE.Vector3).copy(t.size);
+      (u[`uHeadRelief${suffix}`].value as THREE.Vector2).set(...titleRelief(t.stroke, p));
+    }
+    return !!t;
+  }
   const g = headGrid(id);
   u[`uHeadOn${suffix}`].value = g ? 1 : 0;
   if (g) {
@@ -137,13 +167,15 @@ export function setHead(u: Record<string, THREE.IUniform>, id: unknown, suffix =
 
 /**
  * GLSL: headD(p), the head of the scene in the frame of sdHead (y up, facing +z), sculpted or baked (a baked
- * bust floats, cut flat under its neck). headBound(p) is a cheap distance that never exceeds the head's. Needs ART_LIB.
+ * bust floats, cut flat under its neck), or the night's title. headBound(p) is a cheap distance that never exceeds
+ * the head's. Needs ART_LIB. uHeadOn: 0 sculpted head, 1 baked head, 2 title, 3 nothing (the title is being drawn).
  */
 export const HEAD_GLSL = /* glsl */ `
 uniform highp sampler3D uHeadTex;
 uniform float uHeadOn;
 uniform vec3 uHeadMin;
 uniform vec3 uHeadSize;
+uniform vec2 uHeadRelief;
 
 /**
  * Cubic B-spline sampling from 8 linear fetches (Sigg & Hadwiger): a smooth field, so normals and highlights
@@ -180,14 +212,31 @@ float bakedHead(highp sampler3D tex, vec3 bmin, vec3 bsize, vec3 p) {
   if (d < .08) d = mix(tricubic(tex, c), d, smoothstep(.04, .08, d));
   return d + length((uvw - c) * bsize);
 }
-/** A head slot: the sculpted head (on = 0) or a baked one, which floats: no column under the bust. */
-float headSlot(highp sampler3D tex, float on, vec3 bmin, vec3 bsize, vec3 p) {
-  if (on < .5) return sdHead(p);
-  return bakedHead(tex, bmin, bsize, p);
+/**
+ * The night's title: its outline (a 2D distance field in a texture one texel deep), extruded around z = 0, relief.x
+ * deep on each side, edges rounded by relief.y (relief.x = relief.y: round and puffy).
+ */
+float titleField(highp sampler3D tex, vec3 bmin, vec3 bsize, vec2 relief, vec3 p) {
+  vec2 uv = (p.xy - bmin.xy) / bsize.xy;
+  vec2 c = clamp(uv, 0., 1.);
+  float d = textureLod(tex, vec3(c, .5), 0.).r;
+  if (d < .06) d = mix(tricubic(tex, vec3(c, .5)), d, smoothstep(.03, .06, d));
+  d += length((uv - c) * bsize.xy);
+  vec2 w = vec2(d + relief.y, abs(p.z) - relief.x + relief.y);
+  return min(max(w.x, w.y), 0.) + length(max(w, 0.)) - relief.y;
 }
-float headD(vec3 p) { return headSlot(uHeadTex, uHeadOn, uHeadMin, uHeadSize, p); }
+/** A head slot: the sculpted head (on = 0), a baked one, which floats (no column under the bust), or the title. */
+float headSlot(highp sampler3D tex, float on, vec3 bmin, vec3 bsize, vec2 relief, vec3 p) {
+  if (on < .5) return sdHead(p);
+  if (on < 1.5) return bakedHead(tex, bmin, bsize, p);
+  if (on < 2.5) return titleField(tex, bmin, bsize, relief, p);
+  return 10.;
+}
+float headD(vec3 p) { return headSlot(uHeadTex, uHeadOn, uHeadMin, uHeadSize, uHeadRelief, p); }
 float headBound(vec3 p) {
   if (uHeadOn < .5) return sdEllipsoid(p - vec3(0., -.05, -.02), vec3(.56, .95, .75));
+  if (uHeadOn > 2.5) return 10.;
+  if (uHeadOn > 1.5) return sdBox(p - vec3(uHeadMin.xy + uHeadSize.xy * .5, 0.), vec3(uHeadSize.xy * .5, uHeadRelief.x));
   return sdBox(p - uHeadMin - uHeadSize * .5, uHeadSize * .5);
 }
 `;

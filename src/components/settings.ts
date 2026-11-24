@@ -2,6 +2,7 @@ import { defaultParams, SCENES, type ParamValues } from "@/scenes";
 import { BLEND_MODES, TRANSITIONS, type LayerSettings, type TransitionId } from "@/engine/transitions";
 import { DIRECTOR_MODES, type DirectorMode } from "@/engine/Director";
 import { NEUTRAL_FX, type FxSettings } from "@/engine/fx";
+import { DEFAULT_BRAND, loadBrand, type Brand } from "@/brand/brand";
 import {
   findPlan,
   LOOKS,
@@ -75,6 +76,8 @@ export interface Settings {
   worldCycle: { enabled: boolean; rule: WorldRule };
   /** Worlds left out of the rotation (the ones left out, so a world added later is in). */
   offWorlds: string[];
+  /** The night's title or logo, shown by every world in its style. */
+  brand: Brand;
   background: BackgroundSettings;
   /**
    * The night's drift: over this many minutes from the start of the source, the worlds slowly degrade
@@ -113,6 +116,7 @@ export function defaultSettings(): Settings {
     customLooks: [],
     worldCycle: { enabled: true, rule: "breakdown" },
     offWorlds: [],
+    brand: { ...DEFAULT_BRAND },
     background: { auto: true, sceneId: null, opacity: 0.4, tint: true, blur: 0.4 },
     drift: 60,
   };
@@ -156,7 +160,7 @@ export function applyLook(s: Settings, look: Look): Settings {
     if (look.palettes.length && !look.palettes.includes(String(p.palette))) p.palette = look.palettes[0];
     params[entry.id] = p;
   }
-  const sceneId = plans.some((p) => p.key === s.sceneId) ? s.sceneId : (plans[0]?.key ?? s.sceneId);
+  const sceneId = plans.some((p) => p.key === s.sceneId) ? s.sceneId : (plans.find((p) => !p.title)?.key ?? s.sceneId);
   // The world's own layer comes in with it; another world's layer leaves (a layer picked by hand stays)
   let layer = s.layer;
   const worldLayer = look.layer && SCENES.some((d) => d.id === look.layer!.id) ? look.layer : null;
@@ -179,7 +183,7 @@ export function applyLook(s: Settings, look: Look): Settings {
 export function enterWorld(s: Settings, worldId: string): Settings {
   const look = findLook(s, worldId);
   const next = applyLook(s, look);
-  const pool = lookPlans(look).filter((p) => p.key !== s.sceneId && p.scene.id !== s.layer.sceneId);
+  const pool = lookPlans(look).filter((p) => !p.title && p.key !== s.sceneId && p.scene.id !== s.layer.sceneId);
   if (!pool.length) return next;
   let r = Math.random() * pool.reduce((sum, p) => sum + (p.shot.weight ?? 1), 0);
   const pick = pool.find((p) => (r -= p.shot.weight ?? 1) <= 0) ?? pool[0];
@@ -269,6 +273,7 @@ export function loadSettings(): Settings {
         rule: WORLD_RULES.some((r) => r.id === saved.worldCycle?.rule) ? saved.worldCycle!.rule : base.worldCycle.rule,
       },
       offWorlds: Array.isArray(saved.offWorlds) ? saved.offWorlds.filter((id) => looks.some((l) => l.id === id)) : [],
+      brand: loadBrand(saved.brand),
       background: {
         ...base.background,
         ...(saved.background ?? {}),

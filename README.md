@@ -20,6 +20,12 @@ npm run dev   # http://localhost:3000
   - **Les plans** : une même scène peut apparaître plusieurs fois, dans un monde ou d'un monde à l'autre, avec d'autres réglages (Porcelaine « Coquille » et « Éclats », Cathédrale « Rouge » et « Blanche », Profil chrome ou béton…). Chaque plan a sa propre instance, son rôle pour le réalisateur (calme, montée, drop) et ses limites de variation.
   - Tes retouches sont gardées par plan et par monde ; « Réinitialiser le plan » revient aux réglages du monde.
   - **Enchaîner les mondes** : ils se succèdent, au breakdown (et au moins toutes les 8 phrases) ou toutes les 4 ou 8 phrases. Le passage se fait par le noir, et les effets glissent vers ceux du nouveau monde.
+  - **Mondes actifs** : un interrupteur sur chaque carte met le monde dans la rotation ou l'en sort (tous y sont par défaut). Le dernier monde actif ne peut pas être éteint ; éteindre le monde à l'écran passe tout de suite au suivant.
+- **Ta soirée** (Réglages, ou sur l'accueil) : le nom de la soirée, une deuxième ligne pour le DJ ou la date, ou un logo. Chaque monde le montre dans son style, sur un plan « Titre » : en porcelaine qui se brise en bandes au drop (Porcelaine), en inscription de béton au-dessus de l'avenue (Monolithe), en lignes de niveau sous un cadre de reconnaissance (Signal).
+  - Le réalisateur le montre à un moment fort : à l'entrée dans un monde ou à son premier drop, une fois par monde, un monde sur deux, ou souvent. Il reste à l'écran le temps d'un plan. `N` ou « Afficher maintenant » le montre tout de suite.
+  - Un logo est réduit à sa silhouette (sa transparence, ou ce qui se détache de la couleur de ses bords) ; chaque monde lui donne sa matière. Un aperçu montre la forme retenue, « Inverser » corrige un logo lu à l'envers.
+  - Le titre est écrit dans la police du monde, servie par l'application (aucun appel externe pendant la soirée). Il devient un champ de distance en relief, bombé ou taillé, que les scènes à têtes sculptent comme une tête (`src/brand/`).
+  - « Signature dans un coin » : le titre ou le logo en petit sur toutes les scènes, effacé pendant le plan Titre. Tout reste dans le navigateur.
 - **Têtes** : les scènes de visage (Porcelaine, Topographie, Profil, Trame, Mercure, Métamorphose), l'Architecte et le Colosse du Monolithe ont un réglage « Tête » :
   - humain (la tête sculptée en code), tigre, loup, faucon, lion, hibou, bélier, Moai, Néfertiti ;
   - ce sont des bustes gratuits de Printables (crédits dans `public/heads/CREDITS.md`), convertis une fois en grilles de distances par `scripts/bake-heads.mjs`, donc tous les effets marchent avec toutes les têtes ;
@@ -100,6 +106,7 @@ npm run dev   # http://localhost:3000
 | `Espace` | Drop manuel (impact + rafale, recale la mesure) |
 | `T` | Tap tempo |
 | `L` | Verrouiller la scène |
+| `N` | Montrer le titre de la soirée |
 | `D` | Panneau de debug (BPM, mesure, section, tension) |
 | `F` | Plein écran |
 | `H` | Masquer l'interface |
@@ -141,6 +148,7 @@ scripts/bake-heads.mjs   Conversion des bustes (STL/3MF de assets/heads-src/, ca
 
 ## Principes de réalisation
 
+- **Pas de texte à l'écran**, à une exception près : le titre de ta soirée, sur son plan. Il suit les mêmes règles (il bouge à peine, il reste lisible, les effets portent le rythme).
 - **Le sujet vit à son tempo** : visage, figure, architecture ou paysage bougent lentement et en continu. Ils ne changent d'état que sur les grands moments du morceau (montée, drop, breakdown), avec des transitions de plusieurs mesures.
 - **Les effets portent le rythme** : lumière, couleur, particules, ondes, reflets et post-effets réagissent au kick, aux attaques et aux bandes de fréquences.
 - **On peut regarder une scène longtemps** :

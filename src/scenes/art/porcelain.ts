@@ -3,7 +3,7 @@ import { paletteParam } from "../palettes";
 import { num } from "../utils";
 import { ART_LIB, MARCH } from "./lib.glsl";
 import { CAMERA_GLSL, type Framing } from "./camera";
-import { HEAD_GLSL, headParam, headUniforms, setHead } from "./heads";
+import { HEAD_GLSL, headParam, headUniforms, setHead, TITLE_HEAD } from "./heads";
 import { DETAIL_GLSL } from "./detail.glsl";
 
 /** Framings around the head (world space: the head centre sits near y = 0). "open" ones need the head open. */
@@ -16,6 +16,12 @@ const FRAMINGS: Framing[] = [
   { az: 0.15, el: 0.62, dist: 4.2, target: [0, 0.02, 0.05], focal: 1.9, weight: 3, tag: "open" },
   { az: 0.02, el: 0.1, dist: 4.6, target: [0, -0.05, 0], focal: 1.95, weight: 2, tag: "open" },
   { az: -0.7, el: 0.3, dist: 4, target: [0, 0, 0], focal: 1.9, weight: 2, tag: "open" },
+  // The night's title: from the front, so that it always reads (its centre sits at y = -.07)
+  { az: 0, el: 0.05, dist: 4.1, target: [0, -0.07, 0], focal: 1.95, weight: 3, tag: "title" },
+  { az: 0.24, el: 0.12, dist: 4.4, target: [0.05, -0.07, 0], focal: 1.95, weight: 2, tag: "title" },
+  { az: -0.26, el: -0.02, dist: 4, target: [-0.05, -0.07, 0], focal: 1.95, weight: 2, tag: "title" },
+  { az: 0.4, el: 0.26, dist: 4.9, target: [0, -0.07, -0.15], focal: 1.9, weight: 2, tag: "title-open" },
+  { az: -0.36, el: 0.16, dist: 4.7, target: [0, -0.07, -0.15], focal: 1.9, weight: 2, tag: "title-open" },
 ];
 
 /**
@@ -78,15 +84,19 @@ export const porcelain = defineShaderScene({
     uSelfie: { value: 0 },
     uMode: { value: Math.random() < 0.5 ? 0 : 1 },
     uWasOpen: { value: 0 },
+    uTitle: { value: 0 },
   }),
   update(u, f, p, dt, ctx) {
-    setHead(u, p.head);
+    // The night's title instead of a head: in bands about a letter wide, which drift apart on the drop
+    const title = p.head === TITLE_HEAD;
+    setHead(u, p.head, "", p);
+    u.uTitle.value = title ? 1 : 0;
     const bar = f.bpm > 0 ? (60 / f.bpm) * 4 : 2;
     // The story: closed, pried open by the build, swung open on the drop, closing through the breakdown
     let target = f.section === "build" ? 0.1 * f.buildProgress : f.section === "drop" ? 1 : 0;
     if (f.drop) {
       target = 1;
-      ctx.camera?.request("open");
+      ctx.camera?.request(title ? "title-open" : "open");
       u.uShiftTarget.value = (u.uShiftTarget.value as number) + 0.37;
     }
     const o = u.uOpen.value as number;
@@ -99,8 +109,11 @@ export const porcelain = defineShaderScene({
     const open = u.uOpen.value as number;
     // (through the phone's viewfinder, the face is filmed from the front)
     const selfie = p.frame === "selfie";
+    const opened = target > 0.5 || open > 0.5;
     if (ctx.camera)
-      ctx.camera.allow = (fr) => (fr.tag !== "open" || target > 0.5 || open > 0.5) && (!selfie || Math.abs(fr.az) < 0.6);
+      ctx.camera.allow = title
+        ? (fr) => fr.tag === "title" || (fr.tag === "title-open" && opened)
+        : (fr) => !fr.tag?.startsWith("title") && (fr.tag !== "open" || opened) && (!selfie || Math.abs(fr.az) < 0.6);
     // Shell or shards: the style only changes while the head is closed
     if (open > 0.5) u.uWasOpen.value = 1;
     if (open < 0.02) {
@@ -134,6 +147,7 @@ uniform float uShift;
 uniform float uCinema;
 uniform float uSelfie;  // the face seen through a phone's viewfinder
 uniform float uMode;   // 0: opens like a shell, 1: breaks into floating shards
+uniform float uTitle;  // the night's title instead of a head
 ${ART_LIB}
 ${HEAD_GLSL}
 ${CAMERA_GLSL}
@@ -146,6 +160,9 @@ const float CORE_R = .46;
 const float NECK = -.85;                // the halves open above this cut
 float gAng;
 float gCoreD;
+/** The fractal jewel: in the head, or behind the title. */
+vec3 gCore = CORE;
+float gCoreR = CORE_R;
 
 /** The head turns very slowly on its own (the hinge, shards and core turn with it). */
 float gYaw = 0.;
@@ -234,7 +251,7 @@ float gapDist(vec3 h) {
  * It drifts very slowly (the structure morphs over minutes); it never moves to the beat. trap: orbit trap.
  */
 float coreFractal(vec3 h, out float trap) {
-  vec3 p = (h - CORE) / CORE_R * 1.2;
+  vec3 p = (h - gCore) / gCoreR * 1.2;
   p.xz *= rot(uTime * .025 + uSeed);
   p.xy *= rot(uTime * .017 + uSeed * .7);
   float s = 1.;
@@ -256,11 +273,69 @@ float coreFractal(vec3 h, out float trap) {
     s *= k;
     trap = min(trap, r2);
   }
-  return (length(p) - .8) / s * CORE_R / 1.2;
+  return (length(p) - .8) / s * gCoreR / 1.2;
 }
+
+// ---- the night's title: it breaks into bands about a letter wide, which drift apart in depth and settle back
+const float TB = .24;
+
+/** Undo the drift and tilt of band i. */
+vec3 bandFrame(vec3 h, float i) {
+  float hs = hash12(vec2(i, 5.3));
+  float o = uOpen * uAmp;
+  float side = mod(i, 2.) < .5 ? 1. : -.7;
+  vec3 q = h - vec3(0., o * (.22 * (hs - .5) + .05 * sin(uTime * .3 + i * 1.3)), o * (.3 + .45 * hs) * side);
+  float c = (i + .5) * TB;
+  q.x -= c;
+  q.xz *= rot(o * .6 * (hash12(vec2(i, 8.1)) - .5));
+  q.xy *= rot(o * .3 * (hash12(vec2(i, 2.9)) - .5));
+  q.x += c;
+  return q;
+}
+
+/** Distance to the side of band i (negative inside it). */
+float bandSlab(vec3 q, float i) { return abs(q.x - (i + .5) * TB) - TB * .5; }
+
+float bandsD(vec3 h, out float best, out vec3 bq) {
+  float i0 = floor(h.x / TB);
+  float d = 1e3;
+  best = i0;
+  bq = h;
+  for (int k = -1; k <= 1; k++) {
+    float i = i0 + float(k);
+    vec3 q = bandFrame(h, i);
+    float w = bandSlab(q, i) + .003 * uOpen;
+    if (w < d) {
+      float ds = max(shell(q), w);
+      if (ds < d) { d = ds; best = i; bq = q; }
+    }
+  }
+  return d;
+}
+
+/** Distance to the nearest line between two bands (the vermilion seams, the light leaking out). */
+float bandGap(vec3 h) { return abs(fract(h.x / TB + .5) - .5) * TB; }
 
 float map(vec3 p) {
   vec3 h = toHead(p);
+  if (uTitle > .5) {
+    float bound = headBound(h) - .05 - .8 * uOpen * uAmp;
+    gCoreD = 1e3;
+    if (bound > .3) return bound;
+    float bi;
+    vec3 bq;
+    float d = bandsD(h, bi, bq);
+    // the jewel behind the title, seen through the gaps as it opens
+    if (uOpen > .01) {
+      float cb = length(h - gCore) - gCoreR;
+      if (cb < d) {
+        float tr;
+        gCoreD = max(cb, coreFractal(h, tr));
+        d = min(d, gCoreD);
+      }
+    }
+    return d;
+  }
   // Cheap bound: far from the head (and its drifting shards), no need to evaluate anything
   float bound = sdCapsule(h, vec3(0., -1.5, -.1), vec3(0., .3, -.1), .85 + .3 * uHeadOn + (.6 + 1.1 * uAmp) * uOpen);
   gCoreD = 1e3;
@@ -312,7 +387,11 @@ void main() {
   vec2 fc = gl_FragCoord.xy;
   vec2 uv = (fc - .5 * uRes) / uRes.y;
   gAng = uOpen * .85 * uAmp;
-  gYaw = .22 * sin(uTime * .04 + uSeed) + .06 * sin(uTime * .1 + uSeed * 2.);
+  gYaw = (.22 * sin(uTime * .04 + uSeed) + .06 * sin(uTime * .1 + uSeed * 2.)) * (1. - .6 * uTitle);
+  if (uTitle > .5) {
+    gCore = vec3(0., .05, -.45);
+    gCoreR = .42;
+  }
   vec3 ro = uCamPos;
   vec3 rd = lookAt(ro, uCamTarget) * normalize(vec3(uv, uFocal));
 
@@ -347,7 +426,7 @@ void main() {
       // ---- the fractal core: iridescent, lit from within, a wave of light on every kick
       float tr;
       coreFractal(h, tr);
-      float r = length(h - CORE) / CORE_R;
+      float r = length(h - gCore) / gCoreR;
       float wave = exp(-pow(r - waveR, 2.) * 60.) * exp(-uWave * 1.5);
       // soft gradients through the jewel (the orbit trap only nudges them) rather than fine speckles
       vec3 c = mix(pal(r * .6 + tr * .08 + uShift), iri(r * .8 + uShift), .6);
@@ -356,10 +435,14 @@ void main() {
       col += c * .35 * (1. - r) + spe * .15 + fre * iri(uShift + .5) * .3;
     } else {
       // ---- which piece, and where on it
-      float dn = neckD(h);
+      float dn = uTitle > .5 ? 1e3 : neckD(h);
       vec3 q;
       float dPiece, cutPlane;
-      if (uMode > .5) {
+      if (uTitle > .5) {
+        float bi;
+        dPiece = bandsD(h, bi, q);
+        cutPlane = abs(bandSlab(q, bi));
+      } else if (uMode > .5) {
         float si;
         dPiece = shardsD(h, si, q);
         cutPlane = abs(wedge(q, si));
@@ -383,8 +466,9 @@ void main() {
         float speM = pow(clamp(dot(reflect(-L, nm), -rd), 0., 1.), 56.);
         // Porcelain, with gold kintsugi cracks spreading over minutes
         col = uInk * (difM * vec3(1.1, 1.04, .96) + vec3(.06, .065, .08) * (.5 + .5 * nm.y)) * ao;
-        // soft fill from the camera, so every framing keeps the porcelain readable
-        col += uInk * .22 * clamp(dot(nm, -rd), 0., 1.) * ao;
+        // soft fill from the camera, so every framing keeps the porcelain readable (the title faces us: more of it,
+        // or its flat faces turn grey)
+        col += uInk * (.22 + .3 * uTitle) * clamp(dot(nm, -rd), 0., 1.) * ao;
         col += speM * .34 + fre * vec3(.22, .24, .28) * ao;
         col += pow(clamp(dot(nm, normalize(vec3(.9, .25, -.5))), 0., 1.), 3.) * .15;
         // crazing: the hairlines of an old glaze, an irregular net, faintly tea-coloured, in a few patches
@@ -415,13 +499,13 @@ void main() {
         vec3 gold = vec3(1., .76, .34);
         col = mix(col, gold * (.35 + dif * 1.1) + gold * spe * 2. + gold * uBeat * .5, crack);
         // The seam: a thread of light that pulses on the kick
-        float seam = uMode > .5 ? gapDist(q) : abs(q.x);
-        col += uAccent * exp(-seam * 120.) * ((uMode > .5 ? .12 : .3) + 1.4 * uBeat + 2. * uLeak) * step(NECK, q.y);
+        float seam = uTitle > .5 ? bandGap(q) : uMode > .5 ? gapDist(q) : abs(q.x);
+        col += uAccent * exp(-seam * 120.) * ((uMode > .5 || uTitle > .5 ? .12 : .3) + 1.4 * uBeat + 2. * uLeak) * step(NECK, q.y);
       } else if (dIn < dCut) {
         // Geode lining: crystal facets, iridescent, lit by the core
         vec3 cv = cells(q * 16.);
         vec3 nf = normalize(n + (vec3(hash13(vec3(cv.z, 1., 2.)), hash13(vec3(cv.z, 3., 4.)), hash13(vec3(cv.z, 5., 6.))) - .5) * 1.1);
-        vec3 Lc = normalize(CORE - h);
+        vec3 Lc = normalize(gCore - h);
         float lc = clamp(dot(nf, Lc), 0., 1.);
         vec3 c = mix(pal(cv.z + uShift) , iri(cv.z + dot(nf, rd) * .8 + uShift), .7);
         col = c * (.3 + lc * .9 * coreLight) * pow(ao, .3);
@@ -440,7 +524,7 @@ void main() {
   // The heads float: below the cut of the neck the light dies out into the dark
   if (tt > 0.) col *= smoothstep(NECK - .4, NECK + .02, toHead(ro + rd * tt).y);
   // The glow of the core around the fractal
-  col += iri(uShift + .2) * glow * coreLight * (uOpen + .05);
+  col += iri(uShift + .2) * glow * coreLight * (uOpen + .05) * (1. - .5 * uTitle);
 
   // Sheet of light escaping the seam (build, open)
   if (uLeak > .01) {
@@ -451,7 +535,7 @@ void main() {
       vec3 h = toHead(ro + rd * tEnd * (float(i) + j) / 8.);
       float sd = headD(h);
       if (sd < 0.) continue;
-      float g = uMode > .5 ? gapDist(h) : abs(h.x);
+      float g = uTitle > .5 ? bandGap(h) : uMode > .5 ? gapDist(h) : abs(h.x);
       float sheet = exp(-g * (40. - 25. * uOpen)) * exp(-sd * 2.2) * step(NECK, h.y);
       acc += sheet * (.55 + .45 * vnoise(vec3(h.yz * 6., uTime * .8)));
     }

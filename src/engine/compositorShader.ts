@@ -65,6 +65,10 @@ uniform vec2 uSizeB;
 // the glow around the highlights (bloom), and how much of it
 uniform sampler2D uBloomTex;
 uniform float uBloomAmt;
+// The night's signature: its title or logo, small, in a corner (alpha = the shape)
+uniform sampler2D uSig;
+uniform float uSigOn;
+uniform vec4 uSigRect;
 varying vec2 vUv;
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -328,6 +332,14 @@ void main() {
   if (uStrobe > 0.0) {
     if (uStrobeMode == 1) col = mix(col, vec3(1.0), uStrobe);
     else col = mix(col, 1.0 - clamp(col, 0.0, 1.0), step(0.5, uStrobe));
+  }
+
+  // The night's signature, after the grade: it stays the same in every world
+  if (uSigOn > 0.001) {
+    vec2 sq = (vUv - uSigRect.xy) / uSigRect.zw;
+    if (sq.x > 0.0 && sq.x < 1.0 && sq.y > 0.0 && sq.y < 1.0) {
+      col = mix(col, vec3(0.94, 0.93, 0.9), texture2D(uSig, sq).a * 0.62 * uSigOn);
+    }
   }
 
   // a dither of half a level (triangular, changing every frame): no bands in dark gradients once quantised to 8 bits

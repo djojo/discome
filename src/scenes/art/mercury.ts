@@ -40,7 +40,7 @@ export const mercury = defineShaderScene({
     uCrash: { value: 0 },
   }),
   update(u, f, p, dt) {
-    setHead(u, p.head);
+    setHead(u, p.head, "", p);
     // The swell follows the track: a mirror in the breakdown, rising through the build, strongest on the drop
     const sw = num(p.swell, 1) * (f.section === "breakdown" ? 0.2 : f.section === "build" ? 0.5 + 0.7 * f.buildProgress : f.section === "drop" ? 1.5 : 0.8);
     const cur = u.uSwell.value as number;

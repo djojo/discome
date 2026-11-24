@@ -14,6 +14,7 @@ export interface DirectorPlan {
   role?: string;
 }
 import { paletteOptions } from "@/scenes/palettes";
+import type { BrandFrequency } from "@/brand/brand";
 import type { TransitionId, TransitionSpec } from "./transitions";
 
 export const DIRECTOR_MODES = [
@@ -105,6 +106,8 @@ export interface DirectorContext {
   worldCycle?: { enabled: boolean; rule: "breakdown" | "phrases4" | "phrases8" };
   /** Background managed by the director (the world's background shots). */
   background?: { auto: boolean; currentId: string | null; shots: { id: string; weight?: number }[] };
+  /** The night's title in this world: its plan (kept out of `plans`), when there is one and it is ready. */
+  title?: { key: string; frequency: BrandFrequency } | null;
 }
 
 export interface Decision {
@@ -147,17 +150,52 @@ export class Director {
   private now = 0;
   private phrasesInWorld = 0;
   private bgPhrases = 0;
+  // The night's title: once per visit to a world (or every other world), and again after a long stay in one
+  private titleShownHere = false;
+  private worldsSinceTitle = 99;
+  private phrasesSinceTitle = 99;
+  /** While the title is on screen, nothing cuts it before it has been seen (beats). */
+  private titleHoldUntil = -1;
+  private holdBars = 16;
   /** Background presence multiplier: fuller in breakdowns, pulsing during bursts. */
   bgLevel = 1;
 
-  /** The show just entered a new world. */
-  noteWorldChange(id: string) {
+  /** The show just entered a new world (`titled`: it opens on the night's title). */
+  noteWorldChange(id: string, titled = false) {
     this.phrasesInWorld = 0;
     this.bgPhrases = 0;
     this.burstUntil = -1;
     this.plannedNext = null;
     this.plannedDrop = null;
+    this.worldsSinceTitle++;
+    this.titleShownHere = false;
     this.noteManualCut(id);
+    if (titled) this.noteTitle();
+  }
+
+  /** Entering a world: open it on the night's title? Half of the times it is due (otherwise its first drop shows it). */
+  titleOnEntry(frequency: BrandFrequency): boolean {
+    const due = frequency !== "half" || this.worldsSinceTitle + 1 >= 2;
+    return due && Math.random() < 0.5;
+  }
+
+  /** The title went on screen (by the director, on entering a world, or by hand). */
+  noteTitle() {
+    this.titleShownHere = true;
+    this.worldsSinceTitle = 0;
+    this.phrasesSinceTitle = 0;
+    this.burstUntil = -1;
+    this.titleHoldUntil = this.beats + this.holdBars * 4;
+    this.lastCutBeat = this.beats;
+  }
+
+  private titleDue(ctx: DirectorContext): boolean {
+    const t = ctx.title;
+    if (!t || ctx.currentId === t.key) return false;
+    // a long stay in one world (no rotation): again after a while
+    if (this.phrasesSinceTitle >= (t.frequency === "often" ? 8 : t.frequency === "world" ? 16 : 32)) return true;
+    if (this.titleShownHere) return false;
+    return t.frequency !== "half" || this.worldsSinceTitle >= 2;
   }
 
   /** A scene change that didn't come from the director (click, keyboard). */
@@ -220,8 +258,28 @@ export class Director {
       burstTransitions: ctx.transitions?.drop ?? base.burstTransitions,
     };
     const beat = f.bpm > 0 ? 60 / f.bpm : 0.5;
+    if (f.downbeat && f.phraseBar === 0) this.phrasesSinceTitle++;
+    // the title plan lasts like the world's other plans
+    this.holdBars = Math.max(8, pacing.calmBars);
 
-    // ---- Drop: impact, then a burst of cuts
+    // ---- The night's title on screen: nothing cuts it until it has been seen (the effects carry the drops)
+    if (auto && ctx.title && ctx.currentId === ctx.title.key && this.beats < this.titleHoldUntil) {
+      this.lastSection = f.section;
+      if (f.downbeat && f.phraseBar === 0) this.phrasesInWorld++;
+      return null;
+    }
+
+    // ---- Drop: impact, then a burst of cuts (or the night's title, when it is due)
+    if (f.drop && auto && ctx.title) {
+      const often = ctx.title.frequency === "often" && this.phrasesSinceTitle >= 4 && Math.random() < 1 / 3;
+      if (this.titleDue(ctx) || (often && ctx.currentId !== ctx.title.key)) {
+        this.plannedDrop = null;
+        const type = pickOne(pacing.dropTransitions);
+        const d = this.cut(ctx, ctx.title.key, { type, duration: (SNAP_BEATS[type] ?? 1) * beat });
+        this.noteTitle();
+        return d;
+      }
+    }
     if (f.drop && (auto || f.dropManual)) {
       this.burstPacing = pacing;
       this.burstStart = this.beats;
@@ -283,6 +341,13 @@ export class Director {
       const every = inDrop ? pacing.dropBars : pacing.calmBars;
       const aligned = inDrop ? true : f.phraseBar % 4 === 0;
       if (bars >= every && aligned) {
+        // No drop came to show the title: the next regular cut does, once the world has settled
+        if (ctx.title && this.titleDue(ctx) && this.phrasesInWorld >= 4 && !inDrop) {
+          this.plannedNext = null;
+          const d = this.cut(ctx, ctx.title.key, { type: pickOne(pacing.calmTransitions), duration: pacing.calmBeats * beat });
+          this.noteTitle();
+          return d;
+        }
         const id = this.plannedNext && this.plannedNext !== ctx.currentId ? this.plannedNext : this.pick(ctx, energies);
         this.plannedNext = null;
         if (inDrop) {

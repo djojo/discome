@@ -65,8 +65,8 @@ export const monolith = defineShaderScene({
     u.uRise.value = r + (rise - r) * (1 - Math.exp(-dt * 0.3));
     u.uDust.value = num(p.dust, 1);
     u.uCinema.value = p.letterbox === true ? 1 : 0;
-    // the colossal head once it is loaded, the slab until then
-    u.uMonument.value = p.monument === "head" && setHead(u, p.head ?? "moai") ? 1 : 0;
+    // the colossal head once it is loaded (or the night's title once drawn), the slab until then
+    u.uMonument.value = p.monument === "head" && setHead(u, p.head ?? "moai", "", p) ? 1 : 0;
   },
   fragment: /* glsl */ `
 uniform float uSunAz;
@@ -279,17 +279,24 @@ float ao(vec3 p, vec3 n) {
 }
 
 const float COL_S = 12.;
-/** The colossus: a giant head buried up to the lips at the end of the avenue, always on the horizon. */
+/** Scale of the colossus (the title is smaller: it must fit between the towers that frame the avenue). */
+float gColS = COL_S;
+/**
+ * The colossus: a giant head buried up to the lips at the end of the avenue, always on the horizon. The night's
+ * title hangs there instead, a concrete inscription above the far roofs, in the gap the avenue leaves in the sky.
+ */
 float colossus(vec3 ro, vec3 rd, out vec3 c) {
-  c = vec3(0., COL_S * .3, ro.z - 42.);
+  bool title = uHeadOn > 1.5;
+  gColS = title ? 6.5 : COL_S;
+  c = vec3(0., title ? 8. - (uHeadMin.y + .11) * gColS : COL_S * .3, ro.z - 42.);
   vec3 oc = ro - c;
-  float R = COL_S * 1.2;
+  float R = gColS * (title ? length(uHeadSize.xy) * .5 + .1 : 1.2);
   float b = dot(oc, rd), h = b * b - dot(oc, oc) + R * R;
   if (h < 0.) return -1.;
   h = sqrt(h);
   float t = max(-b - h, 0.), t1 = -b + h;
   for (int i = 0; i < 64; i++) {
-    float d = headD((ro + rd * t - c) / COL_S) * COL_S;
+    float d = headD((ro + rd * t - c) / gColS) * gColS;
     if (d < .002 * t) return t;
     t += d;
     if (t > t1) break;
@@ -384,7 +391,7 @@ void main() {
   if (tm > 0. && (t < 0. || t > tm)) {
     if (uMonument > .5) {
       // Weathered stone in the low sun, softened by the distance; its edges flare on the drop
-      vec3 q = (ro + rd * tm - cc) / COL_S;
+      vec3 q = (ro + rd * tm - cc) / gColS;
       const vec2 k = vec2(1, -1);
       const float e = .004;
       vec3 n = normalize(k.xyy * headD(q + k.xyy * e) + k.yyx * headD(q + k.yyx * e) + k.yxy * headD(q + k.yxy * e) + k.xxx * headD(q + k.xxx * e));

@@ -24,7 +24,10 @@ import {
   type Settings,
 } from "./settings";
 import { NEUTRAL_FX, type FxSettings } from "@/engine/fx";
-import { findPlan, lookBackgrounds, lookPlans, planDefaults, sceneForKey } from "@/looks";
+import { findPlan, lookBackgrounds, lookPlans, planDefaults, sceneForKey, shownPlans, titlePlan } from "@/looks";
+import { brandOn, type Brand } from "@/brand/brand";
+import { BrandSettings } from "./BrandSettings";
+import { setBrandContent, signatureCanvas, titleReady, titleShape } from "@/brand/shape";
 import { HEADS, preloadHeads } from "@/scenes/art/heads";
 import { getPalette, hex, ink } from "@/scenes/palettes";
 import { preloadDancer } from "@/scenes/3d/humanoid/dancerAsset";
@@ -53,7 +56,7 @@ function describeError(e: unknown, kind: SourceKind): string {
 
 /** Plans of the current world (arrows and digits move through them). */
 function worldOrder(s: Settings) {
-  const own = lookPlans(findLook(s)).map((p) => p.key);
+  const own = shownPlans(findLook(s), brandOn(s.brand)).map((p) => p.key);
   return own.length ? own : SCENES.map((x) => x.id);
 }
 
@@ -87,6 +90,9 @@ export default function Visualizer() {
   const overPanelRef = useRef(false);
   /** The world on screen was just left out of the rotation: the loop moves on to the next one (with the usual dip). */
   const leaveWorldRef = useRef<string | null>(null);
+  /** « Afficher maintenant » / N: the loop cuts to the world's title plan. */
+  const titleNowRef = useRef(false);
+  const compositorRef = useRef<Compositor | null>(null);
 
   const scene = sceneOf(settings, settings.sceneId);
   const params = settings.params[settings.sceneId] ?? defaultParams(scene);
@@ -95,12 +101,23 @@ export default function Visualizer() {
   useEffect(() => {
     settingsRef.current = settings;
     engine.setSensitivity(settings.sensitivity);
+    setBrandContent(settings.brand);
     saveSettings(settings);
   }, [settings, engine]);
+
+  /** Show the night's title now, in the world on screen. */
+  const showTitle = useCallback(() => {
+    const s = settingsRef.current;
+    if (!brandOn(s.brand)) setError("Renseigne d'abord le nom de ta soirée ou ton logo (Réglages › Ta soirée).");
+    else if (!titlePlan(findLook(s))) setError("Ce monde n'a pas encore de plan pour le titre.");
+    else titleNowRef.current = true;
+  }, []);
 
   const patchSettings = useCallback((patch: Partial<Settings>) => setSettings((s) => ({ ...s, ...patch })), []);
 
   const goToScene = useCallback((id: string) => setSettings((s) => ({ ...s, sceneId: id })), []);
+
+  const patchBrand = useCallback((patch: Partial<Brand>) => setSettings((s) => ({ ...s, brand: { ...s.brand, ...patch } })), []);
 
   const stepScene = useCallback((delta: number) => {
     setSettings((s) => {
@@ -114,6 +131,7 @@ export default function Visualizer() {
   useEffect(() => {
     const stage = stageRef.current!;
     const compositor = new Compositor(canvasRef.current!, (key) => sceneOf(settingsRef.current, key));
+    compositorRef.current = compositor;
     let viewport: Viewport = { width: 1, height: 1, dpr: 1 };
     let raf = 0;
     let last = performance.now();
@@ -198,16 +216,23 @@ export default function Visualizer() {
     // Director pool derived from the active look, rebuilt only when the look changes
     let lookKey = "";
     let lookCtx: Pick<DirectorContext, "plans" | "palettes" | "transitions"> = { plans: [] };
+    // The night's title: the plan of the world on screen, and the next world's typeface (drawn ahead of time)
+    let titleHere: { key: string; font: unknown } | null = null;
+    let nextTitleFont: unknown = null;
     let bgShots: { id: string; weight?: number }[] = [];
     let bgInk: [number, number, number] = [1, 1, 1];
     let firstBg = true;
     const lookContext = (s: Settings) => {
-      const key = `${s.lookId}:${s.customLooks.length}`;
+      const key = `${s.lookId}:${s.customLooks.length}:${s.offWorlds.join()}`;
       if (key !== lookKey) {
         lookKey = key;
         const look = findLook(s);
+        const tp = titlePlan(look);
+        titleHere = tp ? { key: tp.key, font: tp.shot.params?.titleFont } : null;
+        const np = titlePlan(findLook(s, nextWorldId(s)));
+        nextTitleFont = np ? np.shot.params?.titleFont : null;
         lookCtx = {
-          plans: lookPlans(look).map((p) => ({
+          plans: shownPlans(look, false).map((p) => ({
             key: p.key,
             scene: p.scene,
             energy: p.energy,
@@ -281,6 +306,13 @@ export default function Visualizer() {
         frame.tint = tintNow;
       } else frame.tint = null;
 
+      // ---- The night's title: ready (or being drawn) for this world and the next
+      const brandIsOn = brandOn(s.brand);
+      const worldCtx = lookContext(s);
+      if (brandIsOn && nextTitleFont !== null && s.worldCycle.enabled) titleShape(nextTitleFont);
+      const titleCtx =
+        brandIsOn && titleHere && titleReady(titleHere.font) ? { key: titleHere.key, frequency: s.brand.frequency } : null;
+
       // ---- Auto director
       const decision = director.update(frame, {
         mode: s.director,
@@ -291,7 +323,8 @@ export default function Visualizer() {
         inTransition: compositor.inTransition,
         params: s.params,
         worldCycle: s.worldCycle,
-        ...lookContext(s),
+        ...worldCtx,
+        title: titleCtx,
         background: { auto: s.background.auto, currentId: compositor.backgroundId, shots: bgShots },
       });
       if (decision?.background) {
@@ -312,11 +345,18 @@ export default function Visualizer() {
         leaveWorldRef.current = null;
         // Next world: its look, its shots, and a dip to black between the two
         const next = enterWorld(s, nextWorldId(s));
+        // ...sometimes opening on the night's title, in the new world's style
+        let titled = false;
+        const tp = brandIsOn ? titlePlan(findLook(next)) : null;
+        if (tp && titleReady(tp.shot.params?.titleFont) && director.titleOnEntry(next.brand.frequency)) {
+          next.sceneId = tp.key;
+          titled = true;
+        }
         s = next;
         settingsRef.current = next;
         setSettings(next);
         compositor.show(next.sceneId, { type: "dip", duration: (frame.bpm > 0 ? 60 / frame.bpm : 0.5) * 6 });
-        director.noteWorldChange(next.sceneId);
+        director.noteWorldChange(next.sceneId, titled);
         firstShow = false;
       }
       if (decision?.sceneId && decision.transition) {
@@ -327,6 +367,30 @@ export default function Visualizer() {
         setSettings((cur) => ({ ...cur, sceneId: id, params: varied ? { ...cur.params, [id]: varied } : cur.params }));
         compositor.show(id, decision.transition);
         firstShow = false;
+      }
+
+      // ---- The title was just cleared while its plan was on screen: back to one of the world's plans
+      if (!brandIsOn && titleHere && s.sceneId === titleHere.key && lookCtx.plans.length) {
+        const id = lookCtx.plans[0].key;
+        s = { ...s, sceneId: id };
+        settingsRef.current = s;
+        setSettings((cur) => ({ ...cur, sceneId: id }));
+      }
+
+      // ---- « Afficher maintenant » / N: the night's title, in the world on screen
+      if (titleNowRef.current) {
+        titleNowRef.current = false;
+        const tp = brandIsOn ? titlePlan(findLook(s)) : null;
+        if (tp) {
+          const id = tp.key;
+          s = { ...s, sceneId: id };
+          settingsRef.current = s;
+          setSettings((cur) => ({ ...cur, sceneId: id }));
+          compositor.show(id, firstShow ? { type: "cut", duration: 0 } : { type: s.transition, duration: s.transitionTime });
+          director.noteManualCut(id);
+          director.noteTitle();
+          firstShow = false;
+        }
       }
 
       // ---- Manual changes (panel, keyboard)
@@ -356,6 +420,7 @@ export default function Visualizer() {
         }
       }
       lookContext(s); // keeps the background ink in sync with the world
+      compositor.signatureShown = compositor.sceneId !== titleHere?.key;
       compositor.render(
         frame,
         (id) => params[id] ?? defaultParams(sceneOf(s, id)),
@@ -400,6 +465,23 @@ export default function Visualizer() {
       compositor.dispose();
     };
   }, [engine]);
+
+  // The night's signature in a corner, in the typeface of the world on screen
+  const sigFont = titlePlan(findLook(settings))?.shot.params?.titleFont;
+  useEffect(() => {
+    const b = settings.brand;
+    if (!b.signature || !brandOn(b)) {
+      compositorRef.current?.setSignature(null);
+      return;
+    }
+    let alive = true;
+    void signatureCanvas(b, sigFont)
+      .then((c) => alive && compositorRef.current?.setSignature(c))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [settings.brand, sigFont]);
 
   useEffect(() => {
     // Warm the dancer model download so humanoid scenes appear without a wait
@@ -495,6 +577,7 @@ export default function Visualizer() {
       } else if (e.key === "t" || e.key === "T") engine.tap();
       else if (e.key === "l" || e.key === "L") setSettings((s) => ({ ...s, locked: !s.locked }));
       else if (e.key === "d" || e.key === "D") setDebugOpen((v) => !v);
+      else if (e.key === "n" || e.key === "N") showTitle();
       else if (/^[1-9]$/.test(e.key)) {
         const id = worldOrder(settingsRef.current)[Number(e.key) - 1];
         if (id) goToScene(id);
@@ -503,7 +586,7 @@ export default function Visualizer() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [stepScene, goToScene, toggleFullscreen, engine]);
+  }, [stepScene, goToScene, toggleFullscreen, engine, showTitle]);
 
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wake = useCallback(() => {
@@ -579,6 +662,10 @@ export default function Visualizer() {
                 </span>
               </button>
             </div>
+            <details className="start-brand" open={settings.brand.mode !== "none"}>
+              <summary>Ta soirée : son nom ou ton logo, dans chaque monde</summary>
+              <BrandSettings brand={settings.brand} onBrand={patchBrand} onError={setError} compact />
+            </details>
           </div>
         </div>
       ) : (
@@ -652,6 +739,9 @@ export default function Visualizer() {
                   }))
                 }
                 onFx={(patch) => setSettings((s) => ({ ...s, fx: { ...s.fx, ...patch } }))}
+                onBrand={patchBrand}
+                onShowTitle={showTitle}
+                onError={setError}
                 onResetFx={() => setSettings((s) => ({ ...s, fx: applyLook(s, findLook(s)).fx }))}
               />
             </aside>

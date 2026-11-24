@@ -83,6 +83,7 @@ uniform highp sampler3D uHeadTexB;
 uniform float uHeadOnB;
 uniform vec3 uHeadMinB;
 uniform vec3 uHeadSizeB;
+uniform vec2 uHeadReliefB;
 ${ART_LIB}
 ${HEAD_GLSL}
 ${CAMERA_GLSL}
@@ -114,7 +115,7 @@ float spiritD(vec3 p) {
   if (b > .2) return b * HS;
   float m = smoothstep(0., 1., uMorph);
   float d = headD(h);
-  if (m > .001) d = mix(d, headSlot(uHeadTexB, uHeadOnB, uHeadMinB, uHeadSizeB, h), m);
+  if (m > .001) d = mix(d, headSlot(uHeadTexB, uHeadOnB, uHeadMinB, uHeadSizeB, uHeadReliefB, h), m);
   // it dissolves into smoke below the neck
   d = max(d, -.55 - h.y);
   return d * HS;

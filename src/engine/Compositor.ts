@@ -154,6 +154,11 @@ export class Compositor {
   private readonly quadCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   private readonly material: THREE.ShaderMaterial;
   private readonly uniforms;
+  /** The night's signature (its title or logo, white on transparent), drawn small in a corner. */
+  private signature: THREE.CanvasTexture | null = null;
+  private signatureAspect = 1;
+  /** Hidden while the title itself is on screen. */
+  signatureShown = true;
 
   /**
    * `resolve` maps a key (a world plan "world:plan", or a plain scene id) to its scene: two plans of the same
@@ -219,6 +224,9 @@ export class Compositor {
       uSizeB: { value: new THREE.Vector2(1, 1) },
       uBloomTex: { value: this.black as THREE.Texture },
       uBloomAmt: { value: 0 },
+      uSig: { value: this.black as THREE.Texture },
+      uSigOn: { value: 0 },
+      uSigRect: { value: new THREE.Vector4(0, 0, 1, 1) },
     };
     this.material = new THREE.ShaderMaterial({
       uniforms: this.uniforms,
@@ -502,6 +510,14 @@ export class Compositor {
   private applyFx(post: PostFx, frame: AudioFrame, dt: number) {
     const u = this.uniforms;
     const fx = post.fx ?? NEUTRAL_FX;
+    // The night's signature fades in and out (hidden while the title itself is on screen)
+    const sigTarget = this.signature && this.signatureShown ? 1 : 0;
+    u.uSigOn.value += (sigTarget - u.uSigOn.value) * (1 - Math.exp(-dt * 1.5));
+    if (this.signature) {
+      const h = 0.045;
+      const w = (h * this.signatureAspect * this.uniforms.uRes.value.y) / this.uniforms.uRes.value.x;
+      u.uSigRect.value.set(1 - 0.028 - w, 0.04, w, h);
+    }
     u.uTrails.value = fx.trails;
     u.uChroma.value = fx.chroma;
     u.uScan.value = fx.scanlines;
@@ -537,7 +553,17 @@ export class Compositor {
     u.uStrobeMode.value = fx.strobe === "invert" && !post.safeFlash ? 2 : 1;
   }
 
+  /** The night's signature: a canvas with its title or logo in the alpha (null: none). */
+  setSignature(canvas: HTMLCanvasElement | null) {
+    this.signature?.dispose();
+    this.signature = canvas ? new THREE.CanvasTexture(canvas) : null;
+    this.signatureAspect = canvas ? canvas.width / canvas.height : 1;
+    this.uniforms.uSig.value = this.signature ?? this.black;
+    if (!this.signature) this.uniforms.uSigOn.value = 0;
+  }
+
   dispose() {
+    this.signature?.dispose();
     for (const s of this.slots()) this.destroySlot(s);
     this.pool = [];
     this.current = this.next = this.layer = this.bg = this.bgNext = null;

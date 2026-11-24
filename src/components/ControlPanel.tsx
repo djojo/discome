@@ -17,7 +17,9 @@ import {
   type Settings,
   type WorldRule,
 } from "./settings";
-import { lookBackgrounds, lookPlans, type Plan } from "@/looks";
+import { lookBackgrounds, shownPlans, type Plan } from "@/looks";
+import { brandOn, type Brand } from "@/brand/brand";
+import { BrandSettings } from "./BrandSettings";
 
 export const SOURCE_LABELS: Record<SourceKind, string> = {
   mic: "Micro / entrée",
@@ -49,6 +51,9 @@ interface Props {
   onDeleteLook: (id: string) => void;
   onFx: (patch: Partial<FxSettings>) => void;
   onResetFx: () => void;
+  onBrand: (patch: Partial<Brand>) => void;
+  onShowTitle: () => void;
+  onError: (message: string) => void;
 }
 
 function SceneButton({
@@ -108,9 +113,12 @@ export function ControlPanel({
   onDeleteLook,
   onFx,
   onResetFx,
+  onBrand,
+  onShowTitle,
+  onError,
 }: Props) {
   const mode = DIRECTOR_MODES.find((m) => m.id === settings.director) ?? DIRECTOR_MODES[0];
-  const plans = lookPlans(findLook(settings));
+  const plans = shownPlans(findLook(settings), brandOn(settings.brand));
   const otherScenes = SCENES.filter((x) => !plans.some((p) => p.scene.id === x.id));
   const worldBackgrounds = lookBackgrounds(findLook(settings))
     .map((e) => SCENES.find((x) => x.id === e.id)!)
@@ -217,6 +225,12 @@ export function ControlPanel({
             </select>
           </label>
         )}
+      </section>
+
+      <section>
+        <h2>Ta soirée</h2>
+        <p className="hint">Le nom de la soirée, celui du DJ ou ton logo : chaque monde l&apos;affiche dans son style.</p>
+        <BrandSettings brand={settings.brand} onBrand={onBrand} onError={onError} onShowTitle={onShowTitle} />
       </section>
 
       <section>
