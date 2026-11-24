@@ -61,6 +61,36 @@ float sdHead(vec3 p) {
   d = smin(d, sdCapsule(p, vec3(0., -.55, -.12), vec3(0., -1.6, -.2), .23), .15);
   return d;
 }
+
+/**
+ * Le Patron: the archetype of the personality cult, not anyone's portrait. The sculpted head, broader and heavier:
+ * a square jaw, bushy brows, a thick moustache, the hair swept back from the forehead, a thick neck in the closed
+ * collar of a tunic. Same frame as sdHead.
+ */
+float sdPatron(vec3 p) {
+  vec3 q = vec3(abs(p.x), p.y, p.z);
+  // broader (the field of a wider head: scaled, and kept a true bound)
+  float d = sdHead(p * vec3(.9, 1., 1.)) * .9;
+  // a square, heavy jaw
+  d = smin(d, sdEllipsoid(q - vec3(.2, -.43, .2), vec3(.16, .15, .19)), .12);
+  // two bushy brows over the eyes, thick at the inner end, a little arched
+  d = smin(d, sdCapsule(q, vec3(.075, .165, .535), vec3(.17, .185, .5), .04), .03);
+  d = smin(d, sdCapsule(q, vec3(.17, .185, .5), vec3(.3, .15, .41), .03), .03);
+  // the thick moustache, drooping at its ends, over the upper lip
+  d = smin(d, sdEllipsoid(p - vec3(0., -.285, .585), vec3(.15, .055, .055)), .03);
+  d = smin(d, sdCapsule(q, vec3(.06, -.29, .58), vec3(.2, -.37, .5), .05), .04);
+  // the hair swept back: a mass over the forehead and the crown, combed in ridges
+  // (a high forehead: the hairline starts well above the brows)
+  float hair = sdEllipsoid(p - vec3(0., .52, -.1), vec3(.5, .34, .6));
+  hair = smin(hair, sdEllipsoid(p - vec3(0., .66, .12), vec3(.42, .18, .36)), .1);
+  hair += .006 * sin(p.x * 70.) * smoothstep(.45, .6, p.y);
+  d = smin(d, hair, .07);
+  // a thick neck, and the closed collar of a tunic round it
+  d = smin(d, sdCapsule(p, vec3(0., -.6, -.1), vec3(0., -1.6, -.18), .27), .12);
+  float collar = max(abs(length((p.xz - vec2(0., -.14)) * vec2(1., 1.15)) - .3) - .045, abs(p.y + .97) - .09);
+  d = min(d, collar);
+  return d;
+}
 `;
 
 /** Normal, ambient occlusion and sphere-tracing for a scene that defines \`float map(vec3)\`. */

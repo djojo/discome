@@ -5,10 +5,11 @@ import type { ParamDef, ParamValues } from "../types";
 /**
  * The head library: real sculpted busts (Printables, see public/heads/CREDITS.md) baked by scripts/bake-heads.mjs
  * into signed distance grids, so every head effect (shell, shards, contour lines, halftone, chrome…) works with
- * any of them. "humain" is the sculpted head of lib.glsl.ts (no file).
+ * any of them. "humain" and "patron" are sculpted heads of lib.glsl.ts (no file).
  */
 export const HEADS = [
   { id: "humain", label: "Humain" },
+  { id: "patron", label: "Le Patron" },
   { id: "tigre", label: "Tigre" },
   { id: "loup", label: "Loup" },
   { id: "faucon", label: "Faucon" },
@@ -35,7 +36,9 @@ export const headParam = (def: HeadId = "humain"): ParamDef => ({
   default: def,
 });
 
-const isBaked = (id: unknown): id is HeadId => typeof id === "string" && id !== "humain" && HEADS.some((h) => h.id === id);
+/** The heads sculpted in code (lib.glsl.ts): no file to load. */
+const SCULPTED = new Set(["humain", "patron"]);
+const isBaked = (id: unknown): id is HeadId => typeof id === "string" && !SCULPTED.has(id) && HEADS.some((h) => h.id === id);
 
 export interface HeadGrid {
   tex: THREE.Data3DTexture;
@@ -155,6 +158,11 @@ export function setHead(u: Record<string, THREE.IUniform>, id: unknown, suffix =
     }
     return !!t;
   }
+  // the sculpted heads: 0 the human head, .25 the Patron (both "sculpted" for the scenes, which test < .5)
+  if (id === "patron") {
+    u[`uHeadOn${suffix}`].value = 0.25;
+    return true;
+  }
   const g = headGrid(id);
   u[`uHeadOn${suffix}`].value = g ? 1 : 0;
   if (g) {
@@ -168,7 +176,8 @@ export function setHead(u: Record<string, THREE.IUniform>, id: unknown, suffix =
 /**
  * GLSL: headD(p), the head of the scene in the frame of sdHead (y up, facing +z), sculpted or baked (a baked
  * bust floats, cut flat under its neck), or the night's title. headBound(p) is a cheap distance that never exceeds
- * the head's. Needs ART_LIB. uHeadOn: 0 sculpted head, 1 baked head, 2 title, 3 nothing (the title is being drawn).
+ * the head's. Needs ART_LIB. uHeadOn: 0 sculpted head (.25 the Patron), 1 baked head, 2 title, 3 nothing (the title is
+ * being drawn).
  */
 export const HEAD_GLSL = /* glsl */ `
 uniform highp sampler3D uHeadTex;
@@ -227,7 +236,7 @@ float titleField(highp sampler3D tex, vec3 bmin, vec3 bsize, vec2 relief, vec3 p
 }
 /** A head slot: the sculpted head (on = 0), a baked one, which floats (no column under the bust), or the title. */
 float headSlot(highp sampler3D tex, float on, vec3 bmin, vec3 bsize, vec2 relief, vec3 p) {
-  if (on < .5) return sdHead(p);
+  if (on < .5) return on > .2 ? sdPatron(p) : sdHead(p);
   if (on < 1.5) return bakedHead(tex, bmin, bsize, p);
   if (on < 2.5) return titleField(tex, bmin, bsize, relief, p);
   return 10.;
@@ -240,7 +249,7 @@ float titleD2(vec2 xy) {
   return textureLod(uHeadTex, vec3(c, .5), 0.).r + length((uv - c) * uHeadSize.xy);
 }
 float headBound(vec3 p) {
-  if (uHeadOn < .5) return sdEllipsoid(p - vec3(0., -.05, -.02), vec3(.56, .95, .75));
+  if (uHeadOn < .5) return sdEllipsoid(p - vec3(0., -.05, -.02), uHeadOn > .2 ? vec3(.64, 1.02, .8) : vec3(.56, .95, .75));
   if (uHeadOn > 2.5) return 10.;
   if (uHeadOn > 1.5) return sdBox(p - vec3(uHeadMin.xy + uHeadSize.xy * .5, 0.), vec3(uHeadSize.xy * .5, uHeadRelief.x));
   return sdBox(p - uHeadMin - uHeadSize * .5, uHeadSize * .5);
