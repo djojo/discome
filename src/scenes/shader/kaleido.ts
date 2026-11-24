@@ -57,7 +57,7 @@ void main() {
     float d = length(uv) * exp(-length(uv0));
     vec3 c = pal(length(uv0) + i * 0.4 + uHue);
     d = sin(d * (8.0 + 3.0 * uMid) + t) / 8.0;
-    d = abs(d);
+    d = max(abs(d), 1e-3);   // never 0: an infinite glow turns into NaN, black squares through the bloom
     d = pow((0.007 + 0.01 * uTreble + 0.008 * uBeat) / d, 1.2);
     col += c * d;
   }
