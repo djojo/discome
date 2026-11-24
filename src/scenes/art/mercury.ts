@@ -21,9 +21,10 @@ const FRAMINGS: Framing[] = [
 ];
 
 /**
- * A chrome mask rising from a bath of liquid metal; colour only exists in the reflections.
- * The mask stays still. Each kick sends a ring across the liquid from the mask; the drop sweeps a blade of
- * light across the chrome.
+ * A chrome mask rising from a bath of liquid metal, in a product-photo studio: a luminous ceiling and two strip
+ * softboxes, which the face and the bath both reflect; colour only exists in the reflections.
+ * The mask stays still. Each kick sends a ring across the liquid from the mask; the drop darkens the studio and
+ * sweeps a blade of light across the face and the bath.
  */
 export const mercury = defineShaderScene({
   id: "mercury",
@@ -34,7 +35,7 @@ export const mercury = defineShaderScene({
   renderScale: 0.7,
   mask: true,
   camera: { framings: FRAMINGS, glideBars: 2 },
-  description: "Masque chromé immobile dans un bain de métal liquide : chaque kick lance un anneau, le drop fait passer une lame de lumière.",
+  description: "Masque chromé immobile dans un bain de métal liquide, sous les softbox d'un studio photo : chaque kick lance un anneau, le drop éteint le studio et fait passer une lame de lumière.",
   params: [paletteParam("mercury"), headParam(), { type: "range", key: "swell", label: "Houle", min: 0, max: 2, step: 0.05, default: 1 }],
   uniforms: () => ({
     ...headUniforms(),
@@ -123,15 +124,52 @@ vec3 chart(vec3 r) {
   vec3 up = mix(uInk, vec3(.4, 1., .6), .35);
   return mix(up, uAccent * 1.3, step(.2, uCrash)) * (line * 1.6 + area);
 }
-vec3 env(vec3 r) {
-  float az = atan(r.z, r.x) + uTime * .05;
-  float el = r.y;
-  vec3 c = uBase * 1.3 + uInk * .27 * smoothstep(-.05, .95, el) + uTint * .04 * (1. - smoothstep(-.4, .1, el));
-  float a1 = abs(mod(az - .8 + PI, 2. * PI) - PI);
-  c += uTint * 3.6 * (1. - smoothstep(.015, .04, abs(el - .28))) * (1. - smoothstep(.5, .75, a1));
-  float a2 = abs(mod(az + 2.3 + PI, 2. * PI) - PI);
-  c += uPal1 * 3. * (1. - smoothstep(.02, .05, abs(el - .08))) * (1. - smoothstep(.7, .95, a2));
-  c += vec3(1.) * 1.1 * smoothstep(.9, .98, el);
+/** Angle between two azimuths, wrapped. */
+float azGap(float a, float b) { return abs(mod(a - b + PI, 2. * PI) - PI); }
+/**
+ * The product studio, fixed around the bath (azimuth 0 = the mask's front, +z; r.y >= 0): a luminous ceiling of
+ * diffuser tiles over the set, deep enough that the bath catches its far end, and two tall strip softboxes on the
+ * mask's sides, a little in front (they draw the cheeks), one white, one in the world's leading colour. The rest of
+ * the room stays black: the dark between the lights is what draws a chrome shape. The seams of the ceiling bend over
+ * the face like the zebra of a car designer.
+ */
+vec3 studio(vec3 r, float fw) {
+  vec3 c = vec3(.02 + .05 * smoothstep(0., .8, r.y));
+  // the luminous ceiling: 3 × 7 tiles from far behind the mask (what the bath sees) to over the camera (what the face
+  // sees), brightest over the mask
+  if (r.y > .1) {
+    vec2 q = (r.xz / r.y - vec2(0., -.8)) / vec2(1.05, 2.8);
+    vec2 aq = abs(q);
+    float inside = (1. - smoothstep(.95, 1., aq.x)) * (1. - smoothstep(.97, 1., aq.y));
+    vec2 g = (q + 1.) * vec2(1.5, 3.5);
+    vec2 sd = abs(fract(g) - .5);
+    // the seams, a hair under a tenth of a tile; gone where the chrome squeezes a tile under a few pixels
+    float gw = fw * 1.4 / (r.y * r.y);
+    vec2 seam = smoothstep(.45 - gw, .465 + gw, sd) * (1. - smoothstep(.06, .2, gw));
+    float tile = .93 + .14 * hash12(floor(g) + 7.);
+    float z = r.z / r.y;
+    float heart = (1. - .3 * q.x * q.x) * (.45 + .55 * (1. - smoothstep(-1.6, 1.8, z))) * (.5 + .5 * smoothstep(-3.6, -1.8, z));
+    c += vec3(2.2) * inside * tile * heart * (1. - .85 * max(seam.x, seam.y));
+  }
+  // the two strips: tall, narrow, a hot line down their middle; they breathe a little with the kick
+  float az = atan(r.x, r.z);
+  float tall = smoothstep(-.06, .03, r.y) * (1. - smoothstep(.86, .94, r.y)) * (.5 + .5 * smoothstep(-.05, .6, r.y));
+  float d1 = azGap(az, 1.2) / .14, d2 = azGap(az, -1.2) / .14;
+  float s1 = (1. - smoothstep(.8, 1., d1)) * (1. - .6 * d1 * d1), s2 = (1. - smoothstep(.8, 1., d2)) * (1. - .6 * d2 * d2);
+  float pump = .88 + .24 * uBeat;
+  c += mix(vec3(1.), uTint, .75) * 2. * s1 * tall * pump;
+  c += vec3(1.8) * s2 * tall * pump;
+  return c;
+}
+/** What the chrome sees in direction r; chartK: how much of the price chart it shows. */
+vec3 env(vec3 r, float chartK) {
+  // the pixel's footprint on the room (the seams of the ceiling fade where it is too large)
+  float fw = length(fwidth(r));
+  if (!(fw < 1.)) fw = 1.;
+  // the drop: the studio goes dark while the blade passes, then comes back up
+  float dark = smoothstep(0., .05, uSweep) * (1. - smoothstep(1.3, 2.8, uSweep));
+  // below the horizon, the bath: the same studio, mirrored and darker
+  vec3 c = studio(vec3(r.x, abs(r.y), r.z), fw) * mix(.5, 1., smoothstep(-.04, .01, r.y)) * (1. - .8 * dark);
   // the title's studio: a big softbox behind the camera, so the letters' faces read as bright chrome
   if (uTitle > .5) {
     vec3 sb = normalize(uCamPos - uCamTarget + vec3(0., .8, 0.));
@@ -139,11 +177,17 @@ vec3 env(vec3 r) {
     c += mix(uInk, vec3(1.), .5) * 1.5 * smoothstep(.55, .9, k) * (.75 + .25 * smoothstep(-.2, .5, r.y));
     c += uTint * .9 * smoothstep(.15, .3, k) * (1. - smoothstep(.3, .45, k));
   }
-  c += chart(r);
-  // The drop: a vertical blade of light sweeping once around the room
-  if (uSweep < 1.3) {
-    float as = abs(mod(az - (uSweep * 2. * PI - PI) + PI, 2. * PI) - PI);
-    c += vec3(1.) * 5. * (1. - smoothstep(.03, .12, as)) * (1. - uSweep * .7);
+  c += chart(r) * chartK;
+  // The drop: in the darkened studio, a blade of light (a vertical plane turning about the mask) crosses the face
+  // from one side to the other, its back half crossing the bath, then the lights come back up
+  if (uSweep < 1.7) {
+    float s = clamp(uSweep / 1.5, 0., 1.);
+    s = 1. - (1. - s) * (1. - s);
+    float side = fract(uSeed) > .5 ? 1. : -1.;
+    float a = atan(uCamPos.x - uCamTarget.x, uCamPos.z - uCamTarget.z) + side * (3.9 * s - 1.95);
+    float d = abs(dot(r, vec3(cos(a), 0., -sin(a))));
+    float on = smoothstep(0., .04, uSweep) * (1. - smoothstep(1.3, 1.7, uSweep));
+    c += (vec3(1.) * 9. * (1. - smoothstep(.035, .08, d)) + mix(uTint, vec3(1.), .35) * 1.8 * exp(-d * 12.)) * on;
   }
   return c;
 }
@@ -160,7 +204,11 @@ void main() {
     vec3 p = ro + rd * tt;
     vec3 n = calcNormal(p);
     float fre = pow(1. - clamp(dot(n, -rd), 0., 1.), 5.);
-    col = env(reflect(rd, n)) * mix(uInk * .85, vec3(1.), fre);
+    // the chart glows in the bath; on the mask it would only draw a line round every contour
+    float onMask = smoothstep(.02, .08, p.y - liquidH(p.xz));
+    col = env(reflect(rd, n), 1. - .75 * onMask) * mix(uInk * .85, vec3(1.), fre);
+    // under the title the bath stays a dark mirror, so the chrome letters stand out against it
+    col *= 1. - .75 * uTitle * (1. - onMask);
     col *= .55 + .45 * calcAO(p, n);
     col = mix(col, bg, smoothstep(4., 12., tt));
   }
