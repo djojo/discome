@@ -114,8 +114,8 @@ vec3 sky(vec3 rd) {
 /** Light of the orb on the desert. */
 vec3 orbLight(vec3 p) {
   float d = length(p - gOrb);
-  float k = (.5 + 1.5 * uOrb) * (1. + 7. * uDrop);
-  return vec3(.45, .75, 1.) * k / (1. + d * d * (1.6 - 1.3 * uDrop));
+  float k = (.5 + 1.5 * uOrb) * (1. + 3. * uDrop);
+  return vec3(.45, .75, 1.) * k / (1. + d * d * (1.6 - 1.1 * uDrop));
 }
 
 void main() {
@@ -153,7 +153,7 @@ void main() {
       // Graphic light: the low sun dominates, so the long shadow reads as a black band
       col = sand * (.22 + 1.05 * sh * (.55 + .45 * smoothstep(-.1, .4, dif * 3.))) + sand * orbLight(p);
       // the orb bursting on the drop floods the whole desert with blue light
-      col += sand * vec3(.45, .75, 1.) * uDrop * 1.2;
+      col += sand * vec3(.45, .75, 1.) * uDrop * .5;
       float fog = 1. - exp(-tg * .022);
       col = mix(col, sky(rd), fog);
       solid = 1. - smoothstep(25., 60., tg);
@@ -161,7 +161,8 @@ void main() {
     col += figHalo(dmin);
   }
 
-  // The orb: a white core, a blue corona, sparks on the kicks
+  // The orb: a white core, a blue corona, sparks on the kicks; on the drop it bursts in rays and a ring of light
+  // (shaped light that leaves the figure and the desert readable, never a white fog)
   vec3 oc = gOrb - ro;
   float s = dot(oc, rd);
   float r = length(oc - rd * s);
@@ -172,9 +173,12 @@ void main() {
     vec3 diff = rd * s - oc;
     float ang = atan(dot(diff, cross(right, rd)), dot(diff, right));
     float spikes = pow(vnoise(vec3(ang * 3.5, uTime * 18., 0.)), 3.) * uBeat * 1.2;
-    float corona = exp(-max(r - R, 0.) * (9. - 6. * spikes)) * (.5 + 1.2 * uOrb);
+    float corona = exp(-max(r - R, 0.) * (14. - 8. * spikes)) * (.35 + .7 * uOrb);
     col = mix(col, vec3(2.4), core);
-    col += vec3(.35, .7, 1.) * corona + vec3(.6, .85, 1.) * exp(-r * 2.) * uDrop * 1.5;
+    col += vec3(.35, .7, 1.) * corona;
+    float rays = pow(vnoise(vec3(ang * 6., uTime * 1.5, 1.)), 4.) * exp(-max(r - R, 0.) * 2.5) * 2.;
+    float ring = exp(-pow((r - R - (1. - uDrop) * 1.4) / .035, 2.));
+    col += vec3(.6, .85, 1.) * uDrop * (rays + ring * 1.4 + exp(-max(r - R, 0.) * 5.) * .4);
     solid = max(solid, core);
   }
 
