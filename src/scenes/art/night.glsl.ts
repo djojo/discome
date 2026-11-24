@@ -28,6 +28,14 @@ vec3 nightSky(vec3 rd, float twist) {
   return c;
 }
 
+/** A crescent moon in direction md, and its faint glow. */
+vec3 moon(vec3 rd, vec3 md) {
+  float dm = acos(clamp(dot(rd, md), -1., 1.));
+  vec3 off = normalize(md + vec3(.03, .02, 0.));
+  float cres = (1. - smoothstep(.034, .038, dm)) * smoothstep(.03, .036, acos(clamp(dot(rd, off), -1., 1.)));
+  return vec3(1., .93, .75) * cres * 1.4 + vec3(.6, .65, .9) * exp(-dm * 9.) * .08;
+}
+
 /** Rings of yarn colour on the ground round a centre, breathing out; petals (a mandala) with bloom. */
 vec3 groundRings(vec2 xz, float breath, float bloom) {
   float r = length(xz);
@@ -35,8 +43,12 @@ vec3 groundRings(vec2 xz, float breath, float bloom) {
   float rr = r * (1. + .08 * bloom * cos(a * 12.)) - breath * .25;
   float band = fract(rr * 1.6);
   float line = smoothstep(.0, .08, band) * (1. - smoothstep(.55, .63, band));
-  vec3 c = yarn(fract(floor(rr * 1.6) * .17)) * line;
-  c += yarn(fract(r * .1 + .5)) * bloom * (1. - smoothstep(.0, .05, abs(sin(a * 6. + r * .5)))) * .8;
+  // toward the horizon the rings get finer than a pixel: their average instead of a moire
+  float fw = fwidth(rr * 1.6);
+  float blur = smoothstep(.15, .5, fw);
+  vec3 c = mix(yarn(fract(floor(rr * 1.6) * .17)) * line, yarn(fract(r * .05 + .3)) * .5, blur);
+  float pet = abs(sin(a * 6. + r * .5));
+  c += yarn(fract(r * .1 + .5)) * bloom * mix(1. - smoothstep(.0, .05, pet), .08, smoothstep(.02, .1, fwidth(pet))) * .8;
   return c * .55 * exp(-r * .09) + uBase * .4;
 }
 `;

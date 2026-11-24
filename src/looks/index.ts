@@ -280,20 +280,16 @@ export const LOOKS: Look[] = [
     name: "Canyon",
     description: "La nuit chamanique du désert : le cactus sacré, les esprits animaux, les visions, les canyons aux pétroglyphes ; tout est dessiné en fils de couleur.",
     swatch: ["#060A20", "#3FD9C8", "#FF8A1F"],
-    palettes: ["peyote", "desert"],
+    palettes: ["peyote", "desert", "huichol"],
     scenes: [
       { id: "canyon-cactus", weight: 3, role: "calm", params: { palette: "peyote", variant: "column" } },
-      { id: "canyon-cactus", key: "bouton", label: "Bouton", weight: 2, role: "build", params: { palette: "peyote", variant: "button" } },
+      { id: "canyon-cactus", key: "bouton", label: "Bouton", weight: 2, role: "build", params: { palette: "huichol", variant: "button" } },
       { id: "canyon-spirit", weight: 2, role: "drop", params: { palette: "peyote" } },
-      { id: "canyon-vision", weight: 3, role: "after", params: { palette: "peyote" } },
+      { id: "canyon-vision", weight: 3, role: "after", params: { palette: "huichol" } },
       { id: "canyon-gorge", label: "Gorge de nuit", weight: 2, role: "drop", params: { palette: "peyote", moment: "night" } },
       { id: "canyon-mesas", label: "Mesas de nuit", weight: 2, role: "build", params: { palette: "desert", moment: "night" } },
     ],
-    backgrounds: [
-      { id: "kaleido", weight: 2, params: { palette: "peyote", segments: 6 } },
-      { id: "nebula", weight: 2, params: { palette: "peyote", trail: 0.9, amount: 0.5 } },
-    ],
-    bgOpacity: 0.45,
+    // no background: every scene draws its own night sky (the spiral of stars)
     title: {
       id: "canyon-spirit",
       key: "titre",
