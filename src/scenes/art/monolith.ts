@@ -8,7 +8,15 @@ import { HEAD_GLSL, headParam, headUniforms, setHead } from "./heads";
 /**
  * Brutalist concrete avenue under a single low sun, flown through by the shared flight:
  * slow glide at ground level in the breakdown, rising through the build, take-off over the roofs on the drop.
+ * The sun stands low, just to the right of the avenue's axis, ahead of us: the towers stand against the light and
+ * their long shadows cross the avenue; through the build it sinks and reddens; seen from above on the drop the city
+ * is a sundial, and the monolith's shadow runs across it.
+ * At night (« Nuit sodium »): no sun, sodium lamps along the avenue, pools of orange light on the wet road; on the
+ * kick they waver, on the drop they go out and come back on one after the other down the avenue.
  */
+/** The sun's azimuth: ahead (-z) and about 24° to the right of the avenue. */
+const SUN_AZ = -1.15;
+
 export const monolith = defineShaderScene({
   id: "monolith",
   name: "Monolithe",
@@ -36,12 +44,17 @@ export const monolith = defineShaderScene({
       default: "slab",
     },
     headParam("moai"),
+    { type: "toggle", key: "night", label: "Nuit (lampadaires sodium)", default: false },
     { type: "toggle", key: "letterbox", label: "Format cinéma 2.39 (bandes noires)", default: false },
   ],
   uniforms: () => ({
-    uSunAz: { value: 0.7 },
-    uSunTarget: { value: 0.7 },
+    // low ahead, a little to the right of the avenue's axis (-z)
+    uSunAz: { value: SUN_AZ },
     uSunEl: { value: 0.2 },
+    uDusk: { value: 0 },
+    uSunUp: { value: 0 },
+    uNight: { value: 0 },
+    uCascade: { value: 1 },
     uBarPos: { value: 0 },
     uRise: { value: 1 },
     uDust: { value: 1 },
@@ -51,13 +64,20 @@ export const monolith = defineShaderScene({
     ...headUniforms(),
   }),
   update(u, f, p, dt) {
-    if (f.drop) u.uSunTarget.value = (u.uSunTarget.value as number) + 2.1;
     // On the drop the monolith lights up like a giant screen, then goes dark again over a few bars
     const barS = f.bpm > 0 ? (60 / f.bpm) * 4 : 2;
     u.uSlabScreen.value = f.drop ? 1 : (u.uSlabScreen.value as number) * Math.exp(-dt / (barS * 2.5));
-    const az = u.uSunAz.value as number;
-    u.uSunAz.value = az + ((u.uSunTarget.value as number) - az) * (1 - Math.exp(-dt * 1.5));
     u.uSunEl.value = num(p.sun, 0.2);
+    // Through the build the sun sinks and reddens; it comes back up slowly after
+    const dusk = f.section === "build" ? f.buildProgress : 0;
+    const d0 = u.uDusk.value as number;
+    u.uDusk.value = f.drop ? 0 : d0 + (dusk - d0) * (1 - Math.exp(-dt * (dusk > d0 ? 1 : 0.12)));
+    // ...and on the drop it springs back up: the light floods the city, the towers' shadows draw the sundial
+    u.uSunUp.value = f.drop ? 1 : (u.uSunUp.value as number) * Math.exp(-dt / (barS * 4));
+    u.uNight.value = p.night === true ? 1 : 0;
+    // Night: on the drop the lamps go out and come back on one after the other down the avenue (over two bars)
+    const c0 = u.uCascade.value as number;
+    u.uCascade.value = f.drop ? 0 : Math.min(1, c0 + dt / (barS * 2));
     u.uBarPos.value = f.bpm > 0 ? f.bar + (f.beatInBar + f.beatPhase) / 4 : f.time / 2;
     // The city moves at its own pace: towers rise and settle over a phrase, quieter in the breakdown
     const rise = f.section === "breakdown" ? 0.3 : 1;
@@ -71,6 +91,10 @@ export const monolith = defineShaderScene({
   fragment: /* glsl */ `
 uniform float uSunAz;
 uniform float uSunEl;
+uniform float uDusk;     // the build: the sun sinks and reddens
+uniform float uSunUp;    // the drop: the sun springs back up
+uniform float uNight;    // sodium night: no sun, lamps
+uniform float uCascade;  // night drop: how far down the avenue the lamps are back on (0..1)
 uniform float uBarPos;
 uniform float uRise;
 uniform float uDust;
@@ -82,6 +106,7 @@ ${HEAD_GLSL}
 ${FLIGHT_GLSL}
 #define CS 2.6
 vec3 gSun;
+vec3 gSunC;   // the sun's colour (it reddens through the build)
 vec3 gRo;
 
 float sdRBox(vec3 p, vec3 b, float r) { vec3 q = abs(p) - b + r; return length(max(q, 0.)) + min(max(q.x, max(q.y, q.z)), 0.) - r; }
@@ -244,7 +269,20 @@ float marchB(vec3 ro, vec3 rd, float tmax) {
 /** Interleaved gradient noise: an even, fine dither (white noise clumps into grain). */
 float ign(vec2 fc) { return fract(52.9829189 * fract(dot(fc, vec2(.06711056, .00583715)))); }
 
+/** The monolith (always 40 ahead) as a box: where a ray enters it, or -1. */
+float slabHit(vec3 ro, vec3 rd) {
+  vec3 c = vec3(0., 12., gRo.z - 40.);
+  vec3 m = 1. / rd;
+  vec3 n = m * (ro - c);
+  vec3 k = abs(m) * vec3(2.4, 12., .3);
+  vec3 t1 = -n - k, t2 = -n + k;
+  float tN = max(max(t1.x, t1.y), t1.z), tF = min(min(t2.x, t2.y), t2.z);
+  return (tN > tF || tF < 0.) ? -1. : tN;
+}
+
 float shadow(vec3 ro, vec3 rd) {
+  // the monolith's own shadow, long across the city (seen from above on the drop)
+  if (uMonument < .5 && slabHit(ro, rd) > 0.) return 0.;
   gCheap = true;
   // The fixed steps would print fans of lines around the edges: a small ordered offset (interleaved gradient
   // noise) breaks them up without the speckle a random one leaves in the penumbra
@@ -257,7 +295,8 @@ float shadow(vec3 ro, vec3 rd) {
     res = min(res, 8. * d / max(t - y, .0001));
     ph = h;
     t += clamp(h, .03, .6);
-    if (res < .004 || t > 22. || ro.y + rd.y * t > 10.) break;
+    // (beyond 16 the haze has the last word: against a low sun the rays would cross half the city)
+    if (res < .004 || t > 16. || ro.y + rd.y * t > 10.) break;
   }
   gCheap = false;
   res = clamp(res, 0., 1.);
@@ -337,9 +376,63 @@ float motes(vec2 uv, float focal, float tHit) {
 /** Thin line where fract(x) wraps, width w (in units of one period). */
 float joint(float x, float w) { float f = fract(x); return 1. - smoothstep(0., w, min(f, 1. - f)); }
 
+// ---------------------------------------------------------------- sodium night
+const vec3 LAMP = vec3(1., .55, .2);
+const float LS = 5.2;   // a lamp every LS on each side, staggered
+
+vec3 lampPos(float k, float side) { return vec3(side * 2.15, 3., (k + (side > 0. ? 0. : .5)) * LS); }
+
+/** Is this lamp on: the drop puts them out, they come back on one after the other; the kick makes some waver. */
+float lampOn(vec3 L) {
+  float ahead = gRo.z - L.z;
+  float on = 1. - smoothstep(uCascade * 60. - 3., uCascade * 60. + 1., ahead);
+  return on * (1. - .35 * uBeat * step(.7, hash12(L.xz * .37)));
+}
+
+/** Light of the nearest lamps on a surface: sodium orange, thrown downward. */
+vec3 lampLight(vec3 p, vec3 n) {
+  vec3 acc = vec3(0.);
+  for (int s = 0; s < 2; s++) {
+    float side = s == 0 ? 1. : -1.;
+    float k0 = floor(p.z / LS - (side > 0. ? 0. : .5) + .5);
+    for (int j = -1; j <= 1; j++) {
+      vec3 L = lampPos(k0 + float(j), side);
+      vec3 d = L - p;
+      float r2 = dot(d, d);
+      float ir = inversesqrt(r2);
+      float ndl = max(dot(n, d * ir), 0.);
+      // a sodium lamp throws its light down: a pool under it, darkness between two
+      float cone = .15 + .85 * smoothstep(.45, .95, d.y * ir);
+      acc += LAMP * ndl * cone * lampOn(L) * 11. / (1. + r2 * 2.4);
+    }
+  }
+  return acc;
+}
+
+/** The lamp heads seen along a ray (their glow in the haze); tmax: what the ray hit. */
+vec3 lampGlow(vec3 ro, vec3 rd, float tmax, float pa) {
+  vec3 acc = vec3(0.);
+  float k0 = floor(gRo.z / LS) + 1.;
+  for (int i = 0; i < 10; i++) {
+    for (int s = 0; s < 2; s++) {
+      vec3 L = lampPos(k0 - float(i), s == 0 ? 1. : -1.);
+      vec3 w = L - ro;
+      float along = dot(w, rd);
+      if (along < 0. || (tmax > 0. && along > tmax + .2)) continue;
+      float d = length(w - rd * along);
+      float px = max(along * pa, .05);
+      acc += LAMP * lampOn(L) * (exp(-d * d / (px * px * 2.)) * 3. + exp(-d * 2.5) * .22) * exp(-along * .035);
+    }
+  }
+  return acc;
+}
+
 vec3 fogColor(vec3 rd) {
-  float s = pow(max(dot(rd, gSun), 0.), 6.);
-  return mix(uInk * .6, uAccent * 1.25, s * .65) + uBase * .35;
+  float s = max(dot(rd, gSun), 0.);
+  // night: a dark orange haze, the lamps' glow low over the avenue
+  if (uNight > .5) return uBase * .8 + LAMP * .06 * (1. - smoothstep(0., .3, abs(rd.y)));
+  // against the light: the haze glows toward the sun, stays cool and dim away from it
+  return mix(uBase * .8 + uInk * .14, gSunC * 1.15, pow(s, 4.) * .85) + gSunC * pow(s, 32.) * .4;
 }
 
 void main() {
@@ -347,8 +440,9 @@ void main() {
   vec2 uv = (fc - .5 * uRes) / uRes.y;
   uv *= rot(uBank);
   uv += flightShake();
-  float az = uSunAz + .35 * sin(uTime * .05);
-  gSun = normalize(vec3(cos(az) * .9, uSunEl, sin(az) * .9));
+  float az = uSunAz + .05 * sin(uTime * .05);
+  gSun = normalize(vec3(cos(az) * .9, uSunEl * (1. - .55 * uDusk) + .25 * uSunUp, sin(az) * .9));
+  gSunC = mix(uAccent * vec3(1.08, .86, .62) * 1.2, vec3(1., .4, .17), uDusk * .75);
 
   // Flight: low along the avenue, high over the roofs when the drop takes off
   // On top of the flight's moves, a weave across the avenue and a swell in altitude tied to the distance
@@ -367,9 +461,13 @@ void main() {
   float focal = flightFocal(1.35);
   vec3 rd = lookAt(ro, ta) * normalize(vec3(uv, focal));
 
-  vec3 sky = mix(uInk * .9, uBase * 1.6, clamp(rd.y * 1.6, 0., 1.));
+  vec3 sky = mix(uInk * .6 + uBase * .5, uBase * 1.4, clamp(rd.y * 1.6, 0., 1.));
   float sd = max(dot(rd, gSun), 0.);
-  sky += uAccent * (pow(sd, 24.) * .55 + smoothstep(.9994, .9998, sd) * 1.6);
+  sky += gSunC * (pow(sd, 4.) * .4 + pow(sd, 24.) * .8 + smoothstep(.9994, .9998, sd) * 2.2);
+  if (uNight > .5) sky = uBase * .6 + LAMP * .07 * exp(-max(rd.y, 0.) * 6.);
+  float pa = 1. / (uRes.y * focal);
+  // the haze thins out high up (the drop sees the whole city)
+  float fogK = .018 * mix(1., .4, smoothstep(1., 4., ro.y));
 
   // Ground plane intersected analytically; the march only looks for buildings in front of it
   float tg = rd.y < -.0001 ? (ro.y - level) / -rd.y : 1e5;
@@ -397,14 +495,16 @@ void main() {
       vec3 n = normalize(k.xyy * headD(q + k.xyy * e) + k.yyx * headD(q + k.yyx * e) + k.yxy * headD(q + k.yxy * e) + k.xxx * headD(q + k.xxx * e));
       float dif = clamp(dot(n, gSun), 0., 1.);
       vec3 alb = uInk * .75 * (.88 + .18 * vnoise(q * 18.));
-      float rim = pow(1. - clamp(dot(n, -rd), 0., 1.), 3.) * (.3 + 1.2 * uDrop);
-      col = alb * (dif * uAccent * 2.6 * (1. + uDrop) + uBase * 1.2 * (.5 + .5 * n.y)) + uAccent * rim * dif;
-      col = mix(col, fogColor(rd), .38);
+      // against the light: a dark face, its edges haloed by the sun behind it
+      float rim = pow(1. - clamp(dot(n, -rd), 0., 1.), 3.) * (.5 + 1.2 * uDrop) * smoothstep(.3, .95, dot(rd, gSun));
+      col = alb * (dif * gSunC * 2.6 * (1. + uDrop) + uBase * 1.2 * (.5 + .5 * n.y)) + gSunC * (rim * 1.4 + pow(1. - clamp(dot(n, -rd), 0., 1.), 3.) * dif * .5);
+      col *= 1. - .6 * uNight;
+      col = mix(col, fogColor(rd), .3);
     } else {
       // Near black, with a thin sunlit edge on the side facing the sun
       vec3 q = ro + rd * tm;
-      float rim = smoothstep(2.25, 2.4, q.x * sign(gSun.x)) * (.4 + 1.2 * uDrop);
-      vec3 slab = uBase * .1 + uAccent * rim;
+      float rim = smoothstep(2.25, 2.4, q.x * sign(gSun.x)) * (.4 + 1.2 * uDrop) * (1. - uNight);
+      vec3 slab = uBase * .1 + gSunC * rim;
       // ...until the drop lights it up like a giant screen
       if (uSlabScreen > .01) {
         vec2 su = vec2((q.x + 2.4) / 4.8, q.y / 24.);
@@ -413,7 +513,7 @@ void main() {
         scr += uInk * .5 * exp(-pow((su.y - fract(uTime * .25)) * 9., 2.));
         slab = mix(slab, scr * 1.5, uSlabScreen);
       }
-      col = mix(slab, fogColor(rd), .32);
+      col = mix(slab, fogColor(rd), .22);
     }
     t = -1.;
     solid = 1.;
@@ -429,22 +529,24 @@ void main() {
     gCheap = true;
     float tr = marchB(p + vec3(0., .01, 0.), rr, 30.);
     gCheap = false;
-    vec3 refl = mix(uInk * .9, uBase * 1.6, clamp(rr.y * 1.6, 0., 1.)) + uAccent * pow(max(dot(rr, gSun), 0.), 24.) * .55;
+    vec3 refl = uNight > .5 ? uBase * .6 : mix(uInk * .6 + uBase * .5, uBase * 1.4, clamp(rr.y * 1.6, 0., 1.)) + gSunC * pow(max(dot(rr, gSun), 0.), 24.) * .8;
     if (tr > 0.) {
       vec3 q = p + rr * tr;
       vec3 qn = nrm(q);
-      refl = uInk * .7 * (clamp(dot(qn, gSun), 0., 1.) * uAccent * 2.5 + uBase * 1.2);
-      refl = mix(refl, fogColor(rr), 1. - exp(-(t + tr) * .022));
+      refl = uInk * .7 * (clamp(dot(qn, gSun), 0., 1.) * gSunC * 2.5 * (1. - uNight) + uBase * 1.2);
+      if (uNight > .5) refl += uInk * .5 * lampLight(q, qn);
+      refl = mix(refl, fogColor(rr), 1. - exp(-(t + tr) * fogK));
     }
+    if (uNight > .5) refl += lampGlow(p, rr, tr, pa) * .6;
     float fre = .3 + .7 * pow(1. - clamp(dot(wn, -rd), 0., 1.), 4.);
     col = mix(uBase * .45 + uInk * .03, refl, fre);
-    col = mix(col, fogColor(rd), max(1. - exp(-t * .022), smoothstep(30., 46., t)));
+    col = mix(col, fogColor(rd), max(1. - exp(-t * fogK), smoothstep(30., 46., t)));
   } else if (t > 0.) {
     vec3 p = ro + rd * t;
     map(p);
     float mm = ground ? 0. : gMatM;
     vec3 n = ground ? vec3(0., 1., 0.) : nrm(p);
-    float sh = shadow(p + n * .01, gSun);
+    float sh = uNight > .5 ? 0. : shadow(p + n * .01, gSun);
     float dif = clamp(dot(n, gSun), 0., 1.) * sh;
     float occ = ao(p, n);
     vec2 c = floor(p.xz / CS);
@@ -480,11 +582,20 @@ void main() {
       streak *= (1. - smoothstep(.25, .6, fwidth(f.x * 3.2))) * facing; // facades seen edge-on would turn the streaks into moiré
       alb *= (1. - .18 * streak * (1. - smoothstep(8., 22., t))) * (.93 + .14 * vnoise(vec3(f * 1.1, c.x)));
     }
-    vec3 sunCol = uAccent * 3.3 * (1. + uDrop);
-    vec3 skyCol = uBase * 1.35 * (.45 + .55 * n.y);
+    vec3 sunCol = gSunC * 3.4 * (1. + uDrop) * (1. - uNight);
+    // the shadowed side stays dark: one sun, hard shadows
+    vec3 skyCol = uBase * 1.15 * (.4 + .6 * n.y) * (1. - .7 * uNight);
     // Warm light bounced by the sunlit ground onto the lower facades
-    vec3 bounce = uAccent * .45 * clamp(gSun.y * 3., 0., 1.) * (.5 - .5 * n.y) * exp(-p.y * .35);
+    vec3 bounce = gSunC * .4 * clamp(gSun.y * 3., 0., 1.) * (.5 - .5 * n.y) * exp(-p.y * .35) * (1. - uNight);
     col = alb * (dif * sunCol + (skyCol + bounce) * occ);
+    if (uNight > .5) {
+      col += alb * lampLight(p, n) * (.4 + .6 * occ);
+      // the wet road mirrors the lamps, in long streaks
+      if (ground) {
+        vec3 wn = normalize(vec3(.03 * (vnoise(p * vec3(3., 0., .4)) - .5), 1., .2 * (vnoise(p * vec3(.6, 0., 2.5)) - .5)));
+        col += lampGlow(p + vec3(0., .01, 0.), reflect(rd, wn), -1., pa) * .8;
+      }
+    }
     // its red light blinks on the beat
     if (mm > 1.5) col = vec3(1., .14, .1) * (.4 + 2.6 * uBeat);
     // Silent advertising screens on the facades facing the avenue (more of them as the night drifts)
@@ -504,12 +615,14 @@ void main() {
         }
       }
     }
-    float fog = max(1. - exp(-t * .022), smoothstep(30., 46., t));
+    float fog = max(1. - exp(-t * fogK), smoothstep(30., 46., t));
     col = mix(col, fogColor(rd), fog);
   }
+  // night: the lamp heads in the haze
+  if (uNight > .5) col += lampGlow(ro, rd, t, pa);
 
   // Dust lit by the sun, with shafts where the towers cut the light
-  if (uDust > 0.) {
+  if (uDust > 0. && uNight < .5) {
     float tEnd = t > 0. ? min(t, 24.) : 24.;
     // a fixed, even dither and soft shadow edges: no flickering grain in the shafts
     float j = ign(fc);
@@ -524,7 +637,7 @@ void main() {
     lit /= 6.;
     float phase = .25 + 1.6 * pow(sd, 5.);
     // the dust catches the light on the kick
-    col += uAccent * lit * phase * uDust * .1 * (1. - exp(-tEnd * .08)) * (1. + uDrop + .6 * uBeat);
+    col += gSunC * lit * phase * uDust * .14 * (1. - exp(-tEnd * .08)) * (1. + uDrop + .6 * uBeat);
   }
 
   // dust right in front of the lens, lit by the sun; it flashes on the kick

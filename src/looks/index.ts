@@ -230,7 +230,7 @@ export const LOOKS: Look[] = [
         label: "Nuit sodium",
         weight: 2,
         role: "calm",
-        params: { palette: "sodium", sun: 0.07, dust: 1.6, dynamics: 1.3 },
+        params: { palette: "sodium", sun: 0.07, dust: 1.6, dynamics: 1.3, night: true },
         vary: { palettes: ["sodium"] },
       },
       {
