@@ -364,6 +364,7 @@ export const LOOKS: Look[] = [
       { id: "flesh-morph", weight: 3, role: "drop", params: { palette: "flesh" } },
       { id: "flesh-radiolaria", weight: 2, role: "calm", params: { palette: "flesh" } },
       { id: "flesh-jelly", weight: 2, role: "build", params: { palette: "flesh" } },
+      { id: "flesh-skin", weight: 2, role: "build", params: { palette: "flesh", head: "humain" } },
     ],
     backgrounds: [
       { id: "halo", weight: 3, params: { palette: "flesh", symmetry: 8, trail: 0.8, spin: 0.2, hueSpeed: 0.2 } },
