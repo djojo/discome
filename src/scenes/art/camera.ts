@@ -80,7 +80,9 @@ export class Cadrage {
     this.fresh = false;
     if (this.pending || phrase || !this.allow(this.to)) {
       if (phrase) this.held = 0;
-      const next = this.draw(this.pending) ?? this.draw(null);
+      // already on a framing of the requested tag: stay there (drawing would exclude it and wander off)
+      const stay = !!this.pending && this.to.tag === this.pending && this.allow(this.to);
+      const next = stay ? this.to : (this.draw(this.pending) ?? this.draw(null));
       this.pending = null;
       if (next && next !== this.to) {
         this.from = this.current();
