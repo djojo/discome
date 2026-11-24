@@ -6,7 +6,17 @@ import { ParamControl } from "./ParamControl";
 import { BLEND_MODES, TRANSITIONS, type BlendModeId, type TransitionId } from "@/engine/transitions";
 import { DIRECTOR_MODES } from "@/engine/Director";
 import { FX_SLIDERS, MIRROR_OPTIONS, STROBE_OPTIONS, type FxSettings, type StrobeMode } from "@/engine/fx";
-import { allLooks, DRIFT_OPTIONS, findLook, WORLD_RULES, type Quality, type Settings, type WorldRule } from "./settings";
+import {
+  activeWorlds,
+  allLooks,
+  DRIFT_OPTIONS,
+  findLook,
+  rotationOrder,
+  WORLD_RULES,
+  type Quality,
+  type Settings,
+  type WorldRule,
+} from "./settings";
 import { lookBackgrounds, lookPlans, type Plan } from "@/looks";
 
 export const SOURCE_LABELS: Record<SourceKind, string> = {
@@ -33,6 +43,8 @@ interface Props {
   onTap: () => void;
   onDrop: () => void;
   onLook: (id: string) => void;
+  /** Put a world in or out of the rotation. */
+  onToggleWorld: (id: string) => void;
   onSaveLook: () => void;
   onDeleteLook: (id: string) => void;
   onFx: (patch: Partial<FxSettings>) => void;
@@ -91,6 +103,7 @@ export function ControlPanel({
   onTap,
   onDrop,
   onLook,
+  onToggleWorld,
   onSaveLook,
   onDeleteLook,
   onFx,
@@ -128,23 +141,40 @@ export function ControlPanel({
           </button>
         </div>
         <div className="look-grid">
-          {allLooks(settings).map((l) => (
+          {allLooks(settings).map((l) => {
+            const inRotation = rotationOrder(settings).includes(l.id);
+            const on = !settings.offWorlds.includes(l.id);
+            const last = on && activeWorlds(settings).length <= 1;
+            return (
             <div key={l.id} className="look-wrap">
               <button
-                className={`look-card ${settings.lookId === l.id ? "look-card-active" : ""}`}
+                className={`look-card ${settings.lookId === l.id ? "look-card-active" : ""} ${inRotation && !on ? "look-card-off" : ""}`}
                 onClick={() => onLook(l.id)}
                 title={l.description}
               >
                 <span className="look-swatch" style={{ background: `linear-gradient(120deg, ${l.swatch.join(", ")})` }} />
                 <span className="look-name">{l.name}</span>
               </button>
+              {inRotation && (
+                <input
+                  type="checkbox"
+                  role="switch"
+                  className="look-toggle"
+                  checked={on}
+                  disabled={last}
+                  onChange={() => onToggleWorld(l.id)}
+                  aria-label={`${l.name} dans la rotation`}
+                  title={last ? "Il faut au moins un monde dans la rotation" : on ? "Dans la rotation" : "Hors rotation"}
+                />
+              )}
               {l.custom && (
                 <button className="look-delete" onClick={() => onDeleteLook(l.id)} aria-label={`Supprimer ${l.name}`}>
                   ×
                 </button>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
         <p className="hint">{findLook(settings).description}</p>
         <label className="field field-toggle">

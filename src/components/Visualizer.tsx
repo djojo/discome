@@ -20,6 +20,7 @@ import {
   resetPlan,
   saveCurrentLook,
   saveSettings,
+  toggleWorld,
   type Settings,
 } from "./settings";
 import { NEUTRAL_FX, type FxSettings } from "@/engine/fx";
@@ -84,6 +85,8 @@ export default function Visualizer() {
   const debugRef = useRef<HTMLPreElement>(null);
   const settingsRef = useRef(settings);
   const overPanelRef = useRef(false);
+  /** The world on screen was just left out of the rotation: the loop moves on to the next one (with the usual dip). */
+  const leaveWorldRef = useRef<string | null>(null);
 
   const scene = sceneOf(settings, settings.sceneId);
   const params = settings.params[settings.sceneId] ?? defaultParams(scene);
@@ -302,7 +305,11 @@ export default function Visualizer() {
         const id = decision.preload;
         compositor.preload(id, frame, s.params[id] ?? defaultParams(sceneOf(s, id)));
       }
-      if (decision?.changeWorld) {
+      // The world on screen left out of the rotation by hand: on to the next one now (once the setting is in)
+      const leave = leaveWorldRef.current !== null && leaveWorldRef.current === s.lookId && s.offWorlds.includes(s.lookId);
+      if (leaveWorldRef.current !== null && leaveWorldRef.current !== s.lookId) leaveWorldRef.current = null;
+      if (decision?.changeWorld || leave) {
+        leaveWorldRef.current = null;
         // Next world: its look, its shots, and a dip to black between the two
         const next = enterWorld(s, nextWorldId(s));
         s = next;
@@ -629,11 +636,18 @@ export default function Visualizer() {
                   }
                   setSettings((s) => ({ ...applyLook(s, findLook(s, id)), strobeWarned: s.strobeWarned || !!look.fx.strobe }));
                 }}
+                onToggleWorld={(id) => {
+                  const next = toggleWorld(settings, id);
+                  if (next === settings) return;
+                  if (next.offWorlds.includes(id) && id === settings.lookId) leaveWorldRef.current = id;
+                  setSettings((s) => toggleWorld(s, id));
+                }}
                 onSaveLook={() => setSettings((s) => saveCurrentLook(s))}
                 onDeleteLook={(id) =>
                   setSettings((s) => ({
                     ...s,
                     customLooks: s.customLooks.filter((l) => l.id !== id),
+                    offWorlds: s.offWorlds.filter((w) => w !== id),
                     lookId: s.lookId === id ? "free" : s.lookId,
                   }))
                 }

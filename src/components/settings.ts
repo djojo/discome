@@ -73,6 +73,8 @@ export interface Settings {
   customLooks: Look[];
   /** Worlds take turns automatically. */
   worldCycle: { enabled: boolean; rule: WorldRule };
+  /** Worlds left out of the rotation (the ones left out, so a world added later is in). */
+  offWorlds: string[];
   background: BackgroundSettings;
   /**
    * The night's drift: over this many minutes from the start of the source, the worlds slowly degrade
@@ -110,6 +112,7 @@ export function defaultSettings(): Settings {
     strobeWarned: false,
     customLooks: [],
     worldCycle: { enabled: true, rule: "breakdown" },
+    offWorlds: [],
     background: { auto: true, sceneId: null, opacity: 0.4, tint: true, blur: 0.4 },
     drift: 60,
   };
@@ -183,11 +186,29 @@ export function enterWorld(s: Settings, worldId: string): Settings {
   return { ...next, sceneId: pick.key };
 }
 
-/** The world after the current one in the rotation (custom worlds join the rotation too). */
+/** The worlds that take turns, in order (custom worlds join the rotation too). */
+export const rotationOrder = (s: Settings): string[] => [...ROTATION, ...s.customLooks.map((l) => l.id)];
+
+/** The worlds of the rotation still in it. */
+export const activeWorlds = (s: Settings): string[] => rotationOrder(s).filter((id) => !s.offWorlds.includes(id));
+
+/** The world after the current one in the rotation, skipping the worlds left out. */
 export function nextWorldId(s: Settings): string {
-  const order = [...ROTATION, ...s.customLooks.map((l) => l.id)];
+  const order = rotationOrder(s);
   const i = order.indexOf(s.lookId);
-  return order[(i + 1) % order.length];
+  for (let k = 1; k <= order.length; k++) {
+    const id = order[(i + k + order.length) % order.length];
+    if (!s.offWorlds.includes(id)) return id;
+  }
+  return s.lookId;
+}
+
+/** Put a world in or out of the rotation; the last world in it stays. */
+export function toggleWorld(s: Settings, id: string): Settings {
+  if (s.offWorlds.includes(id)) return { ...s, offWorlds: s.offWorlds.filter((w) => w !== id) };
+  const active = activeWorlds(s);
+  if (!active.includes(id) || active.length <= 1) return s;
+  return { ...s, offWorlds: [...s.offWorlds, id] };
 }
 
 /** Save the current effects (on top of the current look's scenes and palettes) as a new look. */
@@ -247,12 +268,17 @@ export function loadSettings(): Settings {
         enabled: saved.worldCycle?.enabled ?? base.worldCycle.enabled,
         rule: WORLD_RULES.some((r) => r.id === saved.worldCycle?.rule) ? saved.worldCycle!.rule : base.worldCycle.rule,
       },
+      offWorlds: Array.isArray(saved.offWorlds) ? saved.offWorlds.filter((id) => looks.some((l) => l.id === id)) : [],
       background: {
         ...base.background,
         ...(saved.background ?? {}),
         sceneId: sceneExists(saved.background?.sceneId) ? saved.background!.sceneId : base.background.sceneId,
       },
     };
+    // Every world left out: none is (the rotation needs one)
+    if (!activeWorlds(loaded).length) loaded.offWorlds = [];
+    // A world left out of the rotation: the night starts in the first one still in it
+    if (loaded.offWorlds.includes(loaded.lookId)) return applyLook(loaded, findLook(loaded, activeWorlds(loaded)[0]));
     // The current world's plans get their settings (kept tweaks, or the world's)
     for (const plan of lookPlans(findLook(loaded))) loaded.params[plan.key] = planParams(loaded, plan.key, allLooks(loaded))!;
     return loaded;
