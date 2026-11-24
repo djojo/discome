@@ -95,9 +95,10 @@ float map(vec3 p) {
   float lq = (p.y - liquidH(p.xz)) * .75;
   if (uTitle > .5) {
     // the letters stand upright, their foot a little under the surface; they sink a little as the chart climbs
-    vec3 h = p - vec3(0., -.29 - (uHeadMin.y + .11) - uChart * .06 + .02 * sin(uTime * .3), 0.);
+    // (the foot just above the surface: the second line must read; the waves of the drop lick it)
+    vec3 h = p - vec3(0., -.24 - (uHeadMin.y + .11) - uChart * .04 + .02 * sin(uTime * .3), 0.);
     h.xz *= rot(sin(uTime * .1 + uSeed) * .12);
-    return smin(lq, headD(h), .07);
+    return smin(lq, headD(h), .05);
   }
   vec3 h = p - vec3(0., .02 + .04 * sin(uTime * .3) - uChart * .4, 0.);
   h.xz *= rot(sin(uTime * .1 + uSeed) * .35);

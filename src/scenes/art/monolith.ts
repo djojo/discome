@@ -287,8 +287,8 @@ float gColS = COL_S;
  */
 float colossus(vec3 ro, vec3 rd, out vec3 c) {
   bool title = uHeadOn > 1.5;
-  gColS = title ? 6.5 : COL_S;
-  c = vec3(0., title ? 8. - (uHeadMin.y + .11) * gColS : COL_S * .3, ro.z - 42.);
+  gColS = title ? 5.6 : COL_S;
+  c = vec3(0., title ? 8.6 - (uHeadMin.y + .11) * gColS : COL_S * .3, ro.z - 42.);
   vec3 oc = ro - c;
   float R = gColS * (title ? length(uHeadSize.xy) * .5 + .1 : 1.2);
   float b = dot(oc, rd), h = b * b - dot(oc, oc) + R * R;

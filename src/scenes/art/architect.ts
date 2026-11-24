@@ -12,10 +12,10 @@ const FRAMINGS: Framing[] = [
   { az: 0.5, el: 0.1, dist: 2.6, target: [0.45, 0.7, 0.45], focal: 1.9, weight: 2 },
   { az: -0.6, el: 0.45, dist: 8.5, target: [0, -0.6, 0], focal: 1.6, weight: 1 },
   // The night's title floating above the mage: from the front, the mage and the title in the frame
-  { az: 0, el: 0.06, dist: 7.6, target: [0, 0.85, 0], focal: 1.55, weight: 3, tag: "title" },
-  { az: 0.24, el: 0.12, dist: 7.8, target: [0, 0.85, 0], focal: 1.55, weight: 2, tag: "title" },
-  { az: -0.22, el: -0.06, dist: 7, target: [0, 1, 0], focal: 1.55, weight: 2, tag: "title" },
-  { az: 0.05, el: 0.02, dist: 5.4, target: [0, 1.7, 0], focal: 1.6, weight: 1, tag: "title" },
+  { az: 0, el: 0.06, dist: 7.8, target: [0, 0.95, 0], focal: 1.55, weight: 3, tag: "title" },
+  { az: 0.24, el: 0.12, dist: 8, target: [0, 0.95, 0], focal: 1.55, weight: 2, tag: "title" },
+  { az: -0.22, el: -0.06, dist: 7.2, target: [0, 1.1, 0], focal: 1.55, weight: 2, tag: "title" },
+  { az: 0.05, el: 0.02, dist: 6, target: [0, 1.9, 0], focal: 1.6, weight: 1, tag: "title" },
 ];
 
 /**
@@ -163,17 +163,18 @@ vec3 lake(vec3 p, vec3 rd) {
 }
 
 // ---- the night's title: a relic of prism glass floating above the mage
-const vec3 TC = vec3(0., 2.15, .05);
+const vec3 TC = vec3(0., 2.3, .05);
+const float TS = 1.3;  // the relic is bigger than the heads' frame: it must read above the mage, under the HUD
 vec3 toTitle(vec3 p) {
   vec3 h = p - TC - vec3(0., .06 * sin(uTime * .4), 0.);
   h.xz *= rot(.14 * sin(uTime * .11 + uSeed));
-  return h;
+  return h / TS;
 }
-float titleD(vec3 p) { return headD(toTitle(p)); }
+float titleD(vec3 p) { return headD(toTitle(p)) * TS; }
 float titleMarch(vec3 ro, vec3 rd, out float dmin) {
   dmin = 1e3;
   vec3 oc = ro - TC;
-  float R = length(uHeadSize.xy) * .5 + .15;
+  float R = (length(uHeadSize.xy) * .5 + .15) * TS;
   float b = dot(oc, rd), h = b * b - dot(oc, oc) + R * R;
   if (h < 0. || uHeadOn < 1.5 || uHeadOn > 2.5) return -1.;
   h = sqrt(h);
