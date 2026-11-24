@@ -14,6 +14,7 @@ import { metamorphosis } from "./art/metamorphosis";
 import { faithful } from "./art/faithful";
 import { flux } from "./art/flux";
 import { panopticon } from "./art/panopticon";
+import { collective } from "./art/collective";
 import { warehouse } from "./art/warehouse";
 import { downpour } from "./art/downpour";
 import { race } from "./art/race";
@@ -59,6 +60,7 @@ export const SCENES: SceneDef[] = [
   faithful,
   monolith,
   panopticon,
+  collective,
   downpour,
   race,
   canyonGorge,
