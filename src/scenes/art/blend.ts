@@ -99,9 +99,9 @@ vec3 blobN(vec3 p) {
 
 /**
  * The marbling: a field warped by itself (the two metals carried by one flow), folded into thin streams.
- * Returns the share of the second metal (x) and how close to a seam (y).
+ * Returns the share of the second metal (x), how close to a seam (y, for a seam sw wide) and the folded field (z).
  */
-vec2 marble(vec3 q) {
+vec3 marble(vec3 q, float sw) {
   vec3 s = q * 1.1;
   vec3 w = vec3(fbm3(s + vec3(0., uFlow, 0.)), fbm3(s + vec3(5.2, 1.3 - uFlow, 2.1)), fbm3(s + vec3(1.7, 9.2, uFlow * .7)));
   // a second fold of the flow: the volutes curl into each other
@@ -113,12 +113,14 @@ vec2 marble(vec3 q) {
   // folded into many thin streams
   float m = .5 + .5 * sin(f * 30. + q.y * 2.);
   float thr = 1. - uShare;
-  float g = smoothstep(thr - .04, thr + .04, m);
-  return vec2(g, exp(-pow((m - thr) / .025, 2.)));
+  // (the boundary softens with the seam once it gets thinner than a couple of pixels)
+  float gw = max(.04, sw * 1.6);
+  float g = smoothstep(thr - gw, thr + gw, m);
+  return vec3(g, exp(-pow((m - thr) / sw, 2.)), m);
 }
 
 /** Two liquid metals under the studio's lights: mercury tinted by the ink, the second one by its own colour. */
-vec3 metals(vec3 n, vec3 rd, vec2 mb) {
+vec3 metals(vec3 n, vec3 rd, vec3 mb) {
   float fre = pow(1. - clamp(dot(n, -rd), 0., 1.), 5.);
   vec3 env = studio(reflect(rd, n));
   vec3 silver = env * mix(uInk * .85, vec3(1.), fre);
@@ -142,15 +144,21 @@ void main() {
     vec3 p = ro + rd * t;
     vec3 n = blobN(p);
     vec3 q = toLocal(p);
-    vec2 mb = marble(q);
+    // the seams are thin: once thinner than a couple of pixels they widen and fade (their average), instead of
+    // sparkling along the edges
+    vec3 mb = marble(q, .025);
+    float sw = max(.025, fwidth(mb.z) * 1.5);
+    float k = .025 / sw;
+    mb = marble(q, sw);
+    mb.y *= k;
     // the two metals stand in relief where they meet: a meniscus along each seam, the gold a little proud
     vec3 t1 = normalize(cross(n, vec3(0., 1., .1)));
     vec3 t2 = cross(n, t1);
     const float e = .012;
-    vec2 m1 = marble(toLocal(p + t1 * e));
-    vec2 m2 = marble(toLocal(p + t2 * e));
-    float h0 = .5 * mb.x + .8 * mb.y, h1 = .5 * m1.x + .8 * m1.y, h2 = .5 * m2.x + .8 * m2.y;
-    n = normalize(n - (t1 * (h1 - h0) + t2 * (h2 - h0)) / e * .012);
+    vec3 m1 = marble(toLocal(p + t1 * e), sw);
+    vec3 m2 = marble(toLocal(p + t2 * e), sw);
+    float h0 = .5 * mb.x + .8 * mb.y, h1 = .5 * m1.x + .8 * m1.y * k, h2 = .5 * m2.x + .8 * m2.y * k;
+    n = normalize(n - (t1 * (h1 - h0) + t2 * (h2 - h0)) / e * .012 * k);
     col = metals(n, rd, mb);
     solid = 1.;
   }
