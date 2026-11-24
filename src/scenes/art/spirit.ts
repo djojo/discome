@@ -6,12 +6,14 @@ import { HEAD_GLSL, headUniforms, setHead, TITLE_HEAD } from "./heads";
 import { NIGHT_GLSL } from "./night.glsl";
 
 const FRAMINGS: Framing[] = [
-  { az: 0, el: 0.05, dist: 10, target: [0, 2.2, 0], focal: 1.7, weight: 3, tag: "open" },
-  { az: 0.5, el: 0.18, dist: 9, target: [0, 2.3, 0], focal: 1.8, weight: 2 },
+  // Always from the front or three-quarters (the animal must read), never so close that its ears leave the frame
+  { az: 0, el: 0.05, dist: 10, target: [0, 2.3, 0], focal: 1.7, weight: 3, tag: "open" },
+  { az: 0.5, el: 0.16, dist: 9, target: [0, 2.7, 0], focal: 1.8, weight: 2 },
+  { az: -0.55, el: 0.1, dist: 8, target: [0, 2.8, 0], focal: 1.8, weight: 2 },
   // low, by the fire, looking up at the spirit
-  { az: -0.35, el: -0.12, dist: 5.2, target: [0, 2.4, 0], focal: 1.7, weight: 2, tag: "open" },
-  // close on the face of smoke
-  { az: 0.2, el: 0.06, dist: 3.4, target: [0, 3.5, 0], focal: 1.9, weight: 2 },
+  { az: -0.35, el: -0.12, dist: 7.2, target: [0, 2.8, 0], focal: 1.7, weight: 2, tag: "open" },
+  // close on the face of smoke (the whole head in the frame)
+  { az: 0.2, el: 0.06, dist: 5.2, target: [0, 3.55, 0], focal: 1.8, weight: 2 },
   // The night's title above the fire: from the front, the flames at the foot of the frame
   { az: 0, el: 0.04, dist: 6.6, target: [0, 3.1, 0], focal: 1.7, weight: 3, tag: "title" },
   { az: 0.22, el: 0.1, dist: 7, target: [0, 3.1, 0], focal: 1.7, weight: 2, tag: "title" },
@@ -23,9 +25,10 @@ const FRAMINGS: Framing[] = [
 const ANIMALS = ["loup", "faucon", "belier", "hibou"];
 
 /**
- * L'Esprit: a fire in the night of the desert; out of its smoke an animal spirit is born, drawn in smoke and in
- * lines of yarn light (the sculpted heads of the library). Embers rise; on the kick the fire flares and throws a
- * sheaf of sparks; on the drop the spirit changes into another animal in a burst of sparks.
+ * L'Esprit: a fire in the night of the desert, its flames in tongues of yarn; its smoke rises, twisting, and becomes an
+ * animal spirit (the sculpted heads of the library) wound in threads of colour, lit from below by the fire, its
+ * contour drawn by a bright thread. Embers rise; on the kick the fire flares and throws a sheaf of sparks; on the drop
+ * the spirit comes undone into its smoke and forms again as another animal, in a burst of sparks.
  */
 export const spirit = defineShaderScene({
   id: "canyon-spirit",
@@ -168,31 +171,39 @@ vec3 spiritN(vec3 p) {
 
 /** Fire and smoke along the ray, through the column above the fire. Returns light (rgb) and opacity (a). */
 vec4 column(vec3 ro, vec3 rd, float tEnd) {
-  // the column: a cylinder of radius .9 from the ground to the spirit (the fire sits on a ring of stones)
+  // the column: a cylinder of radius 1.3 from the ground up into the spirit (the fire sits on a ring of stones)
   vec2 oc = ro.xz;
-  float a = dot(rd.xz, rd.xz), b = dot(oc, rd.xz), c = dot(oc, oc) - .81;
+  float a = dot(rd.xz, rd.xz), b = dot(oc, rd.xz), c = dot(oc, oc) - 1.69;
   float h = b * b - a * c;
   if (h < 0. || a < 1e-5) return vec4(0.);
   float t0 = max((-b - sqrt(h)) / a, 0.), t1 = min((-b + sqrt(h)) / a, tEnd);
   if (t1 <= t0) return vec4(0.);
   vec3 acc = vec3(0.);
   float tr = 1.;
-  float dt = (t1 - t0) / 20.;
-  for (int i = 0; i < 20; i++) {
+  float dt = (t1 - t0) / 24.;
+  float undo = sin(3.1416 * smoothstep(0., 1., uMorph));   // the spirit comes undone into its smoke
+  for (int i = 0; i < 24; i++) {
     vec3 p = ro + rd * (t0 + dt * (float(i) + .5));
-    if (p.y < 0. || p.y > 3.) continue;
+    if (p.y < 0. || p.y > 4.3) continue;
     float r = length(p.xz);
-    // flames: a narrowing tongue of noise
-    float fl = fbm3(p * vec3(3., 2., 3.) - vec3(0., uTime * 2.4, 0.));
-    float top = 1.6 + .8 * uFlare;
-    float rad = max(.6 * (1. - p.y / top), .01);
+    // flames: tongues of yarn, streaked upward; yellow at the heart, orange, magenta at the tips
+    float top = 2.1 + .8 * uFlare;
+    float k = p.y / top;
+    float ang = atan(p.z, p.x);
+    float fl = fbm3(p * vec3(4., 1.5, 4.) - vec3(0., uTime * 2.6, 0.));
+    float rad = max(.8 * (1. - k), .01);
     float cone = (1. - smoothstep(0., rad, r)) * step(p.y, top);
-    float fire = smoothstep(.38, .72, fl + .25 * (1. - p.y / top)) * cone;
-    vec3 fc = mix(uAccent, vec3(1., .85, .45), smoothstep(.0, .5, fire)) * (1.4 + 1.6 * uFlare);
-    // smoke: a slow rising veil widening upward, toward the spirit
-    float sm = smoothstep(.45, .8, fbm3(p * 1.4 - vec3(0., uTime * .5, 0.))) * (1. - smoothstep(.2, .9, r / (.3 + .2 * p.y))) * smoothstep(.8, 1.6, p.y);
-    vec3 sc = mix(uPal1, uInk, .5) * .35;
-    float dens = (fire * 2. + sm * .7) * dt;
+    float tongues = .55 + .45 * smoothstep(.2, .6, sin(ang * 9. + fl * 6. - p.y * 2.));
+    float fire = smoothstep(.36, .7, fl + .3 * (1. - k)) * cone * tongues;
+    vec3 fc = mix(mix(vec3(1., .86, .38), vec3(1., .45, .1), smoothstep(.1, .55, k)), vec3(1., .22, .55), smoothstep(.55, 1., k));
+    fc *= 1.5 + 1.6 * uFlare;
+    // smoke: a column rising and twisting toward the spirit, lit from below by the fire
+    vec3 q = p;
+    q.xz *= rot(p.y * 1.1 + uTime * .25);
+    float sm = smoothstep(.4, .74, fbm3(q * 1.5 - vec3(0., uTime * .6, 0.)))
+      * (1. - smoothstep(.15, 1., r / (.22 + .22 * p.y))) * smoothstep(.9, 1.9, p.y) * (1. + 1.5 * undo);
+    vec3 sc = mix(uPal1, uInk, .5) * .45 + uAccent * .35 * exp(-max(p.y - 1.5, 0.) * .9);
+    float dens = (fire * 2. + sm * .8) * dt;
     acc += tr * (fc * fire * 2. + sc * sm) * dt * 1.6;
     tr *= exp(-dens * 1.5);
   }
@@ -252,20 +263,30 @@ void main() {
     vec3 p = ro + rd * ts;
     vec3 n = spiritN(p);
     vec3 h = toHead(p);
-    // lines of yarn light round the form, drifting up like smoke
-    float g = h.y * 22. + .8 * fbm3(h * 2. + vec3(0., -uTime * .3, 0.)) - uTime * .25;
-    // thin lines where the form turns away (its contour), fading on the faces turned to us
-    float line = (1. - smoothstep(.0, .1, abs(fract(g) - .5) - .38)) * (.35 + .65 * pow(1. - abs(dot(n, -rd)), 1.5));
+    float fre = clamp(1. - abs(dot(n, -rd)), 0., 1.);
+    // light: the fire below (warm), the night above (cool); hollows darker (one step of occlusion)
+    vec3 Lf = normalize(vec3(0., 1.2, 0.) - p);
+    float fireL = clamp(dot(n, Lf), 0., 1.) * (.8 + .5 * uFlare);
+    float skyL = clamp(dot(n, normalize(vec3(-.4, .7, .5))), 0., 1.);
+    float occ = clamp(spiritD(p + n * .15) / .15, 0., 1.);
+    float lit = (.2 + .8 * occ) * (.3 + .9 * fireL + .35 * skyL);
+    // threads of yarn wound round the form, rising like smoke, a dark thread between them
+    // (their average once finer than a pixel)
+    float g = h.y * 26. + .8 * fbm3(h * 2. + vec3(0., -uTime * .3, 0.)) - uTime * .25;
+    float thread = mix(1. - smoothstep(.3, .42, abs(fract(g) - .5)), .72, smoothstep(.3, .8, fwidth(g)));
+    thread = mix(thread, 1., .5 * uTitle);   // the title's letters stay legible
     vec3 yc = yarn(fract(floor(g) * .19 + uTime * .02));
-    float fre = pow(1. - abs(dot(n, -rd)), 2.);
-    // smoke inside the lines: half transparent, lit from below by the fire
-    vec3 smoke = mix(uPal1, uInk, .5) * (.05 + .3 * fre) * (.6 + .4 * dot(n, normalize(vec3(-.3, .5, .8)))) + uAccent * .2 * smoothstep(.3, -.6, h.y) * max(-n.y, 0.);
-    vec3 c = mix(smoke, yc * 1.35, line) + yc * pow(fre, 3.) * .7;
+    vec3 c = yc * thread * lit * 1.3;
+    // the contour: a bright thread where the form turns away, so the animal reads
+    c += mix(yc, vec3(1.), .45) * smoothstep(.62, .94, fre) * 1.3;
+    // embers glow in its hollows (eyes, nostrils)
+    c += mix(uAccent, vec3(1., .8, .4), .5) * (1. - smoothstep(.15, .4, occ)) * (1. - fre) * (.7 + .3 * sin(uTime * 3.)) * (1. - uTitle);
     // stars glinting in the smoke
-    c += vec3(1.) * starSpeck(h * 1.6) * .8;
-    float fade = smoothstep(-.6, -.25, h.y);
-    col = mix(col, c, .9 * fade);
-    solid = max(solid, .9 * fade);
+    c += vec3(1.) * starSpeck(h * 1.6) * .6;
+    // it fades into its smoke below the neck, and comes undone while it changes
+    float fade = smoothstep(-.6, -.25, h.y) * (1. - .65 * sin(3.1416 * smoothstep(0., 1., uMorph)));
+    col = mix(col, c, .92 * fade);
+    solid = max(solid, .92 * fade);
     tEnd = ts;
   }
   // the spirit's smoky halo
