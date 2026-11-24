@@ -86,6 +86,9 @@ const PACING: Record<Exclude<DirectorMode, "manual">, Pacing> = {
 /** Transition length in beats for the short, burst-style transitions. */
 const SNAP_BEATS: Partial<Record<TransitionId, number>> = { cut: 0, glitch: 0.5, flash: 0.75, punch: 1 };
 
+/** The night's title: bars on screen before anything automatic may cut it (time to read it). */
+const TITLE_HOLD_BARS = 8;
+
 export interface DirectorContext {
   mode: DirectorMode;
   locked: boolean;
@@ -154,9 +157,9 @@ export class Director {
   private titleShownHere = false;
   private worldsSinceTitle = 99;
   private phrasesSinceTitle = 99;
-  /** While the title is on screen, nothing cuts it before it has been seen (beats). */
+  /** While the title is on screen, nothing automatic cuts it before it has been read (beats). Then it lasts like
+   * any plan: until the next regular cut, or a drop. */
   private titleHoldUntil = -1;
-  private holdBars = 16;
   /** Background presence multiplier: fuller in breakdowns, pulsing during bursts. */
   bgLevel = 1;
 
@@ -185,7 +188,7 @@ export class Director {
     this.worldsSinceTitle = 0;
     this.phrasesSinceTitle = 0;
     this.burstUntil = -1;
-    this.titleHoldUntil = this.beats + this.holdBars * 4;
+    this.titleHoldUntil = this.beats + TITLE_HOLD_BARS * 4;
     this.lastCutBeat = this.beats;
   }
 
@@ -259,18 +262,18 @@ export class Director {
     };
     const beat = f.bpm > 0 ? 60 / f.bpm : 0.5;
     if (f.downbeat && f.phraseBar === 0) this.phrasesSinceTitle++;
-    // the title plan lasts like the world's other plans
-    this.holdBars = Math.max(8, pacing.calmBars);
 
-    // ---- The night's title on screen: nothing cuts it until it has been seen (the effects carry the drops)
-    if (auto && ctx.title && ctx.currentId === ctx.title.key && this.beats < this.titleHoldUntil) {
+    // ---- The night's title on screen: no automatic cut before it has been read (the effects carry the drops).
+    // A drop by hand (Espace) always goes through: the DJ decides.
+    if (auto && ctx.title && ctx.currentId === ctx.title.key && this.beats < this.titleHoldUntil && !f.dropManual) {
       this.lastSection = f.section;
       if (f.downbeat && f.phraseBar === 0) this.phrasesInWorld++;
       return null;
     }
 
-    // ---- Drop: impact, then a burst of cuts (or the night's title, when it is due)
-    if (f.drop && auto && ctx.title) {
+    // ---- Drop: impact, then a burst of cuts (or the night's title, when it is due: only on a drop of the music,
+    // never on one by hand)
+    if (f.drop && !f.dropManual && auto && ctx.title) {
       const often = ctx.title.frequency === "often" && this.phrasesSinceTitle >= 4 && Math.random() < 1 / 3;
       if (this.titleDue(ctx) || (often && ctx.currentId !== ctx.title.key)) {
         this.plannedDrop = null;

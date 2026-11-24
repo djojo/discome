@@ -32,7 +32,7 @@ npm run dev   # http://localhost:3000
     - Arcanes : en relique de verre et de pixels, pleine de cosmos, au-dessus du mage ;
     - Cathédrale : en lettres de lumière au bout de la nef, reflétées par le sol ;
     - Chair : sous la peau de la Membrane, qui respire et le laisse transparaître.
-  - Le réalisateur le montre à un moment fort : à l'entrée dans un monde ou à son premier drop, une fois par monde, un monde sur deux, ou souvent. Il reste à l'écran le temps d'un plan. `N` ou « Afficher maintenant » le montre tout de suite.
+  - Le réalisateur le montre à un moment fort : à l'entrée dans un monde ou au premier drop de la musique, une fois par monde, un monde sur deux, ou souvent. Il reste à l'écran le temps d'un plan, au moins 8 mesures. Un drop à la main (`Espace`) reste toujours un vrai drop : il ne montre pas le titre et passe même pendant le titre. `N` ou « Afficher maintenant » le montre tout de suite.
   - Un logo est réduit à sa silhouette (sa transparence, ou ce qui se détache de la couleur de ses bords) ; chaque monde lui donne sa matière. Un aperçu montre la forme retenue, « Inverser » corrige un logo lu à l'envers.
   - Le titre est écrit dans la police du monde, servie par l'application (aucun appel externe pendant la soirée). Il devient un champ de distance en relief, bombé ou taillé, que les scènes à têtes sculptent comme une tête (`src/brand/`).
   - « Signature dans un coin » : le titre ou le logo en petit sur toutes les scènes, effacé pendant le plan Titre. Tout reste dans le navigateur.
