@@ -10,8 +10,10 @@ import { NIGHT_GLSL } from "./night.glsl";
  * Two reliefs, published as two shots of the catalogue: a narrow slot ("Gorge", smooth wavy
  * walls and light beams) and an open terraced canyon between mesas ("Mesas", with a mirror river).
  * Skims the floor in the breakdown, climbs out above the plateau on the drop.
- * At night (the Canyon world's shamanic night): a spiral sky, the seams of the strata glowing like threads of
- * yarn, petroglyphs lighting up on the walls as the flight passes them.
+ * At night (the Canyon world's shamanic night): a crescent moon ahead lights the walls (a cold rim on their edges),
+ * a spiral sky, the seams of the strata glowing like threads of yarn with light running along them, big petroglyphs
+ * (spirals, suns, serpents, hands, lightning) in magenta and gold lighting up as the flight passes them; on the drop
+ * a wave of colour runs ahead along every stratum and the petroglyphs flash.
  */
 function canyonScene(id: string, name: string, relief: "gorge" | "mesas", palette: string, description: string) {
   return defineShaderScene({
@@ -201,8 +203,12 @@ vec3 dryBed(vec3 p) {
   return uInk * .5 * (.85 + .2 * hash12(i)) * (1. - .75 * crack);
 }
 
+const vec3 MOON = vec3(-.28, .34, -.9);   // ahead of the flight, low (normalised where used)
+const vec3 MAGENTA = vec3(1., .18, .55);
+const vec3 GOLD = vec3(1., .8, .22);
+
 vec3 sky(vec3 rd) {
-  if (uNight > .5) return nightSky(rd, uTwist);
+  if (uNight > .5) return nightSky(rd, uTwist) + moon(rd, normalize(MOON));
   vec3 c = mix(pal(uShift + .4) * .75 + uBase, uBase * 1.4, smoothstep(-.02, .55, rd.y));
   // A ringed sun low over the canyon; over the night it grows and burns
   vec3 sd = normalize(vec3(-.25, .16, -1.));
@@ -218,33 +224,65 @@ vec3 fogCol(vec3 rd) {
   return mix(uBase * 1.5, pal(uShift + .55) * .55, .55) + uAccent * .08 * max(rd.y, 0.);
 }
 
-/** A petroglyph in its cell (q in [-.5, .5]): a spiral, concentric circles, a sun, or a serpent. fp: a pixel. */
+/** A petroglyph in its cell (q in [-.5, .5]): a spiral, circles, a sun, a serpent, a hand or lightning. fp: a pixel. */
 float glyph(vec2 q, float k, float fp) {
   float r = length(q), a = atan(q.y, q.x);
   float d;
   if (k < 1.) d = abs(fract(r * 6. - a / 6.2831853) - .5) / 6. + max(r - .42, 0.);
   else if (k < 2.) d = min(abs(fract(r * 7.) - .5) / 7. + max(r - .4, 0.), r - .04);
   else if (k < 3.) d = min(abs(r - .16), max(abs(sin(a * 4.)) * r, max(.24 - r, r - .42)));
-  else d = abs(q.y - .12 * sin(q.x * 14.)) + max(abs(q.x) - .42, 0.);
-  return 1. - smoothstep(.014, .03 + fp, d);
+  else if (k < 4.) d = abs(q.y - .12 * sin(q.x * 14.)) + max(abs(q.x) - .42, 0.);
+  else if (k < 5.) {
+    // a hand: a palm and five fingers, drawn as an outline
+    vec2 h = q - vec2(0., -.1);
+    float palm = length(h * vec2(1., 1.2)) - .16;
+    float fing = 1e3;
+    for (int i = 0; i < 5; i++) {
+      float fa = -.95 + float(i) * .42 + (i == 0 ? -.35 : 0.);
+      vec2 dir = vec2(sin(fa), cos(fa));
+      float len = i == 0 ? .2 : i == 2 ? .3 : .26;
+      vec2 hq = h - dir * .14;
+      float s = clamp(dot(hq, dir), 0., len);
+      fing = min(fing, length(hq - dir * s) - .045);
+    }
+    d = abs(min(palm, fing));
+  } else {
+    // lightning: a zigzag falling
+    float y = q.y + .42;
+    d = abs(q.x - .14 * (abs(fract(y * 2.6) - .5) * 4. - 1.)) + max(abs(q.y) - .42, 0.);
+  }
+  return 1. - smoothstep(.016, .034 + fp, d);
 }
 
-/** Night: the glowing threads between the strata, and the petroglyphs lighting up as the flight passes. */
-vec3 nightRock(vec3 p, vec3 n, float t) {
+/**
+ * Night: threads of yarn glowing between the strata, light running along them; big petroglyphs lighting up as the
+ * flight passes them; the drop's wave running ahead along the walls. zr: the camera's z.
+ */
+vec3 nightRock(vec3 p, vec3 n, float t, float zr) {
   float s = p.y * 1.6 - uTime * .05 + .1 * sin(p.z * .6 + p.x * .4);
-  float seam = 1. - smoothstep(.0, .09, fract(s));
-  vec3 c = yarn(fract(floor(s) * .17 + uShift)) * seam * (.5 + .5 * (1. - abs(n.y))) * 1.3;
+  float fs = fwidth(s);
+  float wall = .5 + .5 * (1. - abs(n.y));
+  // two threads per stratum, a wide one and a thin one (their average once finer than a pixel)
+  float f = fract(s);
+  float th = (1. - smoothstep(.0, .14, f)) + .6 * (1. - smoothstep(.0, .05, abs(f - .55)));
+  th = mix(th, .16, smoothstep(.15, .5, fs));
+  float run = .55 + .7 * smoothstep(.55, 1., fract(p.z * .06 - uTime * .35 + floor(s) * .37));
+  vec3 c = yarn(fract(floor(s) * .17 + uShift)) * th * wall * run * 1.6;
+  // the drop: a wave of colour running ahead along every stratum
+  float zw = zr - 2. - (1. - uDrop) * 45.;
+  c += mix(MAGENTA, GOLD, fract(floor(s) * .5)) * th * exp(-pow((p.z - zw) / 3., 2.)) * uDrop * 2.5;
   if (abs(n.y) < .6) {
     float side = sign(p.x - pathX(p.z));
-    vec2 cell = vec2(floor(p.z / 2.6), floor(p.y / 1.8));
+    vec2 cs = vec2(4., 2.8);
+    vec2 cell = vec2(floor(p.z / cs.x), floor(p.y / cs.y));
     float h = hash12(cell + side * 17.3);
-    if (h > .5) {
-      vec2 q = (vec2(p.z, p.y) - (cell + .5) * vec2(2.6, 1.8)) / 1.15;
+    if (h > .45) {
+      vec2 q = (vec2(p.z, p.y) - (cell + .5) * cs) / 2.1;
       float fp = t * .004;
-      float g = glyph(q, floor(hash12(cell + 3.1 + side) * 4.), fp);
-      // they light up as we pass, and on the kick
-      float lit = smoothstep(16., 4., t) * (.6 + .8 * uBeat) + .15;
-      c += yarn(fract(h * 3.)) * g * lit * 1.6;
+      float g = glyph(q, floor(hash12(cell + 3.1 + side) * 6.), fp);
+      // they light up as we pass, on the kick, and flash on the drop
+      float lit = smoothstep(20., 5., t) * (.7 + .8 * uBeat) + .3 + 2. * uDrop;
+      c += mix(MAGENTA, GOLD, step(.7, h)) * g * lit * 1.4;
     }
   }
   return c;
@@ -258,6 +296,8 @@ void main() {
   gTop = gorge ? 7. : 4.;
   // Slot canyons are lit from above; the open canyon by a lower sun
   gL = gorge ? normalize(vec3(.25, .95, -.2)) : normalize(vec3(.45, .8, -.35));
+  // at night the moon lights the walls (and casts the beams in the slot)
+  if (uNight > .5) gL = normalize(MOON + vec3(0., gorge ? .9 : .25, 0.));
 
   // Flight along the bed: skims the river in the breakdown, climbs out above the plateau on the drop
   float z = -uTravel;
@@ -301,7 +341,14 @@ void main() {
       col = alb * (dif * (vec3(1.) + uAccent * .4) * 1.25 + skyl * occ) + bounce * occ;
     }
     // night: moonlight on the rock (cold, from above), the glowing threads and glyphs
-    if (uNight > .5 && !water && !dry) col = col * .5 + rockColor(p, n) * .12 * vec3(.6, .72, 1.) * (.4 + .6 * clamp(n.y, 0., 1.)) + nightRock(p, n, t);
+    if (uNight > .5 && !water && !dry) {
+      // moonlight (cold) on the rock, a cold rim outlining the edges, then the glowing threads and glyphs
+      vec3 moonC = vec3(.55, .65, 1.);
+      vec3 base = rockColor(p, n) * .45;
+      col = base * (moonC * dif * 1.1 + vec3(.25, .28, .4) * occ * (.4 + .6 * clamp(n.y, 0., 1.))) + base * .1 * occ;
+      col += moonC * pow(1. - abs(dot(n, -rd)), 4.) * .16 * occ;
+      col += nightRock(p, n, t, ro.z);
+    }
     col = mix(col, fogCol(rd), 1. - exp(-t * (gorge ? .045 : .03)));
   }
 
