@@ -1,6 +1,6 @@
 # Discome
 
-Visualiseur audio psychédélique dans le navigateur, pensé comme un VJ automatique. Une entrée audio est analysée en temps réel ; elle pilote une vingtaine de scènes (2D, shader, 3D, humanoïdes, raymarching), un réalisateur qui enchaîne les scènes en suivant la structure du morceau, et des esthétiques prêtes à l'emploi.
+Visualiseur audio psychédélique dans le navigateur, pensé comme un VJ automatique. Une entrée audio est analysée en temps réel ; elle pilote une quarantaine de scènes (2D, shader, 3D, humanoïdes, raymarching), un réalisateur qui enchaîne les scènes en suivant la structure du morceau, et des esthétiques prêtes à l'emploi.
 
 ```bash
 npm install
@@ -9,7 +9,8 @@ npm run dev   # http://localhost:3000
 
 ## Fonctionnalités
 
-- **Sources** : micro / entrée, son d'un onglet, fichier (glisser-déposer), démo (un morceau de 32 mesures synthétisé en direct).
+- **Sources** : micro / entrée, son d'un onglet, fichier (glisser-déposer), démo (un morceau de 32 mesures synthétisé en direct), et un set YouTube qu'un bouton play lance depuis l'accueil.
+  - Un set YouTube ou un fichier démarre sur un drop au premier kick entendu (impact, rafale de coupes), sans attendre le premier vrai drop du morceau : une seule fois, pas à chaque reprise d'une boucle.
 - **Horloge musicale** : BPM, temps, mesures et phrases de 8 mesures, avec tap tempo. Les sections (groove → breakdown → montée → drop) sont détectées automatiquement.
 - **Mondes** : Porcelaine, Signal, Mercure, Cathédrale, Monolithe, Canyon, Arcanes, Chair, Bestiaire, et Classique (les premières scènes).
   - **Le propos, sans un mot** : chaque monde garde son thème et dénonce, par les images et le montage seulement, une dérive d'aujourd'hui : les écrans et l'attention (Cathédrale, Signal, Porcelaine), la surveillance (Monolithe, Signal), l'argent et la consommation (Mercure), le vivant (Canyon, Chair, Bestiaire).
@@ -129,21 +130,27 @@ src/
     AudioEngine.ts       Analyse FFT : bandes, niveaux, beats (kick), attaques, auto-gain
     MusicAnalyzer.ts     BPM, horloge calée en phase, sections (breakdown/montée/drop)
     demoSource.ts        Morceau de démo synthétisé
+    youtube.ts           Le set YouTube du bouton play (vidéo, API du lecteur)
   engine/
     Compositor.ts        Rend chaque scène hors écran puis les mélange (transitions, calque, post-FX)
     compositorShader.ts  Passe finale GLSL
     Director.ts          Réalisateur automatique
     transitions.ts, fx.ts
-  looks/index.ts         Mondes (plans = scène + réglages, palettes, effets, rythme)
+  looks/index.ts         Mondes (plans = scène + réglages, palettes, effets, rythme, plan Titre)
+  brand/
+    brand.ts             Ta soirée : nom du monde (par défaut), titre ou logo, fréquence, signature
+    shape.ts             Titre ou logo → champ de distance 2D (une texture par police), signature
+    logo.ts              Import d'un logo : silhouette (transparence, ou contraste avec le bord)
+    fonts.ts             La police du titre dans chaque monde (next/font, servie par l'application)
   scenes/
     types.ts             Contrat d'une scène + paramètres déclaratifs
     art/                 Scènes de direction artistique (visages, Mercure, Cathédrale…)
     art/flight.ts        Vol partagé des travellings (vitesse selon la structure, figures, roulis)
     art/camera.ts        Cadrages : un plan par phrase, la caméra y glisse en orbite autour du sujet
     art/arcane.glsl.ts   Figure sans visage et robe cosmique du monde Arcanes
-    art/heads.ts         Bibliothèque de têtes : chargement des grilles, headD() en GLSL
+    art/heads.ts         Bibliothèque de têtes : chargement des grilles, headD() en GLSL ; la tête « titre » sculpte le titre
     2d/  shader/  3d/    Scènes classiques ; 3d/humanoid/ : danseuse, androïde, particules
-  components/            Visualizer (boucle, sources, HUD), ControlPanel, settings
+  components/            Visualizer (boucle, sources, HUD), ControlPanel, BrandSettings, YouTubePlayer, settings
 public/models/           Michelle.glb (personnage Mixamo des exemples three.js)
 public/heads/            Têtes converties (grilles de distances), crédits
 scripts/bake-heads.mjs   Conversion des bustes (STL/3MF de assets/heads-src/, calés par assets/heads.config.json)
@@ -176,6 +183,8 @@ Les `params` (range, toggle, select) génèrent automatiquement les contrôles d
 
 Les scènes shader reçoivent aussi `uBands[8]`, 8 bandes de fréquences de la basse (0) à l'aigu (7).
 
+Pour qu'une scène à tête sculpte le titre de la soirée : `setHead(u, p.head, "", p)` (la tête `"titre"` lit `titleFont`, `titleRelief` et `titleWorld` dans les réglages du plan), des cadrages de face marqués `tag: "title"`, et une limite de rendu assez large pour le titre. Un monde la déclare dans `Look.title`.
+
 Le plus rapide est un shader plein écran :
 
 ```ts
@@ -203,5 +212,6 @@ export const myScene = defineShaderScene({
 | Son d'un onglet | `getDisplayMedia` | Chrome/Edge : cocher « Partager l'audio » dans la fenêtre de partage. |
 | Fichier | `<audio>` + `MediaElementSource` | Bouton ou glisser-déposer. |
 | Démo | Synthé Web Audio | Morceau structuré (groove, breakdown, montée, drop) pour tester le réalisateur. |
+| Set YouTube | Mini-lecteur YouTube intégré + `getDisplayMedia` (`preferCurrentTab`) | Le son d'une iframe YouTube n'entre pas dans la Web Audio API : Discome capture le son de son propre onglet. Chrome ou Edge sur ordinateur, qui demandent « Partager cet onglet ? » à chaque lancement. Le lecteur reste visible dans un coin, comme le demande YouTube. |
 
 Pour visualiser le son du système sur macOS (Spotify app, etc.), passer par un périphérique virtuel type BlackHole et le choisir comme entrée micro.
