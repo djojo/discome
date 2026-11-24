@@ -61,6 +61,10 @@ export interface AudioFrame extends MusicState {
   drift: number;
   /** The world's leading colour now (set by the visualizer from Look.tints), or null when the world has none. */
   tint: [number, number, number] | null;
+  /** Photosensitivity (set by the visualizer, see Settings.safeFlash): scenes tame their own flashes too. */
+  safeFlash: boolean;
+  /** Scene id of the plan on screen (set by the visualizer): a layer can follow it. */
+  shot: string | null;
 }
 
 export const BAND_COUNT = 64;
@@ -135,6 +139,8 @@ export class AudioEngine {
       active: false,
       drift: 0,
       tint: null,
+      safeFlash: false,
+      shot: null,
       ...emptyMusicState(),
     };
   }

@@ -423,6 +423,8 @@ export default function Visualizer() {
       }
       lookContext(s); // keeps the background ink in sync with the world
       compositor.signatureShown = compositor.sceneId !== titleHere?.key;
+      frame.safeFlash = s.safeFlash;
+      frame.shot = compositor.sceneId ? sceneOf(s, compositor.sceneId).id : null;
       compositor.render(
         frame,
         (id) => params[id] ?? defaultParams(sceneOf(s, id)),
