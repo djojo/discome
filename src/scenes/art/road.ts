@@ -9,10 +9,12 @@ const APPROACH = 90;
 
 /**
  * The Way: a fast flight down a straight rainbow road toward the sacred pyramid. Seven lanes of spectral light
- * engraved with fine lines, neon edges, rare obelisks; the road hangs in the cosmos or crosses a red desert.
+ * engraved with fine lines, neon edges, and an avenue of tall obelisks on either side, running all the way to the
+ * pyramid; the road and its causeway hang in the cosmos, or cross a red desert.
  * The pyramid is never reached: over the scene it grows and rises out of the horizon, a step closer on every
- * drop. A wave of light runs down the road on the kick, sparks on the hats; the capstone glows through the
- * build and on the drop the pyramid becomes a prism (a white beam in, a rainbow fanning across the sky).
+ * drop. A wave of light runs down the road on the kick and lights the obelisks' tips on its way, sparks on the hats;
+ * through the build their tips light up one by one toward the pyramid and its capstone glows; on the drop they all
+ * blaze and the pyramid becomes a prism (a white beam in, a rainbow fanning across the sky).
  */
 export const arcaneRoad = defineShaderScene({
   id: "arcane-road",
@@ -23,7 +25,7 @@ export const arcaneRoad = defineShaderScene({
   mask: true,
   flight: { cruise: 6, pump: 0.4 },
   description:
-    "Vol rapide sur une route arc-en-ciel vers la pyramide sacrée, qui grossit et s'élève sans jamais être atteinte ; une vague de lumière court sur la route au kick, la pyramide devient un prisme au drop.",
+    "Vol rapide sur une route arc-en-ciel bordée d'une allée d'obélisques, vers la pyramide sacrée qui grossit sans jamais être atteinte ; une vague de lumière court sur la route au kick, les obélisques s'allument pendant la montée, la pyramide devient un prisme au drop.",
   params: [
     paletteParam("cosmos"),
     {
@@ -46,6 +48,7 @@ export const arcaneRoad = defineShaderScene({
     uWave: { value: 9 },
     uColor: { value: 1 },
     uDesert: { value: 0 },
+    uLit: { value: 0 },
     // CPU side only
     uClock: { value: 0 },
     uJump: { value: 0 },
@@ -77,6 +80,10 @@ export const arcaneRoad = defineShaderScene({
     if (f.drop) u.uBeam.value = 1.3;
     u.uBeam.value = (u.uBeam.value as number) * Math.exp(-dt / (bar * 1.8));
     u.uWave.value = f.beat ? 0 : (u.uWave.value as number) + dt;
+    // The obelisks' tips: lit one by one toward the pyramid through the build, all of them through the drop
+    const lit = f.section === "build" ? f.buildProgress : f.section === "drop" ? 1 : 0;
+    const l = u.uLit.value as number;
+    u.uLit.value = l + (lit - l) * (1 - Math.exp(-dt * (lit > l ? 3 : 0.4)));
     // The rainbow fades to its lines in the breakdown
     const col = f.section === "breakdown" ? 0.12 : 1;
     const k = u.uColor.value as number;
@@ -89,15 +96,19 @@ uniform float uBeam;     // the prism beam (drop)
 uniform float uWave;     // seconds since the kick: a wave of light runs down the road
 uniform float uColor;    // 1: rainbow lanes; low in the breakdown (only the lines)
 uniform float uDesert;
+uniform float uLit;      // 0..1: how far toward the pyramid the obelisks' tips are lit
 ${ART_LIB}
 ${ARCANE_GLSL}
 ${FLIGHT_GLSL}
 const float RW = 1.75;      // half the road's width: 7 lanes of .5
 const float PS = 40.;       // the pyramid's size
 const float PH = .95;       // its height, for a base of 1
-const float OB = 42.;       // a pair of obelisks every OB along the road
-const float OX = RW + 2.6;  // their distance from the axis
-const float OH = 4.2;       // their height
+const float OB = 10.;       // an obelisk every OB on either side of the road
+const float OX = RW + 2.4;  // their axis
+const float PB = .5;        // the plinth's height
+const float OH = 8.5;       // the shaft's height, above the plinth
+const float XC = OX + 1.4;  // the causeway's outer edge (cosmos)
+const float OFAR = 200.;    // the avenue runs this far (then into the haze)
 vec3 gPyr;                  // the pyramid's base centre (world)
 vec3 gApex;
 
@@ -149,29 +160,43 @@ vec3 pyrColor(vec3 p, vec3 n, float fp) {
 }
 
 // ---------------------------------------------------------------- obelisks
-float obelisk(vec3 p) {
+/** The avenue: an obelisk on its plinth every OB, on either side; q: in the nearest one's frame (base at y = 0). */
+vec3 obFrame(vec3 p, out float cz) {
   vec3 q = vec3(abs(p.x) - OX, p.y, p.z);
-  q.z -= (floor(q.z / OB + .5)) * OB;
-  float w = mix(.3, .2, clamp(q.y / OH, 0., 1.));
-  float shaft = sdBox(vec3(q.x, q.y - OH * .5, q.z), vec3(w, OH * .5, w));
-  float top = sdPyramid((q - vec3(0., OH, 0.)) / .42, .9) * .42;
-  return min(shaft, top);
+  cz = floor(q.z / OB + .5) * OB;
+  q.z -= cz;
+  return q;
+}
+float obWidth(float y) { return mix(.42, .28, clamp(y / OH, 0., 1.)); }
+
+float obelisk(vec3 p) {
+  float cz;
+  vec3 q = obFrame(p, cz);
+  float plinth = sdBox(vec3(q.x, q.y - PB * .5, q.z), vec3(.64, PB * .5, .64));
+  float y = q.y - PB;
+  float w = obWidth(y);
+  float shaft = sdBox(vec3(q.x, y - OH * .5, q.z), vec3(w, OH * .5, w)) * .95;   // tapered: a little slack
+  float top = sdPyramid(vec3(q.x, y - OH, q.z) / .56, .9) * .56;                  // the pyramidion
+  return min(plinth, min(shaft, top));
 }
 
 float obMarch(vec3 ro, vec3 rd, float tmax) {
   // start where the ray leaves the corridor between the two rows: nothing to find before
   // (no bounding plane in the distance: a ray grazing it would stop on it)
-  float X = OX - .45;
+  float X = OX - .7;
   float t = .1;
   if (abs(ro.x) < X) {
     if (abs(rd.x) < 1e-4) return -1.;
     t = max((sign(rd.x) * X - ro.x) / rd.x, .1);
     if (t > tmax) return -1.;
   }
-  for (int i = 0; i < 70; i++) {
+  float TOP = PB + OH + .6;
+  for (int i = 0; i < 90; i++) {
     vec3 p = ro + rd * t;
     float d = obelisk(p);
     if (d < .001 * t) return t;
+    // past the row and going away, or above the tips and rising: nothing more
+    if ((abs(p.x) > OX + .8 && p.x * rd.x > 0.) || (p.y > TOP && rd.y > 0.)) break;
     t += d * .85;
     if (t > tmax) break;
   }
@@ -184,20 +209,56 @@ vec3 obN(vec3 p) {
   return normalize(k.xyy * obelisk(p + k.xyy * e) + k.yyx * obelisk(p + k.yyx * e) + k.yxy * obelisk(p + k.yxy * e) + k.xxx * obelisk(p + k.xxx * e));
 }
 
-vec3 obColor(vec3 p, vec3 n, vec3 rd, float fp) {
-  // dark stone, a few thin lines of light climbing it
-  float g = p.y * 5.;
-  float s = fract(g - uTime * .3);
-  float stripe = smoothstep(.42, .47, s) * (1. - smoothstep(.53, .58, s));
-  stripe = mix(stripe, .1, smoothstep(.3, .9, fp * 5. / .11));
-  vec3 c = mix(vec3(.012), uInk * 1.1, stripe * (.35 + .65 * clamp(dot(n, normalize(vec3(-.4, .5, -.7))), 0., 1.)));
-  c *= 1. + 1.2 * uBeat;
+/** One engraved sign in a cell (g: -.5..5): a cross of strokes, a bar or a ring, drawn from the cell's hash. */
+float glyph(vec2 cell, vec2 g, float aa) {
+  float h = hash12(cell), h2 = hash12(cell + 7.1);
+  float v = max(abs(g.x - (h - .5) * .4) - .07, abs(g.y) - .34);
+  float hz = max(abs(g.y - (h2 - .5) * .5) - .07, abs(g.x) - .3);
+  float d = h2 < .25 ? abs(length(g) - .2) - .06 : h < .35 ? hz : min(v, hz);
+  return 1. - smoothstep(-aa, aa, d);
+}
+
+/** How bright an obelisk's tip burns: the kick's wave passing, the build's countdown, the drop. */
+float tipGlow(float cz, vec3 ro) {
+  float zw = ro.z - 2. - uWave * 55.;
+  float wave = exp(-pow((cz - zw) / 5., 2.)) * exp(-uWave * 1.1);
+  float ahead = ro.z - cz;
+  float lit = uLit * (1. - smoothstep(uLit * OFAR - 4., uLit * OFAR + 4., ahead));
+  return max(max(wave * 1.3, lit * .9), uBeam);
+}
+
+vec3 obColor(vec3 p, vec3 n, vec3 rd, vec3 ro, float fp) {
+  float cz;
+  vec3 q = obFrame(p, cz);
+  float y = q.y - PB;
+  // dark stone, warmed by the pyramid's capstone
+  vec3 L = normalize(gApex - p);
+  float dif = clamp(dot(n, L), 0., 1.);
+  vec3 c = uBase * .35 + vec3(.014) + vec3(1., .82, .55) * dif * (.05 + .1 * uCap);
+  c += uInk * .05 * clamp(dot(n, normalize(vec3(-.4, .5, -.7))), 0., 1.);
+  // signs engraved up the shaft in bands, glowing faintly with the ink colour (their average once sub-pixel)
+  if (y > 0. && y < OH) {
+    float fu = abs(n.x) > abs(n.z) ? q.z : q.x;
+    vec2 cs = vec2(.15, .22);
+    vec2 gc = vec2(fu, y) / cs;
+    float by = fract(y / 2.4);
+    float band = smoothstep(.1, .13, by) * (1. - smoothstep(.5, .53, by));
+    float aa = fp / cs.x * 1.5;
+    vec2 cell = floor(gc) + floor(cz / OB) * 13.;
+    float mark = mix(glyph(cell, fract(gc) - .5, max(aa, .02)) * step(.3, hash12(cell + 3.7)), .16, smoothstep(.25, .6, aa));
+    float climb = exp(-pow((fract(y / OH * .5 - uTime * .07 + cz * .011) - .5) * 7., 2.));
+    c += uInk * mark * band * (.07 + .6 * climb + .3 * uBeat) * step(abs(fu), obWidth(y) - .03);
+  }
   // a neon line on the vertical edges only (a whole face seen edge-on would light up otherwise)
-  vec3 q = vec3(abs(p.x) - OX, p.y, p.z);
-  q.z -= floor(q.z / OB + .5) * OB;
-  float w = mix(.3, .2, clamp(q.y / OH, 0., 1.));
-  float edge = (1. - smoothstep(0., max(.015, fp * 1.5), w - min(abs(q.x), abs(q.z)))) * step(q.y, OH);
-  return c + vec3(.3, .85, 1.) * edge * .9;
+  float w = obWidth(y);
+  float edge = (1. - smoothstep(0., max(.02, fp * 1.5), w - min(abs(q.x), abs(q.z)))) * step(0., y) * step(y, OH);
+  c += vec3(.3, .85, 1.) * edge * (.7 + .5 * uBeat);
+  // the pyramidion: gold, burning when its turn comes
+  if (y > OH - .01) {
+    float g = tipGlow(cz, ro);
+    c = mix(c, vec3(1., .78, .42) * (.12 + .5 * dif), .8) + vec3(1., .88, .55) * g * 2.6;
+  }
+  return c;
 }
 
 // ---------------------------------------------------------------- the road and the ground
@@ -221,6 +282,28 @@ vec3 roadColor(vec3 p, vec3 ro, float fp) {
   float e = abs(abs(p.x) - RW);
   float ew = max(.02, fp);
   c += vec3(.3, .85, 1.) * (1. - smoothstep(0., ew, e)) * .02 / ew * 1.6;
+  return c;
+}
+
+/** The causeway the obelisks stand on (cosmos): dark flagstones, a neon line along its outer edge. */
+vec3 causewayColor(vec3 p, vec3 ro, float fp) {
+  vec3 c = uBase * .3 + vec3(.012);
+  // joints across, one at each obelisk and one between
+  float S = OB * .5;
+  float jz = abs(fract(p.z / S + .5) - .5) * S;
+  float jw = max(.02, fp);
+  c += uInk * (1. - smoothstep(0., jw, jz - .012)) * .024 / jw * .5;
+  // the capstone's warm light on the stone, and the kick's wave crossing it
+  c += vec3(1., .8, .5) * (.03 + .06 * uCap);
+  float zw = ro.z - 2. - uWave * 55.;
+  c += uInk * .25 * exp(-pow((p.z - zw) / 1.8, 2.)) * exp(-uWave * 1.1);
+  // a pool of light at the foot of each obelisk whose tip burns
+  float cz = floor(p.z / OB + .5) * OB;
+  vec2 dq = vec2(abs(p.x) - OX, p.z - cz);
+  c += vec3(1., .85, .55) * tipGlow(cz, ro) * exp(-dot(dq, dq) * 1.2) * .25;
+  // the outer edge
+  float ew = max(.02, fp);
+  c += vec3(.3, .85, 1.) * (1. - smoothstep(0., ew, abs(abs(p.x) - XC))) * .02 / ew * 1.4;
   return c;
 }
 
@@ -291,14 +374,15 @@ void main() {
   float tEnd = 400.;
 
   float tg = rd.y < -1e-4 ? -ro.y / rd.y : 1e5;
-  float to = obMarch(ro, rd, min(tg, 160.));
+  float to = obMarch(ro, rd, min(tg, OFAR));
   float tp = pyrMarch(ro, rd);
   if (tp > 0. && tg < tp && uDesert > .5) tp = -1.;   // hidden by the desert
   if (to > 0. && (tp < 0. || to < tp)) {
     vec3 p = ro + rd * to;
-    col = obColor(p, obN(p), rd, to * pa);
-    col = mix(col, col * .4, smoothstep(60., 160., to));
-    solid = 1.;
+    // far off, the avenue melts into the night's haze (no edge where the march stops)
+    float haze = smoothstep(50., OFAR, to);
+    col = mix(obColor(p, obN(p), rd, ro, to * pa), col, haze * haze);
+    solid = 1. - haze * haze;
     tEnd = to;
   } else if (tp > 0. && (tg > tp || abs((ro + rd * tg).x) > RW)) {
     vec3 p = ro + rd * tp;
@@ -321,9 +405,13 @@ void main() {
       col = mix(desertColor(p, tg), col, smoothstep(60., 200., tg));
       solid = 1. - smoothstep(120., 220., tg);
       tEnd = tg;
+    } else if (abs(p.x) < XC) {
+      col = mix(causewayColor(p, ro, fp), col, far);
+      solid = 1. - far;
+      tEnd = tg;
     } else {
-      // the void under the road: the edges' neon glows into it
-      col += vec3(.3, .85, 1.) * exp(-(abs(p.x) - RW) * 4.) * .3 * (1. - far);
+      // the void under the causeway: its edge's neon glows into it
+      col += vec3(.3, .85, 1.) * exp(-(abs(p.x) - XC) * 4.) * .3 * (1. - far);
     }
   }
   // the capstone's glow
