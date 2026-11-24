@@ -14,6 +14,12 @@ const FRAMINGS: Framing[] = [
   { az: -1.9, el: 0.28, dist: 2.4, target: [-0.8, 0, 0.6], focal: 2, weight: 2 },
   // from above: the whole figure, like a mandala in a dish
   { az: 0.3, el: 1.4, dist: 9, target: [0, 0, 0], focal: 1.8, weight: 1 },
+  // Pics: the ferrofluid is a hill bristling with spikes, seen whole (its spikes are far taller than the waves)
+  { az: 0.5, el: 0.32, dist: 5.6, target: [0, 0.45, 0], focal: 1.8, weight: 3, tag: "pics" },
+  { az: -0.9, el: 0.75, dist: 6.2, target: [0, 0.3, 0], focal: 1.8, weight: 2, tag: "pics" },
+  { az: 2.4, el: 0.07, dist: 4.6, target: [0, 0.55, 0], focal: 1.7, weight: 2, tag: "pics" },
+  // ...and closer when they shoot up on the drop
+  { az: 0.2, el: 0.2, dist: 3.4, target: [0, 0.6, 0], focal: 1.8, weight: 1, tag: "pics-close" },
 ];
 
 /** Bands of the 64-band spectrum feeding the four patterns, low to high. */
@@ -28,7 +34,8 @@ const GROUPS = [
  * Onde: a dish of mercury vibrating in standing waves, like the figures of cymatics. Four patterns (squares,
  * hexagons, eight- and twelve-fold) each driven by a part of the spectrum: the music draws the geometry. On the
  * kick a drop falls and sends its rings; on the drop the patterns jump to a more complex mode.
- * Variant « Pics »: black ferrofluid, whose spikes rise with the bass.
+ * Variant « Pics »: black ferrofluid, a hill bristling with spikes that rise with the bass, twitch on the kick and
+ * shoot up on the drop (the camera comes closer); seen whole, the studio's lights drawing it on the dark.
  */
 export const wave = defineShaderScene({
   id: "mercury-wave",
@@ -65,8 +72,13 @@ export const wave = defineShaderScene({
     uLow: { value: 0 },
     uBurst: { value: 0 },
   }),
-  update(u, f, p, dt) {
-    u.uPics.value = p.variant === "spikes" ? 1 : 0;
+  update(u, f, p, dt, ctx) {
+    const pics = p.variant === "spikes";
+    u.uPics.value = pics ? 1 : 0;
+    if (ctx.camera) {
+      ctx.camera.allow = pics ? (fr) => !!fr.tag?.startsWith("pics") : (fr) => !fr.tag?.startsWith("pics");
+      if (pics && f.drop) ctx.camera.request("pics-close");
+    }
     // The four patterns follow their part of the spectrum, smoothly (never a flicker)
     const amp = u.uAmp.value as THREE.Vector4;
     const quiet = f.section === "breakdown" ? 0.5 : 1;
@@ -110,7 +122,7 @@ export const wave = defineShaderScene({
     u.uLow.value = low;
     const bar = f.bpm > 0 ? (60 / f.bpm) * 4 : 2;
     u.uBurst.value = (u.uBurst.value as number) * Math.exp(-dt / bar);
-    u.uSpike.value = 0.06 + 0.9 * low + 0.12 * f.beatPulse + 0.9 * (u.uBurst.value as number);
+    u.uSpike.value = 0.06 + 0.55 * low + 0.1 * f.beatPulse + 0.75 * (u.uBurst.value as number);
   },
   fragment: /* glsl */ `
 uniform vec4 uAmp;        // the four patterns' amplitudes
@@ -197,6 +209,9 @@ vec4 fallingDrops(vec3 ro, vec3 rd) {
 }
 
 // ---------------------------------------------------------------- Pics: ferrofluid
+/** The hill the ferrofluid makes over its magnet. */
+float dome(float r) { return .32 * max(1. - r * r / 2.6, 0.); }
+
 float spikesD(vec3 p) {
   vec2 q = p.xz * rot(uTime * .04);
   const float S = .34;
@@ -206,18 +221,21 @@ float spikesD(vec3 p) {
   vec2 g = dot(a, a) < dot(b, b) ? a : b;
   vec2 c = q / S - g;
   float r = length(c * S);
-  float H = uSpike * (1. - smoothstep(.4, 2.5, r)) * (.8 + .4 * hash12(floor(c * 2. + .5)));
+  float H = uSpike * (1. - smoothstep(.4, 2.2, r)) * (.8 + .4 * hash12(floor(c * 2. + .5)));
+  // the pool, risen into a hill (a gentle slope: its height field is near enough a distance)
+  float pool = (p.y - dome(length(p.xz))) * .85;
   // a spike with concave flanks and a sharp tip, flowing into the pool
-  if (H < .01) return p.y;
-  float y = clamp(p.y / H, 0., 1.);
+  if (H < .01) return pool;
+  float yb = dome(r);
+  float y = clamp((p.y - yb) / H, 0., 1.);
   // small spikes have small feet: no creases between the cells where the field fades out
   float prof = min(.17, H * .55) * pow(1. - y, 1.8);
-  float spike = max((length(g * S) - prof) * .55, p.y - H);
-  return smin(p.y, spike, .07);
+  float spike = max((length(g * S) - prof) * .55, p.y - yb - H);
+  return smin(pool, spike, .07);
 }
 
 float spikesMarch(vec3 ro, vec3 rd) {
-  float top = uSpike * 1.25 + .1;
+  float top = .32 + uSpike * 1.25 + .1;
   if (ro.y > top && rd.y >= 0.) return -1.;
   float t = ro.y > top ? (ro.y - top) / -rd.y : .05;
   for (int i = 0; i < 90; i++) {
@@ -250,8 +268,8 @@ void main() {
       vec3 p = ro + rd * t;
       vec3 n = spikesN(p);
       float fre = pow(1. - clamp(dot(n, -rd), 0., 1.), 4.);
-      // black and glossy: only the lights draw it
-      col = studio(reflect(rd, n)) * mix(.18, .95, fre);
+      // black and glossy: only the lights draw it (strong enough to cut it out of the dark)
+      col = studio(reflect(rd, n)) * mix(.42, 1.1, fre);
       float fade = 1. - smoothstep(RP - .3, RP + 1.5, length(p.xz));
       col *= fade;
       solid = fade;
