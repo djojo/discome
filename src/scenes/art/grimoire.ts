@@ -3,15 +3,21 @@ import type { Scene2DDef } from "../types";
 import { accent, getPalette, ink, paletteParam, rgbCss } from "../palettes";
 import { num } from "../utils";
 
-/** Chapter titles (our own): the chapter moves on with every drop. */
+/**
+ * Chapter titles (our own), one per scene of the Arcanes world: the chapter is the plan on screen. Over any other
+ * scene it moves on with every drop.
+ */
 const CHAPTERS = [
-  { en: "THE SILENT ARCHITECT", jp: "沈黙の建築家" },
-  { en: "ORBIT OF THE NOMAD", jp: "放浪者の軌道" },
-  { en: "THREE WITNESSES", jp: "三人の証人" },
-  { en: "THE RAINBOW GATE", jp: "虹の門" },
-  { en: "BOOK OF FREQUENCIES", jp: "周波数の書" },
-  { en: "WHERE SOUND BECOMES LIGHT", jp: "音が光になる場所" },
+  { en: "THE SILENT ARCHITECT", jp: "沈黙の建築家", scene: "arcane-architect" },
+  { en: "ORBIT OF THE NOMAD", jp: "放浪者の軌道", scene: "arcane-nomad" },
+  { en: "THREE WITNESSES", jp: "三人の証人", scene: "arcane-prism" },
+  { en: "THE RAINBOW GATE", jp: "虹の門", scene: "arcane-portal" },
+  { en: "BOOK OF FREQUENCIES", jp: "周波数の書", scene: "topo-head" },
+  { en: "WHERE SOUND BECOMES LIGHT", jp: "音が光になる場所", scene: "arcane-road" },
 ];
+
+/** Glyphs a title flickers through while it glitches. */
+const NOISE = "▓▒░#%&@$*+=/\\<>01";
 
 /** Bottom subtitles, one per phrase. */
 const VERSES = [
@@ -111,10 +117,12 @@ export const grimoire: Scene2DDef = {
   ],
   create({ canvas, ctx }) {
     let chapter = 0;
+    /** Seconds since the chapter changed or a drop hit: the title glitches for a moment. */
+    let glitch = 9;
     let dominant = 0;
     let lastBeat = -1;
     return {
-      render(f, p) {
+      render(f, p, dt) {
         const w = canvas.width;
         const h = canvas.height;
         const u = h / 360;
@@ -125,7 +133,11 @@ export const grimoire: Scene2DDef = {
         const red = "rgba(255,74,74,0.95)";
         const jp = p.japanese !== false;
         const detail = num(p.detail, 1);
-        if (f.drop) chapter = (chapter + 1) % CHAPTERS.length;
+        // The chapter is the plan on screen; elsewhere it moves on with the drops
+        const own = CHAPTERS.findIndex((c) => c.scene === f.shot);
+        const next = own >= 0 ? own : f.drop ? (chapter + 1) % CHAPTERS.length : chapter;
+        glitch = next !== chapter || f.drop ? 0 : glitch + dt;
+        chapter = next;
         const beats = f.bpm > 0 ? f.bar * 4 + f.beatInBar + f.beatPhase : f.time * 2;
         // The dominant frequency is read once per beat so the number stays legible
         if (Math.floor(beats) !== lastBeat) {
@@ -151,7 +163,13 @@ export const grimoire: Scene2DDef = {
         panel(ctx, m, m, 150 * u, 44 * u, 0);
         ctx.font = mono(9);
         ctx.fillText(`CHAPTER_${String(chapter + 1).padStart(2, "0")}`, m + 8 * u, m + 8 * u);
-        ctx.fillText(`"${ch.en}"`, m + 8 * u, m + 24 * u);
+        // a drop or a new chapter: the title scrambles for a moment, then settles letter by letter
+        const settled = Math.floor((glitch / 0.5) * ch.en.length);
+        const title =
+          glitch < 0.5
+            ? [...ch.en].map((c, i) => (c === " " || i < settled ? c : NOISE[Math.floor(Math.random() * NOISE.length)])).join("")
+            : ch.en;
+        ctx.fillText(`"${title}"`, m + 8 * u + (glitch < 0.15 ? (Math.random() - 0.5) * 6 * u : 0), m + 24 * u);
         panel(ctx, m, m + 48 * u, 150 * u, 28 * u, 0);
         for (let i = 0; i < 5; i++) {
           const flick = f.onsetPulse > 0.5 && (Math.floor(f.time * 20) + i) % 3 === 0;
