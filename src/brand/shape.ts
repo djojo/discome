@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { brandOn, brandShapeKey, type Brand } from "./brand";
+import { brandOn, brandShapeKey, WORLD_SUBTITLE, type Brand } from "./brand";
 import { titleFont, type TitleFont } from "./fonts";
 
 /**
@@ -54,19 +54,23 @@ export function setBrandContent(b: Brand) {
   building.clear();
 }
 
-const keyFor = (font: unknown) => (current?.mode === "logo" ? "logo" : `font:${String(font)}`);
+const keyFor = (font: unknown, world: unknown) =>
+  current?.mode === "logo" ? "logo" : current?.mode === "world" ? `world:${String(world)}:font:${String(font)}` : `font:${String(font)}`;
 
-/** The shape for this typeface if it is ready (starts building it otherwise). Undefined without a title. */
-export function titleShape(font: unknown): TitleShape | undefined {
+/**
+ * The shape for this typeface (and this world, whose name is the title by default) if it is ready; starts building it
+ * otherwise. Undefined without a title.
+ */
+export function titleShape(font: unknown, world?: unknown): TitleShape | undefined {
   if (!current) return undefined;
-  const key = keyFor(font);
+  const key = keyFor(font, world);
   const done = shapes.get(key);
   if (done !== undefined) return done ?? undefined;
   if (!building.has(key)) {
     building.add(key);
     const gen = generation;
     const brand = current;
-    build(brand, font)
+    build(brand, font, world)
       .catch(() => null)
       .then((shape) => {
         if (gen !== generation) {
@@ -80,14 +84,17 @@ export function titleShape(font: unknown): TitleShape | undefined {
   return undefined;
 }
 
-export const titleReady = (font: unknown) => !!titleShape(font);
+export const titleReady = (font: unknown, world?: unknown) => !!titleShape(font, world);
 
-async function build(b: Brand, font: unknown): Promise<TitleShape | null> {
+async function build(b: Brand, font: unknown, world: unknown): Promise<TitleShape | null> {
   if (b.mode === "logo") {
     const mask = b.logo ? await logoMask(b.logo) : null;
     return mask && toShape(mask, LOGO_BOX);
   }
-  const mask = await textMask(b.title, b.subtitle, titleFont(font));
+  const mask =
+    b.mode === "world"
+      ? await textMask(typeof world === "string" && world ? world : "Discome", WORLD_SUBTITLE, titleFont(font))
+      : await textMask(b.title, b.subtitle, titleFont(font));
   return mask && toShape(mask, TEXT_BOX);
 }
 
@@ -240,8 +247,8 @@ function toShape(m: Mask, box: { w: number; h: number }): TitleShape {
 }
 
 /**
- * The night's signature: its title (in a world's typeface, on one line) or its logo, white on transparent, about
- * 128 px tall, for the small mark in a corner.
+ * The night's signature: its title (in a world's typeface, on one line), its logo, or DISCOME by default, white on
+ * transparent, about 128 px tall, for the small mark in a corner.
  */
 export async function signatureCanvas(b: Brand, font: unknown): Promise<HTMLCanvasElement | null> {
   if (!brandOn(b)) return null;
@@ -256,7 +263,7 @@ export async function signatureCanvas(b: Brand, font: unknown): Promise<HTMLCanv
     return c;
   }
   const f = titleFont(font);
-  const text = [b.title, b.subtitle]
+  const text = (b.mode === "world" ? [WORLD_SUBTITLE] : [b.title, b.subtitle])
     .map((s) => s.trim())
     .filter(Boolean)
     .map((s) => (f.upper ? s.toLocaleUpperCase("fr") : s))

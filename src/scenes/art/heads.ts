@@ -145,7 +145,7 @@ function titleRelief(stroke: number, p?: ParamValues): [number, number] {
  */
 export function setHead(u: Record<string, THREE.IUniform>, id: unknown, suffix = "", p?: ParamValues) {
   if (id === TITLE_HEAD) {
-    const t = titleShape(p?.titleFont);
+    const t = titleShape(p?.titleFont, p?.titleWorld);
     u[`uHeadOn${suffix}`].value = t ? 2 : 3;
     if (t) {
       u[`uHeadTex${suffix}`].value = t.tex;

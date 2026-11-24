@@ -21,7 +21,7 @@ npm run dev   # http://localhost:3000
   - Tes retouches sont gardées par plan et par monde ; « Réinitialiser le plan » revient aux réglages du monde.
   - **Enchaîner les mondes** : ils se succèdent, au breakdown (et au moins toutes les 8 phrases) ou toutes les 4 ou 8 phrases. Le passage se fait par le noir, et les effets glissent vers ceux du nouveau monde.
   - **Mondes actifs** : un interrupteur sur chaque carte met le monde dans la rotation ou l'en sort (tous y sont par défaut). Le dernier monde actif ne peut pas être éteint ; éteindre le monde à l'écran passe tout de suite au suivant.
-- **Ta soirée** (Réglages, ou sur l'accueil) : le nom de la soirée, une deuxième ligne pour le DJ ou la date, ou un logo. Chaque monde le montre dans son style, sur un plan « Titre » :
+- **Ta soirée** (Réglages, ou sur l'accueil) : par défaut, chaque monde s'annonce par son nom, avec DISCOME en dessous, comme un carton de chapitre. On peut le remplacer par le nom de la soirée (et une deuxième ligne pour le DJ ou la date), par un logo, ou ne rien afficher. Chaque monde le montre dans son style, sur un plan « Titre » :
     - Porcelaine : en céramique fendue de vermillon, qui se brise en bandes au drop ;
     - Monolithe : en inscription de béton au-dessus de l'avenue ;
     - Signal : en lignes de niveau sous un cadre de reconnaissance ;

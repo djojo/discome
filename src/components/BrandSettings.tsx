@@ -1,13 +1,22 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { BRAND_FREQUENCIES, brandOn, TITLE_MAX, type Brand, type BrandFrequency, type BrandMode } from "@/brand/brand";
+import {
+  BRAND_FREQUENCIES,
+  brandOn,
+  TITLE_MAX,
+  WORLD_SUBTITLE,
+  type Brand,
+  type BrandFrequency,
+  type BrandMode,
+} from "@/brand/brand";
 import { importLogo, invertLogo, LogoError } from "@/brand/logo";
 
 const MODES: { id: BrandMode; label: string }[] = [
+  { id: "world", label: "Monde" },
+  { id: "title", label: "Titre" },
+  { id: "logo", label: "Logo" },
   { id: "none", label: "Rien" },
-  { id: "title", label: "Un titre" },
-  { id: "logo", label: "Un logo" },
 ];
 
 interface Props {
@@ -51,6 +60,12 @@ export function BrandSettings({ brand, onBrand, onError, onShowTitle, compact }:
           </button>
         ))}
       </div>
+
+      {brand.mode === "world" && (
+        <p className="hint">
+          Chaque monde affiche son nom, avec {WORLD_SUBTITLE} en dessous. Choisis « Titre » ou « Logo » pour ta soirée.
+        </p>
+      )}
 
       {brand.mode === "title" && (
         <div className="brand-fields">
@@ -142,7 +157,9 @@ export function BrandSettings({ brand, onBrand, onError, onShowTitle, compact }:
           )}
         </>
       )}
-      {brand.mode !== "none" && <p className="hint">Tout reste dans ton navigateur : rien n&apos;est envoyé.</p>}
+      {(brand.mode === "title" || brand.mode === "logo") && (
+        <p className="hint">Tout reste dans ton navigateur : rien n&apos;est envoyé.</p>
+      )}
 
       <input
         ref={fileRef}

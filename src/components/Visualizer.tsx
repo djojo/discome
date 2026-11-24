@@ -217,8 +217,8 @@ export default function Visualizer() {
     let lookKey = "";
     let lookCtx: Pick<DirectorContext, "plans" | "palettes" | "transitions"> = { plans: [] };
     // The night's title: the plan of the world on screen, and the next world's typeface (drawn ahead of time)
-    let titleHere: { key: string; font: unknown } | null = null;
-    let nextTitleFont: unknown = null;
+    let titleHere: { key: string; font: unknown; world: string } | null = null;
+    let nextTitle: { font: unknown; world: string } | null = null;
     let bgShots: { id: string; weight?: number }[] = [];
     let bgInk: [number, number, number] = [1, 1, 1];
     let firstBg = true;
@@ -228,9 +228,9 @@ export default function Visualizer() {
         lookKey = key;
         const look = findLook(s);
         const tp = titlePlan(look);
-        titleHere = tp ? { key: tp.key, font: tp.shot.params?.titleFont } : null;
+        titleHere = tp ? { key: tp.key, font: tp.shot.params?.titleFont, world: look.name } : null;
         const np = titlePlan(findLook(s, nextWorldId(s)));
-        nextTitleFont = np ? np.shot.params?.titleFont : null;
+        nextTitle = np ? { font: np.shot.params?.titleFont, world: np.look.name } : null;
         lookCtx = {
           plans: shownPlans(look, false).map((p) => ({
             key: p.key,
@@ -309,9 +309,11 @@ export default function Visualizer() {
       // ---- The night's title: ready (or being drawn) for this world and the next
       const brandIsOn = brandOn(s.brand);
       const worldCtx = lookContext(s);
-      if (brandIsOn && nextTitleFont !== null && s.worldCycle.enabled) titleShape(nextTitleFont);
+      if (brandIsOn && nextTitle && s.worldCycle.enabled) titleShape(nextTitle.font, nextTitle.world);
       const titleCtx =
-        brandIsOn && titleHere && titleReady(titleHere.font) ? { key: titleHere.key, frequency: s.brand.frequency } : null;
+        brandIsOn && titleHere && titleReady(titleHere.font, titleHere.world)
+          ? { key: titleHere.key, frequency: s.brand.frequency }
+          : null;
 
       // ---- Auto director
       const decision = director.update(frame, {
@@ -348,7 +350,7 @@ export default function Visualizer() {
         // ...sometimes opening on the night's title, in the new world's style
         let titled = false;
         const tp = brandIsOn ? titlePlan(findLook(next)) : null;
-        if (tp && titleReady(tp.shot.params?.titleFont) && director.titleOnEntry(next.brand.frequency)) {
+        if (tp && titleReady(tp.shot.params?.titleFont, tp.look.name) && director.titleOnEntry(next.brand.frequency)) {
           next.sceneId = tp.key;
           titled = true;
         }
@@ -662,7 +664,7 @@ export default function Visualizer() {
                 </span>
               </button>
             </div>
-            <details className="start-brand" open={settings.brand.mode !== "none"}>
+            <details className="start-brand" open={settings.brand.mode === "title" || settings.brand.mode === "logo"}>
               <summary>Ta soirée : son nom ou ton logo, dans chaque monde</summary>
               <BrandSettings brand={settings.brand} onBrand={patchBrand} onError={setError} compact />
             </details>

@@ -528,6 +528,8 @@ export function planDefaults(plan: Plan): ParamValues {
   const palettes = plan.look.palettes;
   if (palettes.length && !palettes.includes(String(p.palette))) p.palette = palettes[0];
   p[PLAN_SIGNATURE] = JSON.stringify(plan.shot.params ?? {});
+  // the title plan knows its world's name: the title by default
+  if (plan.title) p.titleWorld = plan.look.name;
   return p;
 }
 
