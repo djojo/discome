@@ -10,7 +10,7 @@ npm run dev   # http://localhost:3000
 ## Fonctionnalités
 
 - **Sources** : micro / entrée, son d'un onglet, fichier (glisser-déposer), démo (un morceau de 32 mesures synthétisé en direct), et un set YouTube qu'un bouton play lance depuis l'accueil.
-  - Un set YouTube ou un fichier démarre sur un drop au premier kick entendu (impact, rafale de coupes), sans attendre le premier vrai drop du morceau : une seule fois, pas à chaque reprise d'une boucle.
+  - Un set YouTube ou un fichier démarre sur un drop au premier kick entendu (impact, montage de caméra), sans attendre le premier vrai drop du morceau : une seule fois, pas à chaque reprise d'une boucle.
 - **Horloge musicale** : BPM, temps, mesures et phrases de 8 mesures, avec tap tempo. Les sections (groove → breakdown → montée → drop) sont détectées automatiquement.
 - **Mondes** : Porcelaine, Signal, Mercure, Cathédrale, Monolithe, Canyon, Arcanes, Chair, Bestiaire, et Classique (les premières scènes).
   - **Le propos, sans un mot** : chaque monde garde son thème et dénonce, par les images et le montage seulement, une dérive d'aujourd'hui : les écrans et l'attention (Cathédrale, Signal, Porcelaine), la surveillance, le culte du chef et du collectif (Monolithe, Signal), l'argent et la consommation (Mercure), le vivant (Canyon, Chair, Bestiaire).
@@ -60,10 +60,17 @@ npm run dev   # http://localhost:3000
   - On peut aussi choisir le fond à la main dans la section « Fond ».
   - Le monde Classique garde ces scènes en plein écran, avec leurs couleurs d'origine.
 - **Palettes** : 2 à 4 couleurs par palette, avec des rôles fixes (fond, encre, accent) au lieu d'arcs-en-ciel. Les scènes s'en servent pour se recolorer selon le monde.
-- **Réalisateur** (Manuel / Chill / Club / Rave) : fondu au breakdown, tension pendant la montée, impact et rafale de coupes au drop, variation des réglages à chaque coupe.
+- **Réalisateur** (Manuel / Chill / Club / Rave) : un montage qui suit la structure du morceau.
+  - Chaque moment appelle les plans faits pour lui (le rôle de chaque plan dans son monde) : un plan calme en groove, un plan de montée dès le premier temps de la montée et tenu jusqu'au drop, un plan de drop, un plan d'après-drop au breakdown (tenu jusqu'à la montée).
+  - Au drop, le plan de drop est tenu le temps de son histoire (8 mesures en Chill, 4 en Club, 2 en Rave) ; le rythme passe alors par le montage de caméra à l'intérieur de la scène : coupes franches sur le 1, toutes les 4 mesures en Chill, 2 en Club, chaque mesure en Rave, deux fois plus serrées au second drop d'un morceau. Seule la Rave enchaîne ensuite une rafale de coupes de scène.
+  - Les coupes frappent sur le temps : une transition courte (punch, flash, glitch) part en avance pour que son choc tombe sur le 1 ; au drop, elle part à son point fort.
+  - La caméra des scènes à cadrages pousse lentement vers le sujet pendant la montée, glisse lentement au breakdown, et une phrase sur trois commence par une coupe franche en groove.
+  - Le silence d'avant le drop plonge l'image dans le noir (adouci avec « Limiter les flashs ») ; une intro calme tient ses plans deux fois plus longtemps.
+  - À chaque retour d'un plan, sa palette et ses choix déclarés (tête, matière) changent ; ses curseurs ne bougent que dans les plages qu'il déclare (librement dans le monde Classique).
+  - `npm run rehearse` fait jouer au réalisateur un morceau scripté dans chaque monde, imprime sa feuille de montage (`-v`) et vérifie ces règles.
 - **Transitions** : cut, fondu, punch, glitch, volet lumineux, iris, flash blanc, passage au noir, plongée dans la fissure (on entre dans une fente de lumière et on ressort dans la scène suivante), plongée dans l'écran (un petit rectangle lumineux s'allume au milieu de l'image, on plonge dedans).
 - **Calque** : une 2e scène superposée, avec mode de fusion, opacité et option « pulse au beat ». Un monde peut poser son propre calque (Arcanes pose le Grimoire), retiré en quittant le monde.
-- **Post-FX** : aberration chromatique, traînées, halo lumineux (bloom, dosé par monde, aucun pour Signal), flou de vitesse, pixel (tramage), scanlines, CRT, VHS, grain, étalonnage, miroir, postérisation, strobo (option « Limiter les flashs »). L'option « Pixel et VHS seulement sur les temps forts » les réserve au drop (l'image éclate en gros blocs qui se résolvent palier par palier en une seconde) et aux kicks forts du drop ; Arcanes l'active, pour garder son esthétique de jeu rétro sans sauts de pixels au repos.
+- **Post-FX** : accents rythmiques (le cadre pousse et la lumière monte au kick, les claps scintillent, le 1 d'une phrase de drop frappe : plein au drop, léger en groove, dosé par monde), aberration chromatique, traînées, halo lumineux (bloom, dosé par monde, aucun pour Signal), flou de vitesse, pixel (tramage), scanlines, CRT, VHS, grain, étalonnage, miroir, postérisation, strobo (option « Limiter les flashs »). L'option « Pixel et VHS seulement sur les temps forts » les réserve au drop (l'image éclate en gros blocs qui se résolvent palier par palier en une seconde) et aux kicks forts du drop ; Arcanes l'active, pour garder son esthétique de jeu rétro sans sauts de pixels au repos.
 - **Rendu** : un étalonnage unique en fin de chaîne. Les scènes photographiques (Porcelaine, Mercure, Cathédrale, Canyon, Arcanes, Chair…) livrent leur lumière brute ; le compositeur leur applique à toutes la même courbe de tons, puis une seule vignette, celle du monde, à toutes les scènes, graphiques comprises. Le bloom lit cette lumière : les vraies hautes lumières d'un drop (étincelles, éclats, flash) rayonnent davantage, dans leur couleur. Chaque scène shader passe par un anticrénelage (FXAA) et s'agrandit en bicubique ; les images intermédiaires sont en 16 bits, avec un tramage final (pas de paliers dans les noirs). La qualité Auto apprend la résolution que chaque scène tient en restant fluide, Ultra force la pleine résolution. Les scènes phares gagnent un relief fin qui n'apparaît que lorsqu'il est assez grand à l'écran : craquelé et piqûres de la glaçure (Porcelaine), grain et voiles du marbre, fils d'or de l'obsidienne (Métamorphose), rides du mercure (Billes), capillaires et peau mouillée (Morphose).
 
 ## Scènes
@@ -127,7 +134,7 @@ npm run dev   # http://localhost:3000
 | Touche | Action |
 | --- | --- |
 | `←` `→`, `1`–`9` | Changer de plan dans le monde courant |
-| `Espace` | Drop manuel (impact + rafale, recale la mesure) |
+| `Espace` | Drop manuel (impact et montage du drop, recale la mesure) |
 | `T` | Tap tempo |
 | `L` | Verrouiller la scène |
 | `N` | Montrer le titre de la soirée |
@@ -167,6 +174,7 @@ src/
 public/models/           Michelle.glb (personnage Mixamo des exemples three.js)
 public/heads/            Têtes converties (grilles de distances), crédits
 scripts/bake-heads.mjs   Conversion des bustes (STL/3MF de assets/heads-src/, calés par assets/heads.config.json)
+scripts/rehearse.ts      Répétition du réalisateur (npm run rehearse), avec ts-hooks.mjs pour lancer le TypeScript de l'app dans Node
 ```
 
 À chaque frame, `AudioEngine.update(dt)` remplit un `AudioFrame` que les scènes reçoivent dans `render(frame, params, dt)`. Ce frame contient :
