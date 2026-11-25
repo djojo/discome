@@ -1,6 +1,7 @@
 import type { SceneDef } from "./types";
 import { halo } from "./2d/halo";
-import { nebula } from "./2d/nebula";
+import { swirl } from "./2d/swirl";
+import { galaxy } from "./3d/galaxy";
 import { echoes } from "./2d/echoes";
 import { tunnel } from "./shader/tunnel";
 import { kaleido } from "./shader/kaleido";
@@ -104,12 +105,14 @@ export const SCENES: SceneDef[] = [
   kaleido,
   orb,
   tunnel,
-  nebula,
+  galaxy,
   terrain,
   echoes,
   dancer,
   android,
   particleBody,
+  // Only a background now (Monolithe, Arcanes, Bestiaire)
+  swirl,
 ];
 
 export const sceneById = (id: string) => SCENES.find((s) => s.id === id) ?? SCENES[0];

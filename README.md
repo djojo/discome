@@ -53,7 +53,7 @@ npm run dev   # http://localhost:3000
   - À chaque phrase, une figure : croisière, slalom, piqué, remontée, tonneau.
   - Le champ de vision s'ouvre avec la vitesse, et le compositeur ajoute un flou de vitesse radial.
   - Réglages par scène : « Vitesse de croisière » et « Dynamique » (0 = vitesse constante).
-- **Fonds** : les premières scènes (Nébuleuse, Halo, Échos, Tunnel, Orbe, Spectro-terrain, Kaléidoscope, Corps de particules) servent de fonds aux mondes.
+- **Fonds** : les premières scènes (Tourbillon, Halo, Échos, Tunnel, Orbe, Spectro-terrain, Kaléidoscope, Corps de particules) servent de fonds aux mondes.
   - Elles sont rendues en basse résolution, floutées et teintées dans la palette du monde.
   - Elles n'apparaissent que dans les zones sombres de la scène principale, jamais à l'intérieur de son sujet : les scènes de visages et d'architecture transmettent leur silhouette au compositeur.
   - Le réalisateur change de fond toutes les 3 phrases, ou au drop. Il le rend plus présent en breakdown et le fait pulser pendant les rafales.
@@ -120,7 +120,7 @@ npm run dev   # http://localhost:3000
 - **Androïde** : un visage de panneaux de verre noir, aux coutures de néon qui suivent chacune la bande du spectre de leur hauteur, deux fentes de lumière pour yeux, dans un studio sombre de tubes néon qui se reflètent sur le verre ; au kick, des circuits s'allument sous le verre depuis les coutures, la montée les étend à tout le visage ; au drop, les panneaux se déverrouillent, s'écartent sur un cœur de lumière, puis se referment.
 - **Danseuse** : l'hologramme n'éclaire que la surface avant du corps (les mèches et les plis ne s'additionnent plus en boule blanche).
 - **Corps de particules** : des particules fines réparties sur toute la surface du corps, le côté proche plus lumineux ; les formes abstraites surtout dans les breaks.
-- **Nébuleuse** : la spirale s'ouvre jusqu'aux bords de l'écran (réglage Étendue ; les mondes qui la posent en fond la gardent au centre).
+- **Nébuleuse** : une galaxie spirale en 3D aux étoiles nettes comme des pointes d'épingle, bras de gaz en nœuds colorés et bandes de poussière sombre, vue sous plusieurs angles (en biais, de face, par la tranche, au ras d'un bras) ; au kick, une salve d'étoiles jaillit du cœur le long des bras ; la montée l'accélère et rapproche la caméra ; au drop, le cœur s'embrase et une vague de lumière court dans les bras. L'ancienne spirale 2D, devenue Tourbillon, ne sert plus que de fond (Monolithe, Arcanes, Bestiaire).
 
 ## Raccourcis
 

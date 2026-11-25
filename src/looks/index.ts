@@ -243,7 +243,7 @@ export const LOOKS: Look[] = [
     ],
     backgrounds: [
       { id: "terrain", weight: 2, params: { palette: "concrete", bloom: 0.3, sun: false } },
-      { id: "nebula", weight: 1, params: { palette: "sodium", trail: 0.9, amount: 0.5, spread: 0 } },
+      { id: "swirl", weight: 1, params: { palette: "sodium", trail: 0.9, amount: 0.5 } },
       { id: "echoes", weight: 1, params: { palette: "concrete", shape: "circle" } },
     ],
     bgOpacity: 0.35,
@@ -317,7 +317,7 @@ export const LOOKS: Look[] = [
       },
     ],
     backgrounds: [
-      { id: "nebula", weight: 2, params: { palette: "cosmos", trail: 0.9, amount: 0.6, spread: 0 } },
+      { id: "swirl", weight: 2, params: { palette: "cosmos", trail: 0.9, amount: 0.6 } },
       { id: "kaleido", weight: 1, params: { palette: "cosmos", segments: 6 } },
       { id: "echoes", weight: 1, params: { palette: "cosmos", shape: "circle" } },
     ],
@@ -406,7 +406,7 @@ export const LOOKS: Look[] = [
       { id: "profile-head", label: "Faucon", weight: 1, role: "calm", params: { palette: "sodium", head: "faucon" } },
     ],
     backgrounds: [
-      { id: "nebula", weight: 2, params: { palette: "fauve", trail: 0.92, amount: 0.5, speed: 0.5, spread: 0 } },
+      { id: "swirl", weight: 2, params: { palette: "fauve", trail: 0.92, amount: 0.5, speed: 0.5 } },
       { id: "echoes", weight: 1, params: { palette: "bone", shape: "circle", zoom: 0.5, spin: 0.2 } },
     ],
     bgOpacity: 0.3,
@@ -428,7 +428,7 @@ export const LOOKS: Look[] = [
     description: "Les premières scènes et leurs couleurs vives, hors rotation des mondes.",
     swatch: ["#ff3cac", "#a855f7", "#22d3ee"],
     palettes: ["acid", "neon", "sunset", "ocean", "ice", "fire", "chrome", "vhs"],
-    scenes: SCENES.filter((s) => !["porcelain", "metamorphosis", "faithful", "torrent", "panopticon", "collective", "warehouse", "downpour", "race", "mercury-beads", "mercury-wave", "mercury-blend", "mercury-flow", "mercury-melt", "flesh-morph", "flesh-radiolaria", "flesh-jelly", "canyon-cactus", "canyon-spirit", "canyon-vision", "topo-head", "profile-head", "halftone-head", "mercury", "cathedral", "monolith", "canyon-gorge", "canyon-mesas", "arcane-architect", "arcane-nomad", "arcane-prism", "arcane-portal", "arcane-road", "grimoire", "flesh", "flesh-skin", "signal", "museum", "rose", "organ", "kintsugi", "series", "wheel"].includes(s.id)).map((s) => ({ id: s.id, weight: 1 })),
+    scenes: SCENES.filter((s) => !["porcelain", "metamorphosis", "faithful", "torrent", "panopticon", "collective", "warehouse", "downpour", "race", "mercury-beads", "mercury-wave", "mercury-blend", "mercury-flow", "mercury-melt", "flesh-morph", "flesh-radiolaria", "flesh-jelly", "canyon-cactus", "canyon-spirit", "canyon-vision", "topo-head", "profile-head", "halftone-head", "mercury", "cathedral", "monolith", "canyon-gorge", "canyon-mesas", "arcane-architect", "arcane-nomad", "arcane-prism", "arcane-portal", "arcane-road", "grimoire", "flesh", "flesh-skin", "signal", "museum", "rose", "organ", "kintsugi", "series", "wheel", "swirl"].includes(s.id)).map((s) => ({ id: s.id, weight: 1 })),
     fx: {},
     classic: true,
   },
