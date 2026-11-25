@@ -54,6 +54,9 @@ import { forest } from "./art/forest";
 import { giants } from "./art/giants";
 import { maze } from "./art/maze";
 import { fall } from "./art/fall";
+import { grotto } from "./art/grotto";
+import { mirror } from "./art/mirror";
+import { den } from "./art/den";
 
 /**
  * The scene library. To add a scene: create a file exporting a SceneDef
@@ -109,6 +112,9 @@ export const SCENES: SceneDef[] = [
   giants,
   maze,
   fall,
+  grotto,
+  mirror,
+  den,
   // Classics, recoloured by the worlds' palettes
   halo,
   kaleido,
