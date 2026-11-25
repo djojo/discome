@@ -259,6 +259,15 @@ void main() {
       acc += SCREEN * phone * uFigVis * (exp(-r * 1400.) * 1.6 + exp(-r * 90.) * .2);
     }
   }
+  // A veil of light in the plane of the sign, around its letters: the dark end of the nave behind never eats them
+  if (signB > 0. && rd0.z < -.01) {
+    float ts = (gSignZ - ro0.z) / rd0.z;
+    if (ts > 0. && (tf < 0. || ts < tf)) {
+      vec3 ps = ro0 + rd0 * ts;
+      float dl = max(titleD2(vec2(ps.x, ps.y - .55) / TSc), 0.);
+      acc += mix(uInk, vec3(1.), .2) * signB * (.07 * exp(-dl * 7.) + .03 * exp(-dl * 2.)) * (.6 + .4 * uHaze);
+    }
+  }
   vec3 col = acc;
   float lum = dot(col, vec3(.3, .59, .11));
   col = mix(col, uAccent * lum * 1.4, smoothstep(.6, 2.4, lum));

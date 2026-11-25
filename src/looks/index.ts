@@ -191,12 +191,7 @@ export const LOOKS: Look[] = [
       { id: "faithful", weight: 2, role: "calm", params: { palette: "whiteLight" } },
       { id: "faithful", key: "fideles-apres", label: "Après", weight: 2, role: "after", params: { palette: "signalRed", crowd: 0.45 } },
     ],
-    backgrounds: [
-      { id: "tunnel", weight: 2, params: { palette: "signalRed", segments: 12 } },
-      { id: "halo", weight: 1, params: { palette: "signalRed", symmetry: 2, trail: 0.4 } },
-      { id: "particle-body", weight: 1, params: { palette: "signalRed", bloom: 0.6 } },
-    ],
-    bgOpacity: 0.45,
+    // no background: a single light, haze and a mirror floor (a web of lines behind would muddy it)
     title: {
       id: "cathedral",
       key: "titre",
