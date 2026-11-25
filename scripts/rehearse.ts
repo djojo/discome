@@ -14,7 +14,7 @@ import { directorPlans, LOOKS } from "@/looks";
 import { Cadrage, type Framing } from "@/scenes/art/camera";
 
 type Sec = AudioFrame["section"];
-const TRACK: { section: Sec; bars: number; gap?: boolean }[] = [
+const TRACK: { section: Sec; bars: number; gap?: boolean; late?: boolean }[] = [
   { section: "calm", bars: 16 },
   { section: "calm", bars: 16 },
   { section: "breakdown", bars: 8 },
@@ -23,7 +23,8 @@ const TRACK: { section: Sec; bars: number; gap?: boolean }[] = [
   { section: "calm", bars: 16 },
   { section: "breakdown", bars: 8 },
   { section: "build", bars: 16, gap: true },
-  { section: "drop", bars: 32 },
+  // (noticed on the 4th beat of the build's last bar: the clock had drifted, the analyzer counts it as beat 4)
+  { section: "drop", bars: 32, late: true },
   { section: "calm", bars: 8 },
 ];
 const BPM = 125;
@@ -48,6 +49,8 @@ interface Cut {
   dropIndex: number;
   /** When its hit is on screen (its accent, or its start for a fade). */
   hit: number;
+  /** Decided on the drop itself (when it is noticed: not necessarily on a beat). */
+  onDrop: boolean;
 }
 
 function frameAt(t: number, prevBeat: number, f: AudioFrame): AudioFrame {
@@ -78,7 +81,15 @@ function frameAt(t: number, prevBeat: number, f: AudioFrame): AudioFrame {
   f.downbeat = tick && beatIndex % 4 === 0;
   f.section = seg.section;
   f.sectionTime = sectionTime;
-  f.drop = seg.section === "drop" && tick && bar === start && beatIndex % 4 === 0;
+  const late = TRACK.find((s, i) => s.late && TRACK.slice(0, i).reduce((n, x) => n + x.bars, 0) === bar + 1);
+  f.drop = late
+    ? beatIndex % 4 === 3 && beats - beatIndex >= 0.7 && beats - beatIndex - DT / BEAT < 0.7
+    : seg.section === "drop" && !seg.late && tick && bar === start && beatIndex % 4 === 0;
+  if (late && f.drop) f.section = "drop";
+  if (late && beatIndex % 4 === 3 && beats - beatIndex >= 0.7) {
+    f.section = "drop";
+    f.sectionTime = (beats - beatIndex - 0.7) * BEAT;
+  }
   f.dropManual = false;
   f.buildProgress = seg.section === "build" ? buildProgressAt(sectionTime / BAR) : 0;
   f.beat = tick && kick && !gap;
@@ -198,6 +209,7 @@ for (const look of LOOKS) {
         dur: d.transition.duration / BEAT,
         dropIndex: drops,
         hit: t + Math.max(0, (TRANSITION_ACCENT[d.transition.type as TransitionId] ?? 0) - (d.transition.from ?? 0)) * d.transition.duration,
+        onDrop: f.drop,
       });
       current = d.sceneId;
       transEnd = t + d.transition.duration;
@@ -212,7 +224,7 @@ for (const look of LOOKS) {
     if (f.camCut && !jump && t > 1) camBad++;
     if (f.section === "build" && to !== camTo && cam.pos.distanceTo(before) > 0.05) buildMoves++;
     camTo = to;
-    if (director.camCut) camCuts.push({ bar: f.bar, beat: f.beatInBar, phase: f.beatPhase, dropIndex: drops, t });
+    if (director.camCut && !f.drop) camCuts.push({ bar: f.bar, beat: f.beatInBar, phase: f.beatPhase, dropIndex: drops, t });
     if (f.section === "build" && f.sectionTime > BAR) {
       let b = buildShots.find((x) => x.dropIndex === drops);
       if (!b) buildShots.push((b = { dropIndex: drops, shots: new Set() }));
@@ -234,7 +246,7 @@ for (const look of LOOKS) {
   // ---- the rules
   const problems: string[] = [];
   // every cut hits on the beat (its accent, for the short transitions started ahead of the 1)
-  const offBeat = cuts.filter((c) => {
+  const offBeat = cuts.filter((c) => !c.onDrop).filter((c) => {
     const b = c.hit / BEAT;
     return Math.abs(b - Math.round(b)) > (1.5 * DT) / BEAT;
   });

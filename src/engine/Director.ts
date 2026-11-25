@@ -169,6 +169,8 @@ export class Director {
   /** Drops in the current track (a drop within 96 bars of the previous one belongs to the same track). */
   private dropNo = 0;
   private lastDropBeat = -1e9;
+  /** The first downbeat at or after the drop (a drop noticed on the 4th beat counts from the 1 that follows). */
+  private dropOrigin = -1e9;
   /** A build began: cast a build plan on its next downbeat. */
   private buildPending = false;
   private plannedBuild: string | null = null;
@@ -245,6 +247,7 @@ export class Director {
       this.dropNo = this.beats - this.lastDropBeat < 96 * 4 ? this.dropNo + 1 : 1;
       this.dropLevel = Math.min(2, this.dropNo);
       this.lastDropBeat = this.beats;
+      this.dropOrigin = this.beats + (f.beatInBar === 0 ? 0 : 4 - f.beatInBar);
     }
     const fg = this.decide(f, ctx);
     this.camCut = this.cameraCut(f, ctx);
@@ -263,7 +266,7 @@ export class Director {
     if (!f.tick) return false;
     if (f.section === "drop") {
       const bars = (ctx.mode === "chill" ? 4 : ctx.mode === "rave" ? 1 : 2) / (this.dropLevel >= 2 ? 2 : 1);
-      const since = this.beats - this.lastDropBeat;
+      const since = this.beats - this.dropOrigin;
       return since > 0 && since % Math.max(1, Math.round(bars * 4)) === 0;
     }
     return f.section === "calm" && f.downbeat && f.phraseBar === 0 && Math.random() < 1 / 3;
@@ -339,10 +342,11 @@ export class Director {
     if (f.drop && (auto || f.dropManual)) {
       // the drop plan is held while its story plays out; only the Rave cuts from scene to scene after that
       const hold = dropHoldBars(ctx.mode === "manual" ? "club" : ctx.mode);
-      this.holdUntil = this.beats + hold * 4;
+      // (counted from the 1 the drop lands on)
+      this.holdUntil = this.dropOrigin + hold * 4;
       this.burstPacing = pacing;
-      this.burstStart = this.beats + hold * 4;
-      this.burstUntil = auto && ctx.mode === "rave" ? this.beats + pacing.burstBars * 4 : -1;
+      this.burstStart = this.dropOrigin + hold * 4;
+      this.burstUntil = auto && ctx.mode === "rave" ? this.dropOrigin + pacing.burstBars * 4 : -1;
       this.buildPending = false;
       this.plannedBuild = null;
       this.plannedNext = null;

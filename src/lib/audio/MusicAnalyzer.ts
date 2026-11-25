@@ -354,11 +354,13 @@ export class MusicAnalyzer {
       this.startBack(t, this.buildTime + 1.1);
       this.buildLevel = level;
     }
-    // the gap: in a build, the music suddenly falls silent (most often the beat right before the drop)
+    // the gap: late in a build, the music suddenly falls silent (most often the beat right before the drop); the
+    // short breaths between the hits of a snare roll don't count
     if (this.section === "build") {
       this.buildLevel = Math.max(level, this.buildLevel * Math.exp(-dt / 2));
-      this.quiet = level < 0.2 * this.buildLevel ? this.quiet + dt : 0;
-      if (this.quiet > 0.05) this.gap = true;
+      const late = t - this.sectionStart > 3 * bar;
+      this.quiet = late && level < 0.15 * this.buildLevel ? this.quiet + dt : 0;
+      if (this.quiet > 0.1) this.gap = true;
       else if (level > 0.45 * this.buildLevel) this.gap = false;
     }
 
