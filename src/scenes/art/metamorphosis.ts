@@ -12,6 +12,9 @@ const FRAMINGS: Framing[] = [
   { az: 1.4, el: 0.03, dist: 4.2, target: [0, -0.1, 0], focal: 2.1, weight: 2 },
   { az: 0.15, el: 0, dist: 2.6, target: [0, 0.05, 0.25], focal: 2.2, weight: 2 },
   { az: 0.4, el: 0.35, dist: 5.2, target: [0, -0.3, 0], focal: 1.8, weight: 1 },
+  // further back: the bust on its plinth, the round of light on the floor
+  { az: 0.3, el: 0.1, dist: 7.6, target: [0, -0.75, 0], focal: 1.9, weight: 2 },
+  { az: -0.4, el: 0.3, dist: 8.2, target: [0, -1, 0], focal: 1.8, weight: 1 },
   // The night's title (and the busts it turns into): from the front, so that it always reads
   { az: 0, el: 0.05, dist: 4.4, target: [0, -0.05, 0], focal: 1.95, weight: 3, tag: "title" },
   { az: 0.22, el: 0.12, dist: 4.6, target: [0, -0.05, 0], focal: 1.95, weight: 2, tag: "title" },
@@ -109,6 +112,7 @@ export const metamorphosis = defineShaderScene({
     uMatter: { value: 0 },
     uDying: { value: 0 },
     uTitle: { value: 0 },
+    uFlat: { value: 0 },
   }),
   update(u, f, p, dt, ctx) {
     const seed = u.uSeed.value as number;
@@ -116,7 +120,6 @@ export const metamorphosis = defineShaderScene({
     // The night's title: it opens the plan, turns into a bust, comes back, turns into another bust…
     const title = cycle === "titre";
     u.uTitle.value = title ? 1 : 0;
-    if (ctx.camera) ctx.camera.allow = title ? (fr) => fr.tag === "title" : (fr) => fr.tag !== "title";
     let s = states.get(u);
     if (!s || s.seed !== seed || s.cycle !== cycle) {
       const order: string[] = title
@@ -132,6 +135,11 @@ export const metamorphosis = defineShaderScene({
     const a = s.order[s.i % n];
     const b = s.order[(s.i + 1) % n];
     const ready = setHead(u, a, "", p) && setHead(u, b, "B", p);
+    // The ram is a wall relief with a flat back: while it is on screen, only views from the front
+    const flat = a === "belier" || (s.morphing && b === "belier");
+    u.uFlat.value = (u.uFlat.value as number) + ((flat ? 1 : 0) - (u.uFlat.value as number)) * (1 - Math.exp(-dt * 1.5));
+    if (ctx.camera)
+      ctx.camera.allow = title ? (fr) => fr.tag === "title" : (fr) => fr.tag !== "title" && (!flat || Math.abs(fr.az) < 0.5);
     const bar = f.bpm > 0 ? 240 / f.bpm : 2;
     const newBar = f.bar !== s.lastBar;
     s.lastBar = f.bar;
@@ -183,6 +191,7 @@ uniform float uFlare;   // the drop, decaying
 uniform float uMatter;  // 0: marble, 1: obsidian and gold
 uniform float uDying;   // extinction: the old head petrifies and cracks as the new one rises
 uniform float uTitle;   // the night's title takes turns with the busts
+uniform float uFlat;    // the ram (a flat-backed relief) is on screen: it barely turns
 ${ART_LIB}
 ${HEAD_GLSL}
 ${CAMERA_GLSL}
@@ -195,7 +204,31 @@ vec3 toHead(vec3 p) { p.y += .1; p.xz *= rot(gYaw); p.yz *= rot(gPitch); return 
 vec3 fromHead(vec3 h) { h.yz *= rot(-gPitch); h.xz *= rot(-gYaw); h.y -= .1; return h; }
 float frontY(vec3 h) { return h.y + (vnoise(h * 2.6 + uSeed) - .5) * .35; }
 
-const float CUT = -.82;  // the busts float, cut just under the neck; the light dies out before the cut
+const float CUT = -.82;  // the busts are cut just under the neck, on a round base, on a plinth (not the title)
+const vec3 SPOT = vec3(.4, 3.4, 2.2);     // the museum spotlight, above and in front
+const vec3 SPOT_AIM = vec3(0., -.3, 0.);
+const float FLOOR = -2.72;
+
+/**
+ * The short round base under the neck, carried by the bust (head space), and the museum's mounting rod rising from
+ * it: hidden inside a bust with a neck, it holds up the heads that have none (the ram's relief).
+ */
+float socle(vec3 h) {
+  vec2 d = vec2(length(h.xz) - .27, abs(h.y + .86) - .04);
+  float base = min(max(d.x, d.y), 0.) + length(max(d, 0.)) - .01;
+  return min(base, sdCapsule(h, vec3(0., -.86, 0.), vec3(0., -.25, -.05), .028));
+}
+
+/** The plinth: a column of dark stone, a cap with its moulding, a base on the floor (world space). */
+float plinth(vec3 p) {
+  float cap = sdBox(p - vec3(0., -1.06, 0.), vec3(.5, .05, .5)) - .012;
+  float mould = sdBox(p - vec3(0., -1.15, 0.), vec3(.45, .035, .45)) - .01;
+  float shaft = sdBox(p - vec3(0., -1.93, 0.), vec3(.4, .78, .4)) - .006;
+  float base = sdBox(p - vec3(0., -2.66, 0.), vec3(.48, .06, .48)) - .012;
+  return min(min(cap, mould), min(shaft, base));
+}
+
+float museumD(vec3 p, vec3 h) { return uTitle > .5 ? 1e3 : min(plinth(p), socle(h)); }
 
 float morphD(vec3 h) {
   if (uMorph <= 0.) return headD(h);
@@ -210,12 +243,112 @@ float morphD(vec3 h) {
 
 float map(vec3 p) {
   vec3 h = toHead(p);
+  float m = museumD(p, h);
   // both heads fit in the common box (wider for the title)
   float b = sdBox(h - vec3(0., .025, 0.), vec3(.84 + .36 * uTitle, 1., .92));
-  if (b > .2) return b;
-  return max(morphD(h), CUT - h.y);
+  if (b > .2) return min(b, m);
+  return min(max(morphD(h), CUT - h.y), m);
 }
 ${MARCH}
+
+/** The spotlight's cone: 0 outside, its intensity inside, fading with distance. */
+float spotCone(vec3 p) {
+  vec3 axis = normalize(SPOT_AIM - SPOT);
+  float d = length(p - SPOT);
+  return smoothstep(.935, .968, dot((p - SPOT) / d, axis)) * 9. / (1. + d * d * .25);
+}
+
+/** The bust's shadow in the spot's light (a soft sphere is enough at this scale). */
+float bustShadow(vec3 p, vec3 Ls) {
+  vec3 oc = vec3(0., .05, 0.) - p;
+  float tc = dot(oc, Ls);
+  if (tc < .1) return 1.;
+  return smoothstep(.42, .8, length(oc - Ls * tc));
+}
+
+/** The plinth's soft shadow, for the floor. */
+float plinthShadow(vec3 p, vec3 Ls) {
+  float sh = 1., t = .02;
+  for (int i = 0; i < 20; i++) {
+    float d = plinth(p + Ls * t);
+    sh = min(sh, 10. * d / t);
+    t += clamp(d, .03, .4);
+    if (sh < .01 || t > 4.6) break;
+  }
+  return clamp(sh, 0., 1.);
+}
+
+/** The dark stone of the plinth and the base, lit by the spot. */
+vec3 stone(vec3 p, vec3 n, vec3 rd, float ao) {
+  vec3 Ls = normalize(SPOT - p);
+  float lit = spotCone(p) * bustShadow(p, Ls);
+  vec3 light = vec3(1., .86, .66);
+  vec3 c = uBase * 2. + uInk * .07;
+  vec3 col = c * (.25 + 2.4 * clamp(dot(n, Ls), 0., 1.) * lit) * ao;
+  // polished: the spot's highlight, and a hair of the room's light on the edges
+  col += light * pow(clamp(dot(reflect(rd, n), Ls), 0., 1.), 60.) * lit * .5;
+  col += uInk * .025 * pow(1. - clamp(dot(n, -rd), 0., 1.), 4.);
+  return col;
+}
+
+/**
+ * The beam: the spot's light in the dusty air, with the bust's shadow cut out of it, and the grains of dust that
+ * glint on the hats and swirl up on the drop.
+ */
+vec3 beam(vec3 ro, vec3 rd, float tEnd, vec2 fc) {
+  vec3 bmin = vec3(-2.6, FLOOR, -3.8), bmax = vec3(2.6, 3.4, 2.4);
+  vec3 m = 1. / (abs(rd) + 1e-6) * sign(rd + 1e-9);
+  vec3 ta = (bmin - ro) * m, tb = (bmax - ro) * m;
+  vec3 t1 = min(ta, tb), t2 = max(ta, tb);
+  float t0 = max(max(t1.x, t1.y), max(t1.z, 0.)), tx = min(min(t2.x, t2.y), min(t2.z, tEnd));
+  vec3 acc = vec3(0.);
+  if (t0 >= tx) return acc;
+  float dt = (tx - t0) / 6.;
+  float j = hash12(fc + fract(uTime) * 61.);
+  float air = 0.;
+  for (int i = 0; i < 6; i++) {
+    vec3 q = ro + rd * (t0 + dt * (float(i) + j));
+    air += spotCone(q) * bustShadow(q, normalize(SPOT - q)) * dt;
+  }
+  acc += vec3(1., .86, .66) * air * .028;
+  // the grains, in a grid of cells around the bust
+  const float G = .36;
+  vec3 gmin = vec3(-1.4, -.9, -1.1), gmax = vec3(1.4, 2.4, 2.1);
+  ta = (gmin - ro) * m; tb = (gmax - ro) * m;
+  t1 = min(ta, tb); t2 = max(ta, tb);
+  float g0 = max(max(t1.x, t1.y), max(t1.z, 0.)), g1 = min(min(t2.x, t2.y), min(t2.z, tEnd));
+  if (g0 >= g1) return acc;
+  vec3 p = ro + rd * (g0 + 1e-3);
+  vec3 id = floor(p / G);
+  vec3 st = vec3(rd.x < 0. ? -1. : 1., rd.y < 0. ? -1. : 1., rd.z < 0. ? -1. : 1.);
+  vec3 inv = 1. / max(abs(rd), vec3(1e-6));
+  vec3 tM = ((id + max(st, 0.)) * G - ro) * st * inv;
+  vec3 tD = G * inv;
+  float pa = 1. / (uRes.y * uFocal);
+  float grains = 0.;
+  for (int i = 0; i < 28; i++) {
+    float h = hash13(id + uSeed);
+    if (h < .4) {
+      float a = uTime * (.15 + .2 * hash13(id + 4.1)) + h * 40.;
+      vec3 g = (id + .5 + (vec3(hash13(id + 1.7), hash13(id + 2.9), hash13(id + 3.3)) - .5) * .5) * G
+        + vec3(sin(a), sin(a * .7 + 1.3), cos(a * 1.1)) * .05 + vec3(sin(a * 3.), 1., cos(a * 3.)) * .07 * uFlare;
+      vec3 w = g - ro;
+      float tp = dot(w, rd);
+      if (tp > .1 && tp < tEnd) {
+        float W = max(.006, tp * pa);
+        float d2 = dot(w, w) - tp * tp;
+        float glint = .5 + 3. * uHat * step(.7, hash13(id + floor(uTime * 8.))) + 2.5 * uFlare;
+        grains += exp(-d2 / (W * W)) * (.006 / W) * (.006 / W) * spotCone(g) * glint;
+      }
+    }
+    float tn = min(tM.x, min(tM.y, tM.z));
+    if (tn > g1) break;
+    if (tM.x < tM.y && tM.x < tM.z) { id.x += st.x; tM.x += tD.x; }
+    else if (tM.y < tM.z) { id.y += st.y; tM.y += tD.y; }
+    else { id.z += st.z; tM.z += tD.z; }
+  }
+  return acc + vec3(1., .9, .75) * grains * .6;
+}
 
 /**
  * The studio the obsidian reflects: a big softbox overhead, two tall strips on the sides, a lighter backdrop,
@@ -235,7 +368,7 @@ void main() {
   vec2 fc = gl_FragCoord.xy;
   vec2 uv = (fc - .5 * uRes) / uRes.y;
   // (the title only sways: it must keep reading)
-  gYaw = (.3 * sin(uTime * .045 + uSeed) + .07 * sin(uTime * .11 + uSeed * 2.)) * (1. - .65 * uTitle);
+  gYaw = (.3 * sin(uTime * .045 + uSeed) + .07 * sin(uTime * .11 + uSeed * 2.)) * (1. - .65 * uTitle) * (1. - .6 * uFlat);
   gPitch = .05 * sin(uTime * .06 + uSeed * 3.) * (1. - .65 * uTitle);
   gFront = mix(-1.25, 1.3, uMorph);
   vec3 ro = uCamPos;
@@ -245,7 +378,31 @@ void main() {
   // museum dark, a warm halo behind the bust so it stands out of the background
   vec3 col = uBase * .9 + uInk * .06 * exp(-2.2 * length(uv - vec2(0., .12))) + mix(gold, uAccent, .4) * .1 * exp(-2.4 * length(uv - vec2(0., .1)));
   float kick = exp(-uWave * 5.);
-  float tt = march(ro, rd, 12.);
+  float museum = 1. - uTitle;
+  // the march stops at the floor (the rays going down would otherwise crawl on to the far end)
+  float tFloor = museum > .5 && rd.y < 0. ? (FLOOR - ro.y) / rd.y : 1e3;
+  float tt = march(ro, rd, museum > .5 ? min(16., tFloor) : 12.);
+  float tHit = tt > 0. ? tt : 30.;   // the nearest surface, whatever it is
+  // the gallery floor: dark polished stone, the spot's pool, the shadows of the plinth and the bust
+  if (museum > .5 && rd.y < 0.) {
+    float tf = (FLOOR - ro.y) / rd.y;
+    if (tf > 0. && (tt < 0. || tf < tt)) {
+      vec3 q = ro + rd * tf;
+      vec3 Ls = normalize(SPOT - q);
+      float lit = spotCone(q) * plinthShadow(q, Ls) * bustShadow(q, Ls);
+      // only the spot lights it: beyond its pool the floor is the room's dark (no horizon line)
+      col += uInk * .05 * 2.2 * Ls.y * lit;
+      col += vec3(1., .86, .66) * pow(clamp(dot(reflect(rd, vec3(0., 1., 0.)), Ls), 0., 1.), 30.) * lit * .25;
+      tt = -1.;
+      tHit = tf;
+    }
+  }
+  if (tt > 0. && museum > .5 && museumD(ro + rd * tt, toHead(ro + rd * tt)) < .004) {
+    vec3 p = ro + rd * tt;
+    vec3 n = calcNormalE(p, .002);
+    col = stone(p, n, rd, calcAO(p, n));
+    tt = -2.;
+  }
   if (tt > 0.) {
     vec3 p = ro + rd * tt;
     // the normal sampled over about a pixel: relief finer than the screen averages out instead of shimmering
@@ -289,13 +446,13 @@ void main() {
     } else {
       // Obsidian: black glass drawn by the studio's reflections, a coloured backlight around its outline,
       // and veins of gold inside that light up on the kick
-      col = uBase * .15 * dif * ao + env(refl) * (.14 + .86 * fre) * ao;
+      col = uBase * .15 * dif * ao + env(refl) * (.18 + 1.1 * fre) * ao;
       col += pow(clamp(dot(refl, L), 0., 1.), 90.) * 1.6 * uInk;
       float edge = pow(1. - clamp(dot(n, -rd), 0., 1.), 3.);
-      col += mix(gold, uAccent, .4) * edge * (.35 + .65 * rim) * (.9 + 1.2 * kick);
+      col += mix(gold, uAccent, .4) * edge * (.6 + .9 * rim) * (.9 + 1.2 * kick);
       float gv = abs(vnoise(h * 6. + uSeed * 2.) - .5);
       float gvein = 1. - smoothstep(0., .012 + fwidth(gv) * 1.5, gv);
-      col += gold * gvein * (.15 + 1.1 * kick) * ao;
+      col += gold * gvein * (.35 + 1.1 * kick) * ao;
       // close up, finer threads of gold branching off them, in patches
       float gv2 = abs(vnoise(h * 19. + uSeed * 5.) - .5);
       float gvein2 = (1. - smoothstep(0., .01 + fwidth(gv2) * 1.5, gv2)) * resolved(.012, pix) * smoothstep(.4, .65, vnoise(h * 3. + uSeed + 6.));
@@ -323,8 +480,9 @@ void main() {
     }
     // between transformations the hats glint on the highlights
     col += gold * step(.985, hash13(floor(h * 60.) + floor(uTime * 10.))) * uHat * pow(dif, 4.) * .8;
-    // a museum spotlight from above: the light dies out down the neck, the cut melts into the dark
-    col *= smoothstep(CUT, -.42, h.y);
+    // a museum spotlight from above: the light dies down the neck (into the dark for the title, onto its base
+    // for a bust)
+    col *= mix(smoothstep(CUT, -.42, h.y), mix(.4, 1., smoothstep(CUT, -.3, h.y)), museum);
   }
 
   // The drop: sparks flying off the front
@@ -337,14 +495,18 @@ void main() {
       float r = .45 + .2 * hash12(vec2(fi, 2.9)) + age * .25;
       vec3 sp = fromHead(vec3(cos(ang) * r, gFront + age * .5 - age * age * .18, sin(ang) * r));
       float s = dot(sp - ro, rd);
-      if (s < 0. || (tt > 0. && s > tt)) continue;
+      if (s < 0. || s > tHit) continue;
       float d = length(sp - ro - rd * s);
       sparks += exp(-d * 220.) * exp(-age * 1.2) * uFlare;
     }
     col += gold * sparks * 1.6;
   }
 
-  gl_FragColor = vec4(hdrOut(col * 1.05), max(step(0., tt), clamp(sparks, 0., 1.)));
+  // the dusty beam of the spot, in front of everything it lights
+  if (museum > .5) col += beam(ro, rd, tHit, fc);
+
+  // a bust stands in its room (it covers the frame); the title floats over the world's background
+  gl_FragColor = vec4(hdrOut(col * 1.05), museum > .5 ? 1. : max(step(0., tt), clamp(sparks, 0., 1.)));
 }
 `,
 });
