@@ -113,7 +113,7 @@ export const LOOKS: Look[] = [
       { id: "torrent", weight: 2, role: "build", params: { palette: "mono" } },
       { id: "downpour", weight: 2, role: "after", params: { palette: "mono" } },
       { id: "halftone-head", label: "Fine", weight: 2, role: "drop", params: { palette: "mono", cells: 90 } },
-      { id: "race", weight: 2, role: "build", params: { palette: "mono" } },
+      { id: "pilgrimage", weight: 2, role: "build", params: { palette: "mono" } },
     ],
     // only backgrounds in lines: a grey, blurred one would muddy the pure black and white
     backgrounds: [
@@ -428,7 +428,7 @@ export const LOOKS: Look[] = [
     description: "Les premières scènes et leurs couleurs vives, hors rotation des mondes.",
     swatch: ["#ff3cac", "#a855f7", "#22d3ee"],
     palettes: ["acid", "neon", "sunset", "ocean", "ice", "fire", "chrome", "vhs"],
-    scenes: SCENES.filter((s) => !["porcelain", "metamorphosis", "faithful", "torrent", "panopticon", "collective", "warehouse", "downpour", "race", "mercury-beads", "mercury-wave", "mercury-blend", "mercury-flow", "mercury-melt", "flesh-morph", "flesh-radiolaria", "flesh-jelly", "canyon-cactus", "canyon-spirit", "canyon-vision", "topo-head", "profile-head", "halftone-head", "mercury", "cathedral", "monolith", "canyon-gorge", "canyon-mesas", "arcane-architect", "arcane-nomad", "arcane-prism", "arcane-portal", "arcane-road", "grimoire", "flesh", "flesh-skin", "signal", "museum", "rose", "organ", "kintsugi", "series", "wheel", "swirl"].includes(s.id)).map((s) => ({ id: s.id, weight: 1 })),
+    scenes: SCENES.filter((s) => !["porcelain", "metamorphosis", "faithful", "torrent", "panopticon", "collective", "warehouse", "downpour", "pilgrimage", "mercury-beads", "mercury-wave", "mercury-blend", "mercury-flow", "mercury-melt", "flesh-morph", "flesh-radiolaria", "flesh-jelly", "canyon-cactus", "canyon-spirit", "canyon-vision", "topo-head", "profile-head", "halftone-head", "mercury", "cathedral", "monolith", "canyon-gorge", "canyon-mesas", "arcane-architect", "arcane-nomad", "arcane-prism", "arcane-portal", "arcane-road", "grimoire", "flesh", "flesh-skin", "signal", "museum", "rose", "organ", "kintsugi", "series", "wheel", "swirl"].includes(s.id)).map((s) => ({ id: s.id, weight: 1 })),
     fx: {},
     classic: true,
   },

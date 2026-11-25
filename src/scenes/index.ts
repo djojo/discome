@@ -24,7 +24,7 @@ import { panopticon } from "./art/panopticon";
 import { collective } from "./art/collective";
 import { warehouse } from "./art/warehouse";
 import { downpour } from "./art/downpour";
-import { race } from "./art/race";
+import { pilgrimage } from "./art/pilgrimage";
 import { topoHead, profileHead, halftoneHead } from "./art/faces";
 import { mercury } from "./art/mercury";
 import { cathedral } from "./art/cathedral";
@@ -71,7 +71,7 @@ export const SCENES: SceneDef[] = [
   panopticon,
   collective,
   downpour,
-  race,
+  pilgrimage,
   canyonGorge,
   canyonMesas,
   arcaneArchitect,
