@@ -118,8 +118,8 @@ export const LOOKS: Look[] = [
       { id: "halftone-head", label: "Fine", weight: 2, role: "drop", params: { palette: "mono", cells: 90 } },
       { id: "race", weight: 2, role: "build", params: { palette: "mono" } },
     ],
+    // only backgrounds in lines: a grey, blurred one would muddy the pure black and white
     backgrounds: [
-      { id: "halo", weight: 2, params: { palette: "mono", trail: 0.3, symmetry: 2 } },
       { id: "terrain", weight: 1, params: { palette: "mono", sun: false, bloom: 0 } },
       { id: "echoes", weight: 1, params: { palette: "mono", shape: "line" } },
       { id: "tunnel", weight: 1, params: { palette: "mono", segments: 16 } },
