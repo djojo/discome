@@ -14,6 +14,8 @@ import { metamorphosis } from "./art/metamorphosis";
 import { museum } from "./art/museum";
 import { faithful } from "./art/faithful";
 import { torrent } from "./art/torrent";
+import { rose } from "./art/rose";
+import { organ } from "./art/organ";
 import { panopticon } from "./art/panopticon";
 import { collective } from "./art/collective";
 import { warehouse } from "./art/warehouse";
@@ -89,6 +91,8 @@ export const SCENES: SceneDef[] = [
   skin,
   signal,
   torrent,
+  rose,
+  organ,
   // Classics, recoloured by the worlds' palettes
   halo,
   kaleido,
