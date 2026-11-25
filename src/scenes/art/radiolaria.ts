@@ -1,5 +1,6 @@
 import { defineShaderScene } from "../shader/defineShaderScene";
 import { paletteParam } from "../palettes";
+import { ABYSS_GLSL } from "./abyss.glsl";
 import { ART_LIB, MARCH } from "./lib.glsl";
 import { CAMERA_GLSL, type Framing } from "./camera";
 
@@ -56,6 +57,7 @@ uniform float uSpineT;   // seconds since the kick
 uniform float uGlow;     // the bass: the light at the heart
 uniform float uMesh;     // the lace slowly transforming
 ${ART_LIB}
+${ABYSS_GLSL}
 ${CAMERA_GLSL}
 const float RO = 1.25, RI = .62;
 float gPart;             // 0 outer lace, 1 spine, 2 inner shell
@@ -115,7 +117,7 @@ void main() {
   vec2 uv = (fc - .5 * uRes) / uRes.y;
   vec3 ro = uCamPos;
   vec3 rd = lookAt(ro, uCamTarget) * normalize(vec3(uv, uFocal));
-  vec3 col = uBase * .7;
+  vec3 col = deepWater(rd, uv, 1.);
   float solid = 0.;
   // the light at the heart, seen through the lace
   float dc = length(cross(rd, -ro));
@@ -143,7 +145,7 @@ void main() {
     solid = 1.;
     col += heart * .25;
   } else col += heart;
-  gl_FragColor = vec4(hdrOut(col * 1.1), max(solid, clamp(dot(heart, vec3(.3)) * 1.5, 0., 1.)));
+  gl_FragColor = vec4(hdrOut(col * 1.1), 1.);
 }
 `,
 });

@@ -358,12 +358,7 @@ export const LOOKS: Look[] = [
       { id: "flesh-jelly", weight: 2, role: "build", params: { palette: "flesh" } },
       { id: "flesh-skin", weight: 2, role: "build", params: { palette: "flesh", head: "humain" } },
     ],
-    backgrounds: [
-      { id: "halo", weight: 3, params: { palette: "flesh", symmetry: 8, trail: 0.8, spin: 0.2, hueSpeed: 0.2 } },
-      { id: "kaleido", weight: 1, params: { palette: "flesh", complexity: 3, segments: 6 } },
-      { id: "nebula", weight: 1, params: { palette: "flesh", trail: 0.9 } },
-    ],
-    bgOpacity: 0.4,
+    // no background: the creatures live in their own deep water (a mandala or bubbles behind them read as a screensaver)
     title: {
       id: "flesh-skin",
       key: "titre",

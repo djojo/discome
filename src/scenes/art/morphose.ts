@@ -1,5 +1,6 @@
 import { defineShaderScene } from "../shader/defineShaderScene";
 import { paletteParam } from "../palettes";
+import { ABYSS_GLSL } from "./abyss.glsl";
 import { ART_LIB, MARCH } from "./lib.glsl";
 import { CAMERA_GLSL, type Framing } from "./camera";
 import { DETAIL_GLSL } from "./detail.glsl";
@@ -100,6 +101,7 @@ uniform float uWave;     // seconds since the kick: a wave of light along the br
 uniform float uGlow;     // the bass: the inner light
 uniform float uSpin;
 ${ART_LIB}
+${ABYSS_GLSL}
 ${CAMERA_GLSL}
 ${DETAIL_GLSL}
 float gR;                // distance from the heart, at the last evaluation
@@ -229,8 +231,8 @@ void main() {
   vec2 uv = (fc - .5 * uRes) / uRes.y;
   vec3 ro = uCamPos;
   vec3 rd = lookAt(ro, uCamTarget) * normalize(vec3(uv, uFocal));
-  // the dark, a deep red breath behind the form
-  vec3 col = uBase * .7 + uAccent * .07 * exp(-2.2 * length(uv)) * (1. + uGlow);
+  // the deep water, a deep red breath behind the form
+  vec3 col = deepWater(rd, uv, 1.) + uAccent * .07 * exp(-2.2 * length(uv)) * (1. + uGlow);
   float solid = 0.;
   float t = march(ro, rd, 12.);
   if (t > 0.) {
@@ -246,7 +248,7 @@ void main() {
     col = shade(p, n, rd, pix) * ao;
     solid = 1.;
   }
-  gl_FragColor = vec4(hdrOut(col * 1.1), solid);
+  gl_FragColor = vec4(hdrOut(col * 1.1), 1.);
 }
 `,
 });
