@@ -423,7 +423,7 @@ export const LOOKS: Look[] = [
         params: { palette: "bone", matter: "marble", cycle: "extinction" },
       },
       { id: "topo-head", label: "Fauve", weight: 1, role: "build", params: { palette: "fauve", density: 30, head: "tigre" } },
-      { id: "halftone-head", label: "Hibou", weight: 1, role: "drop", params: { palette: "fauve", head: "hibou" } },
+      { id: "halftone-head", label: "Hibou", weight: 1, role: "drop", params: { palette: "fauve", head: "hibou", gain: 0.5 } },
       { id: "profile-head", label: "Faucon", weight: 1, role: "calm", params: { palette: "sodium", head: "faucon" } },
     ],
     backgrounds: [

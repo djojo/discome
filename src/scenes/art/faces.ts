@@ -11,6 +11,8 @@ import { HEAD_GLSL, headParam, headUniforms, setHead, TITLE_HEAD } from "./heads
  */
 const HEAD_MAP = /* glsl */ `
 ${HEAD_GLSL}
+uniform float uZoom;   // heads taller than a face: the framing steps back a little (focal times uZoom)
+uniform float uLift;   // and rises toward their top (ears, crowns)
 float gYaw;
 float gPitch = 0.;
 vec3 toHead(vec3 p) { p.y += .1; p.xz *= rot(gYaw); p.yz *= rot(gPitch); return p; }
@@ -51,7 +53,7 @@ float recognition(vec2 uv) {
     hp.y -= .1;
     vec3 v = hp - uCamPos;
     vec3 c = vec3(dot(v, cam[0]), dot(v, cam[1]), dot(v, cam[2]));
-    P[i] = c.xy / c.z * uFocal;
+    P[i] = c.xy / c.z * uFocal * uZoom;
     V[i] = step(-.05, dot(normalize(hp - vec3(0., -.1, -.1)), normalize(uCamPos - hp)));
     bmin = min(bmin, P[i]);
     bmax = max(bmax, P[i]);
@@ -100,7 +102,7 @@ float recognitionTitle(vec2 uv) {
     hp.y -= .1;
     vec3 v = hp - uCamPos;
     vec3 c = vec3(dot(v, cam[0]), dot(v, cam[1]), dot(v, cam[2]));
-    vec2 P = c.xy / c.z * uFocal;
+    vec2 P = c.xy / c.z * uFocal * uZoom;
     bmin = min(bmin, P);
     bmax = max(bmax, P);
   }
@@ -116,6 +118,17 @@ float recognitionTitle(vec2 uv) {
   return o + tick * (.55 + 1.2 * lit);
 }
 `;
+
+/**
+ * Heads taller than a face (ears, crowns, headdresses): the framings step back a little and rise toward their top,
+ * so they are not cut. [focal factor, lift]
+ */
+const TALL: Record<string, [number, number]> = { hibou: [0.84, 0.06], faucon: [0.7, 0.35], nefertiti: [0.8, 0.16], moai: [0.86, 0.06] };
+const frameFor = (u: Record<string, { value: unknown }>, head: unknown) => {
+  const [zoom, lift] = TALL[String(head)] ?? [1, 0];
+  u.uZoom.value = zoom;
+  u.uLift.value = lift;
+};
 
 const FACE_FRAMINGS: Framing[] = [
   // The night's title: from the front, so that it always reads (its centre sits at y = -.05)
@@ -164,6 +177,7 @@ export const topoHead = defineShaderScene({
     uTurn: { value: 1 },
     uRecog: { value: 0 },
     uTitle: { value: 0 },
+    uZoom: { value: 1 }, uLift: { value: 0 },
     ...kickTimer(),
     ...headUniforms(),
   }),
@@ -171,6 +185,7 @@ export const topoHead = defineShaderScene({
     // The night's title instead of a face: read from the front, by its contour lines
     const title = p.head === TITLE_HEAD;
     setHead(u, p.head, "", p);
+    frameFor(u, p.head);
     u.uTitle.value = title ? 1 : 0;
     if (ctx.camera) ctx.camera.allow = title ? (fr) => fr.tag === "title" : (fr) => fr.tag !== "title";
     u.uRecog.value = p.recog === true ? 1 : 0;
@@ -195,8 +210,8 @@ void main() {
   float turn = uTurn * (1. - .7 * uTitle);
   gYaw = (.3 * sin(uTime * .045 + uSeed) + .07 * sin(uTime * .11 + uSeed * 2.)) * turn;
   gPitch = .05 * sin(uTime * .06 + uSeed * 3.) * turn;
-  vec3 ro = uCamPos;
-  vec3 rd = lookAt(ro, uCamTarget) * normalize(vec3(uv, uFocal));
+  vec3 ro = uCamPos + vec3(0., uLift, 0.);
+  vec3 rd = lookAt(ro, uCamTarget + vec3(0., uLift, 0.)) * normalize(vec3(uv, uFocal * uZoom));
   vec3 col = uBase;
   float tt = march(ro, rd, 9.);
   if (tt > 0.) {
@@ -247,9 +262,10 @@ export const profileHead = defineShaderScene({
     headParam(),
     { type: "range", key: "sweep", label: "Balayage de la lumière", min: 0, max: 2, step: 0.05, default: 1 },
   ],
-  uniforms: () => ({ uSweep: { value: 1 }, ...kickTimer(), ...headUniforms() }),
+  uniforms: () => ({ uSweep: { value: 1 }, uZoom: { value: 1 }, uLift: { value: 0 }, ...kickTimer(), ...headUniforms() }),
   update(u, f, p, dt) {
     setHead(u, p.head, "", p);
+    frameFor(u, p.head);
     u.uSweep.value = num(p.sweep, 1);
     u.uWave.value = f.beat ? 0 : (u.uWave.value as number) + dt;
   },
@@ -264,8 +280,8 @@ void main() {
   vec2 uv = (fc - .5 * uRes) / uRes.y;
   gYaw = .18 * sin(uTime * .04 + uSeed) + .05 * sin(uTime * .1 + uSeed * 2.);
   gPitch = .05 * sin(uTime * .06 + uSeed * 3.);
-  vec3 ro = uCamPos;
-  vec3 rd = lookAt(ro, uCamTarget) * normalize(vec3(uv, uFocal));
+  vec3 ro = uCamPos + vec3(0., uLift, 0.);
+  vec3 rd = lookAt(ro, uCamTarget + vec3(0., uLift, 0.)) * normalize(vec3(uv, uFocal * uZoom));
   // Lights follow the framing: the key light sits behind the head
   vec3 V = normalize(uCamPos - uCamTarget);
   vec3 up = vec3(0., 1., 0.);
@@ -313,10 +329,13 @@ export const halftoneHead = defineShaderScene({
     headParam(),
     { type: "range", key: "cells", label: "Finesse de la trame", min: 30, max: 120, step: 1, default: 62 },
     { type: "range", key: "turn", label: "Dérive du visage", min: 0, max: 1.5, step: 0.05, default: 1 },
+    { type: "range", key: "gain", label: "Éclat", min: 0.3, max: 1, step: 0.05, default: 1 },
   ],
-  uniforms: () => ({ uCells: { value: 62 }, uTurn: { value: 1 }, ...kickTimer(), ...headUniforms() }),
+  uniforms: () => ({ uCells: { value: 62 }, uTurn: { value: 1 }, uGain: { value: 1 }, uZoom: { value: 1 }, uLift: { value: 0 }, ...kickTimer(), ...headUniforms() }),
   update(u, f, p, dt) {
     setHead(u, p.head, "", p);
+    frameFor(u, p.head);
+    u.uGain.value = num(p.gain, 1);
     u.uCells.value = num(p.cells, 62);
     u.uTurn.value = num(p.turn, 1);
     u.uWave.value = f.beat ? 0 : (u.uWave.value as number) + dt;
@@ -324,6 +343,7 @@ export const halftoneHead = defineShaderScene({
   fragment: /* glsl */ `
 uniform float uCells;
 uniform float uTurn;
+uniform float uGain;     // bright palettes add up to white (and bloom): the plan dims its plates
 uniform float uWave;
 ${ART_LIB}
 ${CAMERA_GLSL}
@@ -342,8 +362,8 @@ void main() {
   vec2 uv = (fc - .5 * uRes) / uRes.y;
   gYaw = (.3 * sin(uTime * .045 + uSeed) + .07 * sin(uTime * .11 + uSeed * 2.)) * uTurn;
   gPitch = .05 * sin(uTime * .06 + uSeed * 3.) * uTurn;
-  vec3 ro = uCamPos;
-  vec3 rd = lookAt(ro, uCamTarget) * normalize(vec3(uv, uFocal));
+  vec3 ro = uCamPos + vec3(0., uLift, 0.);
+  vec3 rd = lookAt(ro, uCamTarget + vec3(0., uLift, 0.)) * normalize(vec3(uv, uFocal * uZoom));
   float tt = march(ro, rd, 9.);
   // Three lights from three sides, one per screen: the separation is where they disagree
   vec3 v = vec3(0.);
@@ -367,7 +387,7 @@ void main() {
   float flash = uBeat * .9;
   dA = max(dA, step(1. - .08 * flash, hash12(idA + floor(uTime * 4.))) * step(.01, v.x));
   dB = max(dB, step(1. - .08 * flash, hash12(idB + 7. + floor(uTime * 4.))) * step(.01, v.y));
-  vec3 col = uBase * .5 + uInk * dA * .6 + uAccent * dB * 1.05 + uPal1 * dC * .6;
+  vec3 col = uBase * .5 + (uInk * dA * .6 + uAccent * dB * 1.05 + uPal1 * dC * .6) * uGain;
   col = min(col, vec3(1.2));
   if (uDrop > .7) col = uInk - col * .95;
   gl_FragColor = vec4(col, step(0., tt)); // alpha = silhouette, keeps the background behind the face
