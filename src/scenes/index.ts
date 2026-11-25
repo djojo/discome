@@ -11,6 +11,7 @@ import { android } from "./3d/humanoid/android";
 import { particleBody } from "./3d/humanoid/particleBody";
 import { porcelain } from "./art/porcelain";
 import { metamorphosis } from "./art/metamorphosis";
+import { museum } from "./art/museum";
 import { faithful } from "./art/faithful";
 import { torrent } from "./art/torrent";
 import { panopticon } from "./art/panopticon";
@@ -52,6 +53,7 @@ export const SCENES: SceneDef[] = [
   // Art direction (worlds)
   porcelain,
   metamorphosis,
+  museum,
   topoHead,
   profileHead,
   halftoneHead,
