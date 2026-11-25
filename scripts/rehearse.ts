@@ -172,11 +172,19 @@ for (const look of LOOKS) {
   let buildMoves = 0;
   // variations: outside Classique, only the palette, the declared choices and the declared ranges may move
   let offStyle = 0;
+  // per drop: the 1 it lands on (s), and the plan on screen when it came
+  const landing: number[] = [];
+  const onScreenAtDrop: string[] = [];
   const total = TRACK.reduce((s, x) => s + x.bars, 0) * BAR;
   for (let t = 0; t < total; t += DT) {
     frameAt(t, prevBeat, f);
     prevBeat = Math.floor(t / BEAT);
-    if (f.drop) drops++;
+    if (f.drop) {
+      drops++;
+      const b = Math.floor(t / BEAT);
+      landing[drops] = (f.beatInBar === 0 ? b : b + 4 - f.beatInBar) * BEAT;
+      onScreenAtDrop[drops] = current;
+    }
     const ctx: DirectorContext = {
       mode,
       locked: false,
@@ -233,7 +241,8 @@ for (const look of LOOKS) {
   }
 
   // ---- the sheet
-  const hasBuild = plans.some((p) => p.role === "build");
+  const forBuilds = (r: string | undefined) => r === "build" || r === "arc";
+  const hasBuild = plans.some((p) => forBuilds(p.role));
   console.log(`\n${look.name} (${mode}) — ${cuts.length} coupes, ${camCuts.length} coupes de caméra`);
   if (verbose) {
     for (const c of cuts) {
@@ -251,22 +260,35 @@ for (const look of LOOKS) {
     return Math.abs(b - Math.round(b)) > (1.5 * DT) / BEAT;
   });
   if (offBeat.length) problems.push(`${offBeat.length} coupe(s) qui ne frappent pas sur le temps`);
-  // plans held as long as their story: no cut of the scene in the first bars after a drop
+  // plans held as long as their story: no cut of the scene in the first bars after a drop (counted from the drop
+  // cut's hit, or from the 1 the drop lands on when its plan stays on)
   const hold = dropHoldBars(mode);
-  for (const c of cuts.filter((x) => x.section === "drop" && x.type !== "fade")) {
-    const dropCut = cuts.find((x) => x.dropIndex === c.dropIndex && x.section === "drop");
-    if (dropCut && c !== dropCut && c.hit - dropCut.hit < hold * BAR - 1e-3) {
-      problems.push(`drop ${c.dropIndex} : coupé après ${((c.hit - dropCut.hit) / BAR).toFixed(1)} mes. (tenue ${hold})`);
+  const dropRef = (k: number) => {
+    const dropCut = cuts.find((x) => x.dropIndex === k && x.onDrop);
+    return dropCut ? dropCut.hit : landing[k];
+  };
+  for (const c of cuts.filter((x) => x.section === "drop" && x.type !== "fade" && !x.onDrop)) {
+    const ref = dropRef(c.dropIndex);
+    if (ref !== undefined && c.hit - ref < hold * BAR - 1e-3) {
+      problems.push(`drop ${c.dropIndex} : coupé après ${((c.hit - ref) / BAR).toFixed(1)} mes. (tenue ${hold})`);
       break;
     }
   }
-  // the builds show build plans
+  // the builds show build plans (or plans that carry on through the drop)
   if (hasBuild) {
     for (const b of buildShots) {
-      const off = [...b.shots].filter((k) => role.get(k) !== "build");
+      const off = [...b.shots].filter((k) => !forBuilds(role.get(k)));
       if (off.length) problems.push(`montée ${b.dropIndex + 1} : ${off.map((k) => k.split(":")[1]).join(", ")} au lieu d'un plan de montée`);
     }
   }
+  // a plan whose drop is its own reveal crosses the drop without a cut
+  let arcs = 0;
+  for (let k = 1; k <= drops; k++) {
+    if (role.get(onScreenAtDrop[k]) !== "arc") continue;
+    arcs++;
+    if (cuts.some((c) => c.dropIndex === k && c.onDrop)) problems.push(`drop ${k} : ${onScreenAtDrop[k].split(":")[1]} coupé au lieu de traverser le drop`);
+  }
+  if (verbose && arcs) console.log(`  plans montée → drop au drop : ${arcs}`);
   // never the same plan twice in a row
   const repeats = cuts.filter((c) => c.from === c.to);
   if (repeats.length) problems.push(`${repeats.length} plan(s) répété(s)`);
@@ -278,8 +300,9 @@ for (const look of LOOKS) {
   if (camOff.length) problems.push(`${camOff.length} coupe(s) de caméra hors du temps`);
   // the second drop edited tighter than the first (more camera cuts while its plan is held)
   const inHold = (k: number) => {
-    const d = cuts.find((c) => c.dropIndex === k && c.section === "drop");
-    return d ? camCuts.filter((c) => c.dropIndex === k && c.t >= d.t && c.t < d.t + hold * BAR).length : 0;
+    const d = cuts.find((c) => c.dropIndex === k && c.onDrop);
+    const t0 = d ? d.t : landing[k];
+    return t0 !== undefined ? camCuts.filter((c) => c.dropIndex === k && c.t >= t0 && c.t < t0 + hold * BAR).length : 0;
   };
   const cam1 = inHold(1);
   const cam2 = inHold(2);

@@ -10,7 +10,10 @@ export interface DirectorPlan {
   /** The plan's own settings: variations stay around them instead of drifting away. */
   defaults: ParamValues;
   vary?: { palettes?: string[]; ranges?: Record<string, [number, number]>; choices?: Record<string, string[]> };
-  /** "after": the aftermath, kept for the breakdowns. */
+  /**
+   * "after": the aftermath, kept for the breakdowns. "arc": a build plan whose drop is its own reveal (a fall that
+   * ends in a cavern, a maze left from above): held through the drop, no cut.
+   */
   role?: string;
 }
 import { paletteOptions } from "@/scenes/palettes";
@@ -328,8 +331,9 @@ export class Director {
     }
 
     // ---- Drop: impact, then a burst of cuts (or the night's title, when it is due: only on a drop of the music,
-    // never on one by hand)
-    if (f.drop && !f.dropManual && auto && ctx.title) {
+    // never on one by hand). A plan whose drop is its own reveal stays on: the title waits for the next cut.
+    const arc = this.roleOf(ctx, ctx.currentId) === "arc";
+    if (f.drop && !f.dropManual && auto && ctx.title && !arc) {
       const often = ctx.title.frequency === "often" && this.phrasesSinceTitle >= 4 && Math.random() < 1 / 3;
       if (this.titleDue(ctx) || (often && ctx.currentId !== ctx.title.key)) {
         this.plannedDrop = null;
@@ -351,6 +355,13 @@ export class Director {
       this.plannedBuild = null;
       this.plannedNext = null;
       this.lastSection = f.section;
+      if (arc) {
+        // the plan reveals itself: no cut, its drop is the impact (held and counted as a cut on the drop)
+        this.plannedDrop = null;
+        this.lastCutBeat = this.beats;
+        this.lastCutTime = this.now;
+        return null;
+      }
       const id = this.plannedDrop && this.plannedDrop !== ctx.currentId ? this.plannedDrop : this.cast(ctx, "drop");
       this.plannedDrop = null;
       const type = pickOne(pacing.dropTransitions);
@@ -375,9 +386,17 @@ export class Director {
         return this.cut(ctx, this.cast(ctx, "breakdown"), { type: "fade", duration: pacing.breakdownBeats * beat });
       }
       if (f.section === "build") {
-        // Get the drop scene ready while the tension rises; a build plan comes on the next downbeat
-        this.plannedDrop = this.cast(ctx, "drop");
+        // The build's plan first (the one on screen if it is one): a build plan comes on the next downbeat, and the
+        // drop scene gets ready while the tension rises, unless the build's plan reveals itself on the drop
+        const kept = this.isBuildRole(this.roleOf(ctx, ctx.currentId));
+        if (!kept && !(this.plannedBuild && this.plannedBuild !== ctx.currentId)) this.plannedBuild = this.cast(ctx, "build");
+        const next = kept ? ctx.currentId : this.plannedBuild;
         this.buildPending = true;
+        if (this.roleOf(ctx, next) === "arc") {
+          this.plannedDrop = null;
+          return kept || !next ? null : { preload: next };
+        }
+        this.plannedDrop = this.cast(ctx, "drop");
         return { preload: this.plannedDrop };
       }
     }
@@ -402,17 +421,17 @@ export class Director {
     if (f.section === "build") {
       if (!this.buildPending || !f.downbeat) return null;
       this.buildPending = false;
-      if (this.roleOf(ctx, ctx.currentId) === "build") return null;
+      if (this.isBuildRole(this.roleOf(ctx, ctx.currentId))) return null;
       const id = this.plannedBuild && this.plannedBuild !== ctx.currentId ? this.plannedBuild : this.cast(ctx, "build");
       this.plannedBuild = null;
-      if (this.roleOf(ctx, id) !== "build") return null;
+      if (!this.isBuildRole(this.roleOf(ctx, id))) return null;
       const type = pickOne(pacing.calmTransitions);
       return this.cut(ctx, id, onHit(type, Math.min(4, pacing.calmBeats) * beat));
     }
     // ---- The breakdown: get a build plan ready
     if (f.section === "breakdown" && !this.plannedBuild && f.downbeat) {
       const id = this.cast(ctx, "build");
-      if (this.roleOf(ctx, id) === "build") {
+      if (this.isBuildRole(this.roleOf(ctx, id))) {
         this.plannedBuild = id;
         return { preload: id };
       }
@@ -516,6 +535,11 @@ export class Director {
     return ctx.plans.find((p) => p.key === id)?.role;
   }
 
+  /** A plan for the builds: a build plan, or one that carries on through the drop. */
+  private isBuildRole(role: string | undefined) {
+    return role === "build" || role === "arc";
+  }
+
   /**
    * The plan for a moment of the track, by the worlds' roles: calm plans in the grooves (now and then a build plan),
    * a build plan through the builds, a drop plan on the drop (then drop or build plans), the aftermath in the
@@ -523,8 +547,8 @@ export class Director {
    */
   private cast(ctx: DirectorContext, kind: Casting): string {
     const roles: Record<Casting, string[][]> = {
-      calm: Math.random() < 0.25 ? [["calm", "build"]] : [["calm"], ["build"]],
-      build: [["build"]],
+      calm: Math.random() < 0.25 ? [["calm", "build", "arc"]] : [["calm"], ["build", "arc"]],
+      build: [["build", "arc"]],
       drop: [["drop"]],
       dropAfter: [["drop"], ["build"]],
       breakdown: [["after"], ["calm"]],
