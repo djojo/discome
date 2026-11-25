@@ -107,6 +107,8 @@ export interface DirectorContext {
   palettes?: string[];
   /** Look-specific transition sets. */
   transitions?: { calm?: TransitionId[]; drop?: TransitionId[] };
+  /** The Classique world: its sliders may vary freely (elsewhere only within the plans' declared ranges). */
+  freeVary?: boolean;
   params: Record<string, ParamValues>;
   /** Worlds take turns: at breakdowns, or every N phrases. */
   worldCycle?: { enabled: boolean; rule: "breakdown" | "phrases4" | "phrases8" };
@@ -497,7 +499,7 @@ export class Director {
     this.lastCutTime = this.now;
     this.remember(id);
     const plan = ctx.plans.find((p) => p.key === id);
-    const params = ctx.vary && plan ? mutate(plan, ctx.params[id], ctx.palettes) : undefined;
+    const params = ctx.vary && plan ? mutate(plan, ctx.params[id], ctx.palettes, !!ctx.freeVary) : undefined;
     return { sceneId: id, transition, params };
   }
 
@@ -576,10 +578,11 @@ export class Director {
 
 /**
  * A variation that stays in the plan's style: a palette among the plan's (or the world's), the plan's choices
- * (another head…), and a couple of sliders moved within the plan's ranges, or close to the plan's own value
- * (it never drifts away over time).
+ * (another head…), and a couple of sliders moved within the ranges the plan declares. Only the Classique world's
+ * sliders move freely, close to the plan's own value (they never drift away over time): the art-directed plans
+ * were tuned, a random slider would take them off their style.
  */
-function mutate(plan: DirectorPlan, current: ParamValues | undefined, palettes?: string[]): ParamValues {
+function mutate(plan: DirectorPlan, current: ParamValues | undefined, palettes: string[] | undefined, free: boolean): ParamValues {
   const out: ParamValues = { ...(current ?? plan.defaults) };
   const def = plan.scene;
   const allowed = plan.vary?.palettes ?? (palettes?.length ? palettes : paletteOptions.map((o) => o.value));
@@ -592,7 +595,10 @@ function mutate(plan: DirectorPlan, current: ParamValues | undefined, palettes?:
     const others = options.filter((v) => v !== out[key]);
     if (others.length) out[key] = pickOne(others);
   }
-  const ranges = def.params.filter((p) => p.type === "range" && p.key !== "speed" && p.key !== "dynamics");
+  const declared = plan.vary?.ranges ?? {};
+  const ranges = def.params.filter(
+    (p) => p.type === "range" && p.key !== "speed" && p.key !== "dynamics" && (free || p.key in declared),
+  );
   for (let n = 0; n < 2 && ranges.length; n++) {
     const p = pickOne(ranges);
     if (p.type !== "range") continue;

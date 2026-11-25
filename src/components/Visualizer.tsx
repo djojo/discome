@@ -215,7 +215,7 @@ export default function Visualizer() {
     const fxShown: FxSettings = { ...NEUTRAL_FX, ...settingsRef.current.fx };
     // Director pool derived from the active look, rebuilt only when the look changes
     let lookKey = "";
-    let lookCtx: Pick<DirectorContext, "plans" | "palettes" | "transitions"> = { plans: [] };
+    let lookCtx: Pick<DirectorContext, "plans" | "palettes" | "transitions" | "freeVary"> = { plans: [] };
     // The night's title: the plan of the world on screen, and the next world's typeface (drawn ahead of time)
     let titleHere: { key: string; font: unknown; world: string } | null = null;
     let nextTitle: { font: unknown; world: string } | null = null;
@@ -235,6 +235,7 @@ export default function Visualizer() {
           plans: directorPlans(look),
           palettes: look.palettes,
           transitions: look.transitions,
+          freeVary: !!look.classic,
         };
         // the world's heads load now, so none pops in late when its plan comes up
         preloadHeads(

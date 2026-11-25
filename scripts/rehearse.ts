@@ -159,6 +159,8 @@ for (const look of LOOKS) {
   let camTo = "";
   let camBad = 0;
   let buildMoves = 0;
+  // variations: outside Classique, only the palette, the declared choices and the declared ranges may move
+  let offStyle = 0;
   const total = TRACK.reduce((s, x) => s + x.bars, 0) * BAR;
   for (let t = 0; t < total; t += DT) {
     frameAt(t, prevBeat, f);
@@ -174,9 +176,15 @@ for (const look of LOOKS) {
       plans,
       palettes: look.palettes,
       transitions: look.transitions,
+      freeVary: !!look.classic,
       params: {},
     };
     const d = director.update(f, ctx);
+    if (d?.sceneId && d.params && !look.classic) {
+      const plan = plans.find((p) => p.key === d.sceneId)!;
+      const free = new Set(["palette", ...Object.keys(plan.vary?.choices ?? {}), ...Object.keys(plan.vary?.ranges ?? {})]);
+      for (const [k, v] of Object.entries(d.params)) if (!free.has(k) && v !== plan.defaults[k]) offStyle++;
+    }
     if (d?.sceneId && d.transition) {
       cuts.push({
         t,
@@ -250,6 +258,7 @@ for (const look of LOOKS) {
   // never the same plan twice in a row
   const repeats = cuts.filter((c) => c.from === c.to);
   if (repeats.length) problems.push(`${repeats.length} plan(s) répété(s)`);
+  if (offStyle) problems.push(`${offStyle} réglage(s) varié(s) hors du style du plan`);
   if (camBad) problems.push(`${camBad} écart(s) entre les coupes de caméra et la caméra de la scène`);
   if (buildMoves) problems.push(`la caméra change de cadrage pendant une montée (${buildMoves} images)`);
   // camera cuts on the beat too
