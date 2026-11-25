@@ -118,6 +118,7 @@ npm run dev   # http://localhost:3000
 
 **Classiques**, recolorées par les palettes des mondes : Halo, Kaléidoscope, Orbe, Tunnel, Nébuleuse, Spectro-terrain, Échos, Danseuse, Androïde, Corps de particules.
 - **Androïde** : un visage de panneaux de verre noir, aux coutures de néon qui suivent chacune la bande du spectre de leur hauteur, deux fentes de lumière pour yeux, dans un studio sombre de tubes néon qui se reflètent sur le verre ; au kick, des circuits s'allument sous le verre depuis les coutures, la montée les étend à tout le visage ; au drop, les panneaux se déverrouillent, s'écartent sur un cœur de lumière, puis se referment.
+- **Corps de particules** : des particules fines réparties sur toute la surface du corps, le côté proche plus lumineux ; les formes abstraites surtout dans les breaks.
 
 ## Raccourcis
 
