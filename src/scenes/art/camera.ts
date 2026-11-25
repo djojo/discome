@@ -4,7 +4,9 @@ import type { AudioFrame } from "@/lib/audio/AudioEngine";
 /**
  * Framings ("cadrages") for scenes built around a subject: instead of one camera move forever,
  * a new framing is drawn on every phrase and the camera glides to it over a couple of bars,
- * orbiting around the subject. The subject stays still; the camera tells the story.
+ * orbiting around the subject. The subject stays still; the camera tells the story, with the music:
+ * the director's camera cuts (AudioFrame.camCut) switch framings on the beat (on the drop, a wide one
+ * or the one the scene asks for), a build pushes slowly in instead, a breakdown glides slowly.
  */
 export interface Framing {
   /** Azimuth around the target, radians (0 = in front, on +z; positive toward +x). */
@@ -70,28 +72,42 @@ export class Cadrage {
   update(f: AudioFrame, dt: number) {
     const bar = f.bpm > 0 ? (60 / f.bpm) * 4 : 2;
     this.held += dt;
-    // A new framing on every phrase; without a tempo (quiet passages, no clear beat) every ~16 s anyway
-    const phrase = (f.downbeat && f.phraseBar === 0) || this.held > (f.bpm > 0 ? 12 * bar : 16);
+    // A new framing on every phrase, glided; without a tempo (quiet passages, no clear beat) every ~16 s anyway.
+    // Not through a build (the camera pushes in on its subject) nor a drop (the director's cuts edit it).
+    const still = f.section === "build" || f.section === "drop";
+    const phrase = !still && ((f.downbeat && f.phraseBar === 0) || this.held > (f.bpm > 0 ? 12 * bar : 16));
+    const cut = f.camCut;
     if (this.fresh && !this.allow(this.to)) {
       const first = this.draw(null);
       if (first) this.to = this.from = first;
       this.k = 1;
     }
     this.fresh = false;
-    if (this.pending || phrase || !this.allow(this.to)) {
-      if (phrase) this.held = 0;
+    if (this.pending || phrase || cut || !this.allow(this.to)) {
+      if (phrase || cut) this.held = 0;
       // already on a framing of the requested tag: stay there (drawing would exclude it and wander off)
       const stay = !!this.pending && this.to.tag === this.pending && this.allow(this.to);
-      const next = stay ? this.to : (this.draw(this.pending) ?? this.draw(null));
+      // on the drop, a wide framing unless the scene asked for one
+      const next = stay ? this.to : (this.draw(this.pending) ?? (cut && f.drop ? this.widest() : null) ?? this.draw(null));
       this.pending = null;
       if (next && next !== this.to) {
-        this.from = this.current();
-        this.to = next;
-        this.k = 0;
+        if (cut) {
+          // a hard cut, on the beat
+          this.from = this.to = next;
+          this.k = 1;
+        } else {
+          this.from = this.current();
+          this.to = next;
+          this.k = 0;
+        }
       }
     }
-    this.k = Math.min(1, this.k + dt / (bar * this.glideBars));
+    // a breakdown glides slowly
+    const glide = f.section === "breakdown" ? Math.max(this.glideBars, 4) : this.glideBars;
+    this.k = Math.min(1, this.k + dt / (bar * glide));
     const c = this.current();
+    // a build draws the camera slowly in on the subject
+    if (f.section === "build") c.dist *= 1 - 0.22 * f.buildProgress;
     // A slow orbit on top (about ±10°, over a minute), so even a held framing keeps moving
     const t = f.time;
     const az = c.az + 0.13 * Math.sin(t * 0.09 + this.seed) + 0.05 * Math.sin(t * 0.23 + this.seed * 1.7);
@@ -117,6 +133,13 @@ export class Cadrage {
       target: [lerp(a.target[0], b.target[0], e), lerp(a.target[1], b.target[1], e), lerp(a.target[2], b.target[2], e)],
       focal: lerp(a.focal, b.focal, e),
     };
+  }
+
+  /** The widest of the allowed framings (most of the subject in view), now and then another one. */
+  private widest(): Framing | null {
+    const pool = this.framings.filter((fr) => fr !== this.to && this.allow(fr) && !fr.tag);
+    if (!pool.length || Math.random() < 0.35) return null;
+    return pool.reduce((a, b) => (b.dist / b.focal > a.dist / a.focal ? b : a));
   }
 
   private draw(tag: string | null): Framing | null {

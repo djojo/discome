@@ -417,6 +417,7 @@ export default function Visualizer() {
       compositor.signatureShown = compositor.sceneId !== titleHere?.key;
       frame.safeFlash = s.safeFlash;
       frame.shot = compositor.sceneId ? sceneOf(s, compositor.sceneId).id : null;
+      frame.camCut = director.camCut;
       compositor.render(
         frame,
         (id) => params[id] ?? defaultParams(sceneOf(s, id)),

@@ -167,6 +167,8 @@ export class Director {
   private plannedBuild: string | null = null;
   /** 1 on a track's first drop, 2 on the next ones: edited tighter (camera montage, accents). */
   dropLevel = 1;
+  /** The scene cameras cut to another framing on this frame (read by the Cadrage through AudioFrame.camCut). */
+  camCut = false;
   private phrasesInWorld = 0;
   private bgPhrases = 0;
   // The night's title: once per visit to a world (or every other world), and again after a long stay in one
@@ -230,9 +232,34 @@ export class Director {
   update(f: AudioFrame, ctx: DirectorContext): Decision | null {
     this.section = f.section;
     const dt = Math.max(0, Math.min(0.1, f.time - this.now));
+    if (f.tick) this.beats++;
+    if (f.drop) {
+      // a second drop of the same track (within 96 bars of the previous one) is edited tighter
+      this.dropNo = this.beats - this.lastDropBeat < 96 * 4 ? this.dropNo + 1 : 1;
+      this.dropLevel = Math.min(2, this.dropNo);
+      this.lastDropBeat = this.beats;
+    }
     const fg = this.decide(f, ctx);
+    this.camCut = this.cameraCut(f, ctx);
     const bg = this.decideBackground(f, ctx, dt);
     return fg || bg ? { ...(fg ?? {}), ...(bg ?? {}) } : null;
+  }
+
+  /**
+   * The montage inside the scene: hard cuts of its camera on the beat. On the drop, then all through it (every 4 bars
+   * in Chill, 2 in Club, 1 in Rave; twice as often on a second drop); in a groove, one phrase in three starts on a
+   * cut instead of a glide. The builds and the breakdowns keep their slow camera.
+   */
+  private cameraCut(f: AudioFrame, ctx: DirectorContext): boolean {
+    if (!f.active || ctx.mode === "manual") return false;
+    if (f.drop) return true;
+    if (!f.tick) return false;
+    if (f.section === "drop") {
+      const bars = (ctx.mode === "chill" ? 4 : ctx.mode === "rave" ? 1 : 2) / (this.dropLevel >= 2 ? 2 : 1);
+      const since = this.beats - this.lastDropBeat;
+      return since > 0 && since % Math.max(1, Math.round(bars * 4)) === 0;
+    }
+    return f.section === "calm" && f.downbeat && f.phraseBar === 0 && Math.random() < 1 / 3;
   }
 
   /** The background changes slowly: every 3 phrases, or with a short fade on the drop. */
@@ -267,7 +294,6 @@ export class Director {
 
   private decide(f: AudioFrame, ctx: DirectorContext): Decision | null {
     this.now = f.time;
-    if (f.tick) this.beats++;
     const target = f.section === "build" ? f.buildProgress : 0;
     this.tension += (target - this.tension) * (target > this.tension ? 0.05 : 0.15);
 
@@ -304,10 +330,6 @@ export class Director {
       }
     }
     if (f.drop && (auto || f.dropManual)) {
-      // a second drop of the same track is edited tighter
-      this.dropNo = this.beats - this.lastDropBeat < 96 * 4 ? this.dropNo + 1 : 1;
-      this.dropLevel = Math.min(2, this.dropNo);
-      this.lastDropBeat = this.beats;
       // the drop plan is held while its story plays out; only the Rave cuts from scene to scene after that
       const hold = dropHoldBars(ctx.mode === "manual" ? "club" : ctx.mode);
       this.holdUntil = this.beats + hold * 4;

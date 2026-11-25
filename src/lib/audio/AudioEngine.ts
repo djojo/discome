@@ -65,6 +65,8 @@ export interface AudioFrame extends MusicState {
   safeFlash: boolean;
   /** Scene id of the plan on screen (set by the visualizer): a layer can follow it. */
   shot: string | null;
+  /** The director's camera cut (set by the visualizer): scenes with framings cut to another one on this frame. */
+  camCut: boolean;
 }
 
 export const BAND_COUNT = 64;
@@ -141,6 +143,7 @@ export class AudioEngine {
       tint: null,
       safeFlash: false,
       shot: null,
+      camCut: false,
       ...emptyMusicState(),
     };
   }

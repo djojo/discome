@@ -9,6 +9,7 @@
 import { Director, dropHoldBars, type DirectorContext, type DirectorMode } from "@/engine/Director";
 import type { AudioFrame } from "@/lib/audio/AudioEngine";
 import { directorPlans, LOOKS } from "@/looks";
+import { Cadrage, type Framing } from "@/scenes/art/camera";
 
 type Sec = AudioFrame["section"];
 const TRACK: { section: Sec; bars: number; gap?: boolean }[] = [
@@ -110,6 +111,7 @@ function emptyFrame(): AudioFrame {
     tint: null,
     safeFlash: false,
     shot: null,
+    camCut: false,
     bpm: 0,
     beatPhase: 0,
     beatInBar: 0,
@@ -140,9 +142,15 @@ for (const look of LOOKS) {
   let prevBeat = -1;
   let drops = 0;
   const cuts: Cut[] = [];
-  const camCuts: { bar: number; beat: number; dropIndex: number }[] = [];
+  const camCuts: { bar: number; beat: number; phase: number; dropIndex: number; t: number }[] = [];
   // per build: the plans seen on screen from its second bar to the drop
   const buildShots: { dropIndex: number; shots: Set<string> }[] = [];
+  // a scene's camera, following the director's cuts: does it cut exactly on them, hold through the builds?
+  const FR: Framing[] = [0, 1, 2, 3, 4].map((i) => ({ az: i, el: 0.1 * i, dist: 3 + i, target: [0, 0, 0], focal: 2 }));
+  const cam = new Cadrage(FR, 2);
+  let camTo = "";
+  let camBad = 0;
+  let buildMoves = 0;
   const total = TRACK.reduce((s, x) => s + x.bars, 0) * BAR;
   for (let t = 0; t < total; t += DT) {
     frameAt(t, prevBeat, f);
@@ -177,7 +185,17 @@ for (const look of LOOKS) {
       current = d.sceneId;
       transEnd = t + d.transition.duration;
     }
-    if ((f as unknown as { camCut?: boolean }).camCut) camCuts.push({ bar: f.bar, beat: f.beatInBar, dropIndex: drops });
+    f.camCut = director.camCut;
+    const before = cam.pos.clone();
+    cam.update(f, DT);
+    const to = `${cam.pos.x.toFixed(2)},${cam.pos.z.toFixed(2)}`;
+    // a cut jumps; between cuts the camera only drifts (its slow orbit)
+    const jump = cam.pos.distanceTo(before) > 0.3;
+    if (jump && !f.camCut && f.section === "drop") camBad++;
+    if (f.camCut && !jump && t > 1) camBad++;
+    if (f.section === "build" && to !== camTo && cam.pos.distanceTo(before) > 0.05) buildMoves++;
+    camTo = to;
+    if (director.camCut) camCuts.push({ bar: f.bar, beat: f.beatInBar, phase: f.beatPhase, dropIndex: drops, t });
     if (f.section === "build" && f.sectionTime > BAR) {
       let b = buildShots.find((x) => x.dropIndex === drops);
       if (!b) buildShots.push((b = { dropIndex: drops, shots: new Set() }));
@@ -219,10 +237,20 @@ for (const look of LOOKS) {
   // never the same plan twice in a row
   const repeats = cuts.filter((c) => c.from === c.to);
   if (repeats.length) problems.push(`${repeats.length} plan(s) répété(s)`);
-  // the second drop edited tighter than the first (more camera cuts in its held bars)
-  const cam1 = camCuts.filter((c) => c.dropIndex === 1).length;
-  const cam2 = camCuts.filter((c) => c.dropIndex === 2).length;
-  if (camCuts.length && cam2 <= cam1) problems.push(`second drop pas plus serré (${cam1} → ${cam2} coupes de caméra)`);
+  if (camBad) problems.push(`${camBad} écart(s) entre les coupes de caméra et la caméra de la scène`);
+  if (buildMoves) problems.push(`la caméra change de cadrage pendant une montée (${buildMoves} images)`);
+  // camera cuts on the beat too
+  const camOff = camCuts.filter((c) => c.phase > DT / BEAT + 1e-6);
+  if (camOff.length) problems.push(`${camOff.length} coupe(s) de caméra hors du temps`);
+  // the second drop edited tighter than the first (more camera cuts while its plan is held)
+  const inHold = (k: number) => {
+    const d = cuts.find((c) => c.dropIndex === k && c.section === "drop");
+    return d ? camCuts.filter((c) => c.dropIndex === k && c.t >= d.t && c.t < d.t + hold * BAR).length : 0;
+  };
+  const cam1 = inHold(1);
+  const cam2 = inHold(2);
+  if (mode !== "manual" && cam2 <= cam1) problems.push(`second drop pas plus serré (${cam1} → ${cam2} coupes de caméra pendant la tenue)`);
+  if (verbose) console.log(`  coupes de caméra pendant la tenue : drop 1 ${cam1}, drop 2 ${cam2}`);
 
   if (problems.length) {
     failures += problems.length;
