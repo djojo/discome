@@ -1,5 +1,6 @@
 import { defineShaderScene } from "../shader/defineShaderScene";
 import { paletteParam } from "../palettes";
+import { ABYSS_GLSL } from "./abyss.glsl";
 import { ART_LIB } from "./lib.glsl";
 import { CAMERA_GLSL, type Framing } from "./camera";
 
@@ -54,6 +55,7 @@ uniform float uCanal;    // the kick, along the radial canals
 uniform float uSwarm;    // seconds since the drop
 uniform float uGlow;     // the bass: the inner light
 ${ART_LIB}
+${ABYSS_GLSL}
 ${CAMERA_GLSL}
 float gPart;             // 0 bell, 1 arms, 2 filaments, 3 small jellies
 float gFil;              // closest approach to a filament (for their glow)
@@ -102,7 +104,9 @@ float arms(vec3 p) {
   return max(rib, max(q.y + .1, -q.y - 2.4));
 }
 
-/** The swarm of the drop: small jellies rising all around. */
+float gSwFil = 1e3;      // distance to the small jellies' filaments (they only glow)
+
+/** The swarm of the drop: small jellies rising all around, each trailing a few filaments. */
 float swarm(vec3 p) {
   if (uSwarm > 8.) return 1e3;
   vec3 q = p - vec3(0., uSwarm * 1.1 - 4., 0.);
@@ -114,6 +118,14 @@ float swarm(vec3 p) {
   if (h > .5) return C * .4;
   l += (vec3(hash13(id + 1.), hash13(id + 2.), hash13(id + 3.)) - .5) * .5;
   float s = .22 + .1 * h;
+  // the filaments under the bell, waving
+  for (int k = 0; k < 3; k++) {
+    float fk = float(k);
+    vec2 o = vec2(cos(fk * 2.1 + h * 9.), sin(fk * 2.1 + h * 9.)) * .45 * s;
+    vec3 a = vec3(o.x, -.02, o.y);
+    vec3 b = a + vec3(.06 * sin(uTime * 1.3 + fk + h * 20.), -1.8 * s, .06 * cos(uTime * 1.1 + fk));
+    gSwFil = min(gSwFil, sdCapsule(l, a, b, .004));
+  }
   vec3 r = vec3(1., .7, 1.) * s;
   float e = abs(sdEllipsoid(l, r)) - .03 * s;
   return min(max(e, -l.y - .02), C * .4);
@@ -163,10 +175,11 @@ void main() {
   vec2 uv = (fc - .5 * uRes) / uRes.y;
   vec3 ro = uCamPos;
   vec3 rd = lookAt(ro, uCamTarget) * normalize(vec3(uv, uFocal));
-  vec3 col = uBase * .6 + mix(uAccent, uPal1, .5) * .06 * exp(-1.6 * length(uv - vec2(0., .1)));
-  col += snow(uv);
+  vec3 col = deepWater(rd, uv, 0.) + mix(uAccent, uPal1, .5) * .06 * exp(-1.6 * length(uv - vec2(0., .1)));
+  col += snow(uv) * (1. + 2. * uHat * .3 + uDrop);
   float solid = 0.;
   gFil = 1e3;
+  gSwFil = 1e3;
   float t = .1, tt = -1.;
   for (int i = 0; i < 110; i++) {
     float d = map(ro + rd * t);
@@ -176,6 +189,8 @@ void main() {
   }
   // the filaments glow in the water, even where the ray only passes near them
   col += mix(uAccent, uInk, .4) * exp(-gFil * 25.) * .5 * (1. + uGlow);
+  // and so do the small jellies' filaments
+  col += mix(uAccent, uInk, .5) * exp(-gSwFil * 70.) * .5;
   if (tt > 0.) {
     vec3 p = ro + rd * tt;
     map(p);
@@ -183,7 +198,14 @@ void main() {
     vec3 n = calcN(p);
     float fre = pow(1. - abs(dot(n, -rd)), 2.);
     vec3 film = .5 + .5 * cos(6.2831 * (fre * 1.3 + vec3(0., .33, .67) + p.y * .3));
-    if (part < .5 || part > 2.5) {
+    if (part > 2.5) {
+      // a small jelly: a translucent bell, its rim glowing, a faint light inside; the water shows through
+      vec3 c = mix(uPal1, uInk, .5) * 1.3 * pow(fre, 1.5) + film * fre * .25 + uAccent * (.45 + .6 * uGlow) * (1. - fre) * .8;
+      // their radial canals, faint
+      float a = atan(p.z - floor(p.z / 1.7 + .5) * 1.7, p.x - floor(p.x / 1.7 + .5) * 1.7);
+      c += mix(uAccent, vec3(1., .8, .8), .5) * (1. - smoothstep(.0, .1, abs(sin(a * 4.)))) * .25 * (1. - fre);
+      col = mix(col, c, .55) + mix(uInk, uAccent, .3) * pow(fre, 3.) * .5;
+    } else if (part < .5) {
       // the bell: almost invisible glass, bright at its edges, lit from within
       vec3 c = mix(uPal1, uInk, .5) * (.06 + .85 * fre) + film * fre * .3;
       c += uAccent * (.15 + .6 * uGlow) * (1. - fre) * .6;
@@ -204,7 +226,7 @@ void main() {
       solid = .8;
     }
   }
-  gl_FragColor = vec4(hdrOut(col * 1.1), solid);
+  gl_FragColor = vec4(hdrOut(col * 1.1), 1.);
 }
 `,
 });
