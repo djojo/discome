@@ -83,6 +83,9 @@ const PACING: Record<Exclude<DirectorMode, "manual">, Pacing> = {
   },
 };
 
+/** Bars a drop plan is held after the drop, so its own story plays out (its camera cuts carry the rhythm). */
+export const dropHoldBars = (mode: DirectorMode) => (mode === "chill" ? 8 : mode === "rave" ? 2 : 4);
+
 /** Transition length in beats for the short, burst-style transitions. */
 const SNAP_BEATS: Partial<Record<TransitionId, number>> = { cut: 0, glitch: 0.5, flash: 0.75, punch: 1 };
 
@@ -130,6 +133,9 @@ export interface Decision {
 
 const pickOne = <T>(xs: readonly T[]): T => xs[Math.floor(Math.random() * xs.length)];
 
+/** What a cut is for: a moment of the track (see Director.cast). */
+type Casting = "calm" | "build" | "drop" | "dropAfter" | "breakdown";
+
 /**
  * Automatic VJ: decides when to cut and to what, from the musical structure.
  * Calm → cuts on phrase boundaries; breakdown → slow fade to a calm scene;
@@ -151,6 +157,16 @@ export class Director {
   private plannedNext: string | null = null;
   private lastCutTime = 0;
   private now = 0;
+  /** No scene cut before this beat: the drop plan's story plays out (its camera montage carries the rhythm). */
+  private holdUntil = -1;
+  /** Drops in the current track (a drop within 96 bars of the previous one belongs to the same track). */
+  private dropNo = 0;
+  private lastDropBeat = -1e9;
+  /** A build began: cast a build plan on its next downbeat. */
+  private buildPending = false;
+  private plannedBuild: string | null = null;
+  /** 1 on a track's first drop, 2 on the next ones: edited tighter (camera montage, accents). */
+  dropLevel = 1;
   private phrasesInWorld = 0;
   private bgPhrases = 0;
   // The night's title: once per visit to a world (or every other world), and again after a long stay in one
@@ -168,8 +184,12 @@ export class Director {
     this.phrasesInWorld = 0;
     this.bgPhrases = 0;
     this.burstUntil = -1;
+    this.holdUntil = -1;
     this.plannedNext = null;
     this.plannedDrop = null;
+    this.plannedBuild = null;
+    this.buildPending = false;
+    this.dropNo = 0;
     this.worldsSinceTitle++;
     this.titleShownHere = false;
     this.noteManualCut(id);
@@ -284,10 +304,21 @@ export class Director {
       }
     }
     if (f.drop && (auto || f.dropManual)) {
+      // a second drop of the same track is edited tighter
+      this.dropNo = this.beats - this.lastDropBeat < 96 * 4 ? this.dropNo + 1 : 1;
+      this.dropLevel = Math.min(2, this.dropNo);
+      this.lastDropBeat = this.beats;
+      // the drop plan is held while its story plays out; only the Rave cuts from scene to scene after that
+      const hold = dropHoldBars(ctx.mode === "manual" ? "club" : ctx.mode);
+      this.holdUntil = this.beats + hold * 4;
       this.burstPacing = pacing;
-      this.burstStart = this.beats;
-      this.burstUntil = auto ? this.beats + pacing.burstBars * 4 : -1;
-      const id = this.plannedDrop && this.plannedDrop !== ctx.currentId ? this.plannedDrop : this.pick(ctx, ["intense"]);
+      this.burstStart = this.beats + hold * 4;
+      this.burstUntil = auto && ctx.mode === "rave" ? this.beats + pacing.burstBars * 4 : -1;
+      this.buildPending = false;
+      this.plannedBuild = null;
+      this.plannedNext = null;
+      this.lastSection = f.section;
+      const id = this.plannedDrop && this.plannedDrop !== ctx.currentId ? this.plannedDrop : this.cast(ctx, "drop");
       this.plannedDrop = null;
       const type = pickOne(pacing.dropTransitions);
       return this.cut(ctx, id, { type, duration: (SNAP_BEATS[type] ?? 1) * beat });
@@ -296,38 +327,61 @@ export class Director {
     if (f.downbeat && f.phraseBar === 0) this.phrasesInWorld++;
     const cycle = ctx.worldCycle?.enabled ? ctx.worldCycle.rule : null;
 
-    // ---- Section changes
+    // ---- Section changes (a plan picked ahead for the previous section is no longer the right one)
     if (f.section !== this.lastSection) {
       this.lastSection = f.section;
+      this.plannedNext = null;
       // A breakdown is the natural moment to change worlds (not too often though)
       if (f.section === "breakdown" && cycle === "breakdown" && this.phrasesInWorld >= 2) {
         return { changeWorld: true };
       }
       if (f.section === "breakdown") {
         this.burstUntil = -1;
-        return this.cut(ctx, this.pick(ctx, ["calm"]), { type: "fade", duration: pacing.breakdownBeats * beat });
+        this.holdUntil = -1;
+        return this.cut(ctx, this.cast(ctx, "breakdown"), { type: "fade", duration: pacing.breakdownBeats * beat });
       }
       if (f.section === "build") {
-        // Get the drop scene ready while the tension rises.
-        this.plannedDrop = this.pick(ctx, ["intense"]);
+        // Get the drop scene ready while the tension rises; a build plan comes on the next downbeat
+        this.plannedDrop = this.cast(ctx, "drop");
+        this.buildPending = true;
         return { preload: this.plannedDrop };
       }
     }
     if (ctx.inTransition) return null;
 
-    // ---- Burst after a drop
+    // ---- The drop plan is held while its story plays out
+    if (this.beats < this.holdUntil) return null;
+
+    // ---- Rave: a burst of cuts after the hold
     if (this.beats < this.burstUntil) {
       if (!f.tick) return null;
       const p = this.burstPacing;
       const every = p.burstFrenzy && this.beats - this.burstStart < 4 ? 1 : p.burstEvery;
       if (this.beats - this.lastCutBeat >= every) {
         const type = pickOne(p.burstTransitions);
-        return this.cut(ctx, this.pick(ctx, ["intense", "medium"]), { type, duration: (SNAP_BEATS[type] ?? 0.5) * beat });
+        return this.cut(ctx, this.cast(ctx, "dropAfter"), { type, duration: (SNAP_BEATS[type] ?? 0.5) * beat });
       }
       return null;
     }
 
-    if (f.section === "build") return null; // hold the shot, let the tension do the work
+    // ---- The build: a build plan on its first downbeat (unless one is on screen), then hold it, the tension rises
+    if (f.section === "build") {
+      if (!this.buildPending || !f.downbeat) return null;
+      this.buildPending = false;
+      if (this.roleOf(ctx, ctx.currentId) === "build") return null;
+      const id = this.plannedBuild && this.plannedBuild !== ctx.currentId ? this.plannedBuild : this.cast(ctx, "build");
+      this.plannedBuild = null;
+      if (this.roleOf(ctx, id) !== "build") return null;
+      return this.cut(ctx, id, { type: pickOne(pacing.calmTransitions), duration: Math.min(4, pacing.calmBeats) * beat });
+    }
+    // ---- The breakdown: get a build plan ready
+    if (f.section === "breakdown" && !this.plannedBuild && f.downbeat) {
+      const id = this.cast(ctx, "build");
+      if (this.roleOf(ctx, id) === "build") {
+        this.plannedBuild = id;
+        return { preload: id };
+      }
+    }
 
     // ---- World rotation on phrase boundaries
     if (cycle && f.downbeat && f.phraseBar === 0) {
@@ -340,9 +394,10 @@ export class Director {
       if (!f.downbeat) return null;
       const bars = (this.beats - this.lastCutBeat) / 4;
       const inDrop = f.section === "drop";
-      const energies: Energy[] = f.section === "breakdown" ? ["calm"] : inDrop ? ["intense", "medium"] : ["calm", "medium"];
+      const kind: Casting = f.section === "breakdown" ? "breakdown" : inDrop ? "dropAfter" : "calm";
       const every = inDrop ? pacing.dropBars : pacing.calmBars;
-      const aligned = inDrop ? true : f.phraseBar % 4 === 0;
+      // whole phrases in Chill, half phrases otherwise
+      const aligned = inDrop ? true : f.phraseBar % (ctx.mode === "chill" ? 8 : 4) === 0;
       if (bars >= every && aligned) {
         // No drop came to show the title: the next regular cut does, once the world has settled
         if (ctx.title && this.titleDue(ctx) && this.phrasesInWorld >= 4 && !inDrop) {
@@ -351,7 +406,7 @@ export class Director {
           this.noteTitle();
           return d;
         }
-        const id = this.plannedNext && this.plannedNext !== ctx.currentId ? this.plannedNext : this.pick(ctx, energies);
+        const id = this.plannedNext && this.plannedNext !== ctx.currentId ? this.plannedNext : this.cast(ctx, kind);
         this.plannedNext = null;
         if (inDrop) {
           const type = pickOne(pacing.burstTransitions);
@@ -360,7 +415,7 @@ export class Director {
         return this.cut(ctx, id, { type: pickOne(pacing.calmTransitions), duration: pacing.calmBeats * beat });
       }
       if (bars >= every - 2 && !this.plannedNext) {
-        this.plannedNext = this.pick(ctx, energies);
+        this.plannedNext = this.cast(ctx, kind);
         return { preload: this.plannedNext };
       }
       return null;
@@ -368,7 +423,7 @@ export class Director {
 
     // ---- No tempo yet: fall back to time
     if (f.time - this.lastCutTime > pacing.calmBars * 2 && f.beat) {
-      return this.cut(ctx, this.pick(ctx, ["calm", "medium"]), { type: pickOne(pacing.calmTransitions), duration: 2 });
+      return this.cut(ctx, this.cast(ctx, "calm"), { type: pickOne(pacing.calmTransitions), duration: 2 });
     }
     return null;
   }
@@ -398,6 +453,47 @@ export class Director {
   private remember(id: string) {
     this.history.push(id);
     if (this.history.length > 6) this.history.shift();
+  }
+
+  private roleOf(ctx: DirectorContext, id: string | null) {
+    return ctx.plans.find((p) => p.key === id)?.role;
+  }
+
+  /**
+   * The plan for a moment of the track, by the worlds' roles: calm plans in the grooves (now and then a build plan),
+   * a build plan through the builds, a drop plan on the drop (then drop or build plans), the aftermath in the
+   * breakdowns. A world without roles (Classique) casts by energy.
+   */
+  private cast(ctx: DirectorContext, kind: Casting): string {
+    const roles: Record<Casting, string[][]> = {
+      calm: Math.random() < 0.25 ? [["calm", "build"]] : [["calm"], ["build"]],
+      build: [["build"]],
+      drop: [["drop"]],
+      dropAfter: [["drop"], ["build"]],
+      breakdown: [["after"], ["calm"]],
+    };
+    const energies: Record<Casting, Energy[]> = {
+      calm: ["calm", "medium"],
+      build: ["medium"],
+      drop: ["intense"],
+      dropAfter: ["intense", "medium"],
+      breakdown: ["calm"],
+    };
+    if (ctx.plans.some((p) => p.role)) {
+      const free = ctx.plans.filter((p) => p.key !== ctx.currentId && p.scene.id !== ctx.layerId);
+      const recent = this.history.slice(-3);
+      for (const want of roles[kind]) {
+        const fit = free.filter((p) => p.role && want.includes(p.role));
+        const fresh = fit.filter((p) => !recent.includes(p.key));
+        const pool = fresh.length ? fresh : fit;
+        if (pool.length) {
+          let r = Math.random() * pool.reduce((sum, p) => sum + p.weight, 0);
+          for (const p of pool) if ((r -= p.weight) <= 0) return p.key;
+          return pool[pool.length - 1].key;
+        }
+      }
+    }
+    return this.pick(ctx, energies[kind]);
   }
 
   /** Random plan of the wanted energy, avoiding what's on screen and the last few plans. */

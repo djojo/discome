@@ -24,7 +24,7 @@ import {
   type Settings,
 } from "./settings";
 import { NEUTRAL_FX, type FxSettings } from "@/engine/fx";
-import { findPlan, lookBackgrounds, lookPlans, planDefaults, sceneForKey, shownPlans, titlePlan } from "@/looks";
+import { directorPlans, findPlan, lookBackgrounds, lookPlans, planDefaults, sceneForKey, shownPlans, titlePlan } from "@/looks";
 import { brandOn, type Brand } from "@/brand/brand";
 import { BrandSettings } from "./BrandSettings";
 import { setBrandContent, signatureCanvas, titleReady, titleShape } from "@/brand/shape";
@@ -232,15 +232,7 @@ export default function Visualizer() {
         const np = titlePlan(findLook(s, nextWorldId(s)));
         nextTitle = np ? { font: np.shot.params?.titleFont, world: np.look.name } : null;
         lookCtx = {
-          plans: shownPlans(look, false).map((p) => ({
-            key: p.key,
-            scene: p.scene,
-            energy: p.energy,
-            weight: p.shot.weight ?? 1,
-            defaults: planDefaults(p),
-            vary: p.shot.vary,
-            role: p.shot.role,
-          })),
+          plans: directorPlans(look),
           palettes: look.palettes,
           transitions: look.transitions,
         };

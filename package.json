@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "rehearse": "node --experimental-transform-types --no-warnings --import ./scripts/ts-register.mjs scripts/rehearse.ts"
   },
   "dependencies": {
     "next": "16.4.6",

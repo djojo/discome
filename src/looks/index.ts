@@ -1,5 +1,5 @@
 import { NEUTRAL_FX, type FxSettings } from "@/engine/fx";
-import type { DirectorMode } from "@/engine/Director";
+import type { DirectorMode, DirectorPlan } from "@/engine/Director";
 import type { BlendModeId, TransitionId } from "@/engine/transitions";
 import { defaultParams, SCENES, sceneById, type Energy, type ParamValues, type SceneDef } from "@/scenes";
 
@@ -481,6 +481,18 @@ export const shownPlans = (look: Look, withTitle: boolean) => lookPlans(look).fi
 
 /** The world's title plan, if it has one. */
 export const titlePlan = (look: Look) => lookPlans(look).find((p) => p.title) ?? null;
+
+/** A world's plans as the director casts them (the title plan apart: the director handles it on its own). */
+export const directorPlans = (look: Look): DirectorPlan[] =>
+  shownPlans(look, false).map((p) => ({
+    key: p.key,
+    scene: p.scene,
+    energy: p.energy,
+    weight: p.shot.weight ?? 1,
+    defaults: planDefaults(p),
+    vary: p.shot.vary,
+    role: p.shot.role,
+  }));
 
 /** The world plan behind a key "world:plan" (null for a plain scene id or an unknown plan). */
 export function findPlan(key: string, looks: Look[]): Plan | null {
