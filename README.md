@@ -120,6 +120,7 @@ npm run dev   # http://localhost:3000
 - **Androïde** : un visage de panneaux de verre noir, aux coutures de néon qui suivent chacune la bande du spectre de leur hauteur, deux fentes de lumière pour yeux, dans un studio sombre de tubes néon qui se reflètent sur le verre ; au kick, des circuits s'allument sous le verre depuis les coutures, la montée les étend à tout le visage ; au drop, les panneaux se déverrouillent, s'écartent sur un cœur de lumière, puis se referment.
 - **Danseuse** : l'hologramme n'éclaire que la surface avant du corps (les mèches et les plis ne s'additionnent plus en boule blanche).
 - **Corps de particules** : des particules fines réparties sur toute la surface du corps, le côté proche plus lumineux ; les formes abstraites surtout dans les breaks.
+- **Nébuleuse** : la spirale s'ouvre jusqu'aux bords de l'écran (réglage Étendue ; les mondes qui la posent en fond la gardent au centre).
 
 ## Raccourcis
 

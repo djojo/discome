@@ -243,7 +243,7 @@ export const LOOKS: Look[] = [
     ],
     backgrounds: [
       { id: "terrain", weight: 2, params: { palette: "concrete", bloom: 0.3, sun: false } },
-      { id: "nebula", weight: 1, params: { palette: "sodium", trail: 0.9, amount: 0.5 } },
+      { id: "nebula", weight: 1, params: { palette: "sodium", trail: 0.9, amount: 0.5, spread: 0 } },
       { id: "echoes", weight: 1, params: { palette: "concrete", shape: "circle" } },
     ],
     bgOpacity: 0.35,
@@ -317,7 +317,7 @@ export const LOOKS: Look[] = [
       },
     ],
     backgrounds: [
-      { id: "nebula", weight: 2, params: { palette: "cosmos", trail: 0.9, amount: 0.6 } },
+      { id: "nebula", weight: 2, params: { palette: "cosmos", trail: 0.9, amount: 0.6, spread: 0 } },
       { id: "kaleido", weight: 1, params: { palette: "cosmos", segments: 6 } },
       { id: "echoes", weight: 1, params: { palette: "cosmos", shape: "circle" } },
     ],
@@ -406,7 +406,7 @@ export const LOOKS: Look[] = [
       { id: "profile-head", label: "Faucon", weight: 1, role: "calm", params: { palette: "sodium", head: "faucon" } },
     ],
     backgrounds: [
-      { id: "nebula", weight: 2, params: { palette: "fauve", trail: 0.92, amount: 0.5, speed: 0.5 } },
+      { id: "nebula", weight: 2, params: { palette: "fauve", trail: 0.92, amount: 0.5, speed: 0.5, spread: 0 } },
       { id: "echoes", weight: 1, params: { palette: "bone", shape: "circle", zoom: 0.5, spin: 0.2 } },
     ],
     bgOpacity: 0.3,

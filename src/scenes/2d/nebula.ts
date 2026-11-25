@@ -2,23 +2,28 @@ import type { Scene2DDef } from "../types";
 import { getPalette, palCss, paletteParam } from "../palettes";
 import { num } from "../utils";
 
-const MAX = 3000;
+const MAX = 6000;
 const BUCKETS = 32;
 
-/** Particle bursts on every beat, spiralling out of the centre. */
+/**
+ * Particle bursts on every beat, spiralling out of the centre. With "spread", the spiral keeps opening outward until
+ * it fills the screen (a galaxy's arms); without it, it stays a swirl at the centre (as the worlds that lay it as a
+ * background want it).
+ */
 export const nebula: Scene2DDef = {
   id: "nebula",
   name: "Nébuleuse",
   tag: "2D",
   energy: "calm",
   kind: "2d",
-  description: "Explosions de particules sur chaque beat, en spirale.",
+  description: "Explosions de particules sur chaque beat, en spirale qui s'ouvre jusqu'aux bords de l'écran.",
   params: [
     paletteParam("sunset"),
     { type: "range", key: "amount", label: "Quantité", min: 0.2, max: 3, step: 0.1, default: 1 },
     { type: "range", key: "speed", label: "Vitesse", min: 0.2, max: 3, step: 0.1, default: 1 },
     { type: "range", key: "swirl", label: "Tourbillon", min: -3, max: 3, step: 0.1, default: 1.2 },
-    { type: "range", key: "trail", label: "Traînée", min: 0, max: 0.97, step: 0.01, default: 0.82 },
+    { type: "range", key: "trail", label: "Traînée", min: 0, max: 0.97, step: 0.01, default: 0.88 },
+    { type: "range", key: "spread", label: "Étendue", min: 0, max: 1, step: 0.05, default: 1 },
     { type: "range", key: "hueSpeed", label: "Vitesse des couleurs", min: 0, max: 2, step: 0.05, default: 0.4 },
   ],
   create({ canvas, ctx }) {
@@ -56,14 +61,15 @@ export const nebula: Scene2DDef = {
         const amount = num(p.amount, 1);
         const speed = num(p.speed, 1);
         const hueT = f.time * num(p.hueSpeed) * 0.2;
+        const spread = num(p.spread, 0);
 
         ctx.globalCompositeOperation = "source-over";
         ctx.fillStyle = `rgba(0,0,0,${1 - num(p.trail)})`;
         ctx.fillRect(0, 0, W, H);
 
         // Spawn: a steady stream driven by volume, plus a burst on each beat
-        spawnAcc += (f.active ? f.volume * 9 + f.bass * 12 : 0.8) * amount * dt * 60;
-        if (f.beat) spawnAcc += 160 * amount;
+        spawnAcc += (f.active ? f.volume * 9 + f.bass * 12 : 0.8) * amount * (1 + spread) * dt * 60;
+        if (f.beat) spawnAcc += 160 * amount * (1 + 0.6 * spread);
         let spawn = Math.min(Math.floor(spawnAcc), MAX - count);
         spawnAcc -= Math.floor(spawnAcc);
         while (spawn-- > 0) {
@@ -77,7 +83,7 @@ export const nebula: Scene2DDef = {
           vx[i] = Math.cos(a) * sp;
           vy[i] = Math.sin(a) * sp;
           life[i] = 0;
-          ttl[i] = 1.2 + Math.random() * 2.5;
+          ttl[i] = (1.2 + Math.random() * 2.5) * (1 + 1.4 * spread);
           hue[i] = hueT + Math.random() * 0.35 + f.treble * 0.3;
           size[i] = (m / 450) * (0.7 + Math.random() * 2.3) * (1 + f.beatPulse * 0.8);
         }
@@ -86,8 +92,10 @@ export const nebula: Scene2DDef = {
         const ang = num(p.swirl) * dt * (0.4 + f.mid * 1.2);
         const cs = Math.cos(ang);
         const sn = Math.sin(ang);
-        const drag = Math.pow(0.986, dt * 60) * (1 + f.beatPulse * 0.03);
+        const drag = Math.pow(0.986 + 0.008 * spread, dt * 60) * (1 + f.beatPulse * 0.03);
         const step = dt * 60;
+        // the spread: a push away from the centre, so the spiral opens instead of circling in place
+        const push = m * 0.00004 * spread * (1 + f.bass) * step;
         for (let i = 0; i < count; i++) {
           life[i] += dt;
           const out = px[i] < -50 || px[i] > W + 50 || py[i] < -50 || py[i] > H + 50;
@@ -96,8 +104,15 @@ export const nebula: Scene2DDef = {
             i--;
             continue;
           }
-          const nvx = (vx[i] * cs - vy[i] * sn) * drag;
-          const nvy = (vx[i] * sn + vy[i] * cs) * drag;
+          let nvx = (vx[i] * cs - vy[i] * sn) * drag;
+          let nvy = (vx[i] * sn + vy[i] * cs) * drag;
+          if (push > 0) {
+            const dx = px[i] - cx;
+            const dy = py[i] - cy;
+            const d = Math.hypot(dx, dy) || 1;
+            nvx += (dx / d) * push;
+            nvy += (dy / d) * push;
+          }
           vx[i] = nvx;
           vy[i] = nvy;
           px[i] += nvx * step;
