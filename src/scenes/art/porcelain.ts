@@ -5,6 +5,7 @@ import { ART_LIB, MARCH } from "./lib.glsl";
 import { CAMERA_GLSL, type Framing } from "./camera";
 import { HEAD_GLSL, headParam, headUniforms, setHead, TITLE_HEAD } from "./heads";
 import { DETAIL_GLSL } from "./detail.glsl";
+import { WHITE_GLSL } from "./white.glsl";
 
 /** Framings around the head (world space: the head centre sits near y = 0). "open" ones need the head open. */
 const FRAMINGS: Framing[] = [
@@ -152,6 +153,8 @@ ${ART_LIB}
 ${HEAD_GLSL}
 ${CAMERA_GLSL}
 ${DETAIL_GLSL}
+${WHITE_GLSL}
+const float FLOORW = -1.35;   // the studio floor, where the head lays its soft shadow
 
 const float TH = .1;                    // shell thickness
 const vec3 HINGE = vec3(0., 0., -.58);  // back of the skull
@@ -381,7 +384,14 @@ vec3 cells(vec3 x) {
   return vec3(sqrt(d1), sqrt(d2), id);
 }
 
-vec3 iri(float t) { return .5 + .5 * cos(6.2831 * (t + vec3(0., .33, .67))); }
+/** The world's own colours for what lies inside: gold, vermilion and ivory (no rainbow in the white world). */
+vec3 warm(float t) {
+  vec3 ivory = vec3(1., .95, .86), gold = vec3(1., .72, .3), verm = mix(vec3(.9, .22, .12), uAccent, .5);
+  float s = .5 + .5 * cos(6.2831 * t);
+  float w = .5 + .5 * cos(6.2831 * (t + .33));
+  return mix(mix(gold, verm, s), ivory, w * .45);
+}
+vec3 iri(float t) { return warm(t); }
 
 void main() {
   vec2 fc = gl_FragCoord.xy;
@@ -395,7 +405,13 @@ void main() {
   vec3 ro = uCamPos;
   vec3 rd = lookAt(ro, uCamTarget) * normalize(vec3(uv, uFocal));
 
-  vec3 col = uBase * .9 + uInk * .06 * exp(-2.4 * length(uv - vec2(.3, .12)));
+  // the white studio, and the head's soft shadow on its floor
+  vec3 col = studioW(rd);
+  if (rd.y < -1e-3) {
+    vec3 fq = ro + rd * ((FLOORW - ro.y) / rd.y);
+    col *= 1. - .32 * exp(-dot(fq.xz, fq.xz) * 3.2) - .1 * exp(-dot(fq.xz, fq.xz) * .6);
+  }
+  vec3 bgCol = col;
   // March, gathering the glow of the core along the way
   float t = .05, tt = -1., glow = 0.;
   for (int i = 0; i < 115; i++) {
@@ -469,7 +485,12 @@ void main() {
         // soft fill from the camera, so every framing keeps the porcelain readable (the title faces us: more of it,
         // or its flat faces turn grey)
         col += uInk * (.22 + .3 * uTitle) * clamp(dot(nm, -rd), 0., 1.) * ao;
-        col += speM * .34 + fre * vec3(.22, .24, .28) * ao;
+        // white porcelain in a white studio: brighter, and its glaze mirrors the studio (the black flags draw its edges)
+        // (the white walls bounce light everywhere: the shadows stay light)
+        col = col * 1.55 + uInk * .5 * (.6 + .4 * ao);
+        float freW = pow(1. - clamp(dot(nm, -rd), 0., 1.), 4.);
+        col = mix(col, envW(reflect(rd, nm)) * (.7 + .3 * ao), .02 + .32 * freW);
+        col += speM * .6;
         col += pow(clamp(dot(nm, normalize(vec3(.9, .25, -.5))), 0., 1.), 3.) * .15;
         // crazing: the hairlines of an old glaze, an irregular net, faintly tea-coloured, in a few patches
         float zone = smoothstep(.5, .7, vnoise(q * 2.3 + uSeed + 11.)) * resolved(.012, pix);
@@ -500,7 +521,10 @@ void main() {
         col = mix(col, gold * (.35 + dif * 1.1) + gold * spe * 2. + gold * uBeat * .5, crack);
         // The seam: a thread of light that pulses on the kick
         float seam = uTitle > .5 ? bandGap(q) : uMode > .5 ? gapDist(q) : abs(q.x);
-        col += uAccent * exp(-seam * 120.) * ((uMode > .5 || uTitle > .5 ? .12 : .3) + 1.4 * uBeat + 2. * uLeak) * step(NECK, q.y);
+        float seamLine = exp(-seam * 120.) * step(NECK, q.y);
+        // on white porcelain the vermilion must be a colour, not only a light: painted, then lit on the kick
+        col = mix(col, uAccent * 1.15, seamLine * .8);
+        col += uAccent * seamLine * ((uMode > .5 || uTitle > .5 ? .12 : .3) + 1.4 * uBeat + 2. * uLeak);
       } else if (dIn < dCut) {
         // Geode lining: crystal facets, iridescent, lit by the core
         vec3 cv = cells(q * 16.);
@@ -521,8 +545,8 @@ void main() {
       }
     }
   }
-  // The heads float: below the cut of the neck the light dies out into the dark
-  if (tt > 0.) col *= smoothstep(NECK - .4, NECK + .02, toHead(ro + rd * tt).y);
+  // The heads float: below the cut of the neck they melt into the white of the studio
+  if (tt > 0.) col = mix(bgCol, col, smoothstep(NECK - .4, NECK + .02, toHead(ro + rd * tt).y));
   // The glow of the core around the fractal
   col += iri(uShift + .2) * glow * coreLight * (uOpen + .05) * (1. - .5 * uTitle);
 
@@ -557,7 +581,8 @@ void main() {
   }
 
   col *= 1.05;
-  float alpha = step(0., tt);
+  // the studio fills the frame: no world background behind it
+  float alpha = 1.;
   if (uSelfie > .5) {
     // A phone held up to the face: a portrait screen, its grid, a focus square that follows the face,
     // the recording dot blinking on the beat. The drop is the shutter. Its marks are drawn in screen values.
@@ -567,7 +592,8 @@ void main() {
     float frame = length(max(dq, 0.)) + min(max(dq.x, dq.y), 0.) - .05;
     vec3 ui = vec3(1., .96, .88);
     if (frame > 0.) {
-      col = uBase * .08 + ui * .5 * (1. - smoothstep(0., .004, abs(frame - .012)));
+      // the phone's dark bezel, then the white studio around it
+      col = mix(vec3(.04), vec3(.9, .89, .87), smoothstep(.018, .028, frame));
       alpha = 1.;
     } else {
       vec2 g = abs(fract((uv + fsz) / (fsz * 2.) * 3.) - .5) * 2.;
