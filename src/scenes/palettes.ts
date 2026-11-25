@@ -49,6 +49,12 @@ export const PALETTES: Record<string, Palette> = {
   mars: P("Mars", "#1A0705", ["#C4573A", "#E89A5B", "#53D8FB"]),
   mousse: P("Mousse", "#02060A", ["#7CFF4F", "#2E6BFF", "#FFE45C"]),
   fauve: P("Fauve", "#0B0806", ["#EFE6D6", "#B88A4A", "#F0A93B"]),
+  // Mycélium: the moon's silver on black wood, the moss, the green glow of rotting wood (foxfire)
+  boismort: P("Bois mort", "#020705", ["#B9CCDB", "#3F7A5E", "#7DFFB4"]),
+  // the glowworms' blue, the night of a cave, a lantern's warmth
+  luciole: P("Luciole", "#01030A", ["#7FE6FF", "#2F5F92", "#FFD9A0"]),
+  // the gills of the giant mushrooms: lilac, violet, pink, amber
+  spores: P("Spores", "#07030D", ["#E7D6FF", "#A86BFF", "#FF5FC2", "#FFC46B"]),
   // ---- legacy, vivid (kept for the "Classique" world)
   acid: P("Acide", "#000000", ["#B6FF00", "#FF00E1", "#00F0FF"], "vivid"),
   neon: P("Néon", "#05000A", ["#FF2A6D", "#D300C5", "#05D9E8"], "vivid"),

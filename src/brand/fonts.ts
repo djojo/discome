@@ -3,6 +3,7 @@ import {
   Caveat_Brush,
   Cinzel,
   Fraunces,
+  IM_Fell_English,
   JetBrains_Mono,
   Pirata_One,
   Playfair_Display,
@@ -23,6 +24,7 @@ const caveat = Caveat_Brush({ weight: "400", subsets: ["latin", "latin-ext"], pr
 const pressStart = Press_Start_2P({ weight: "400", subsets: ["latin", "latin-ext"], preload: false });
 const pirata = Pirata_One({ weight: "400", subsets: ["latin", "latin-ext"], preload: false });
 const fraunces = Fraunces({ weight: "800", subsets: ["latin", "latin-ext"], preload: false });
+const fell = IM_Fell_English({ weight: "400", subsets: ["latin"], preload: false });
 
 export interface TitleFont {
   /** CSS font-family, as next/font named it. */
@@ -55,6 +57,8 @@ export const TITLE_FONTS = {
   gothic: { family: pirata.style.fontFamily, weight: "400", spacing: 0.02, second: 0.5 },
   /** Chair: a soft, fleshy serif. */
   soft: { family: fraunces.style.fontFamily, weight: "800", second: 0.5 },
+  /** Mycélium: the type of the old printed books, the first editions of the tales. */
+  tale: { family: fell.style.fontFamily, weight: "400", spacing: 0.01, second: 0.5 },
 } satisfies Record<string, TitleFont>;
 
 export type TitleFontId = keyof typeof TITLE_FONTS;

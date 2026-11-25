@@ -10,9 +10,10 @@ import { defaultParams, SCENES, sceneById, type Energy, type ParamValues, type S
  */
 /**
  * What a plan is for: the director takes calm plans in calm passages and drop plans on drops. "after" is the
- * aftermath (ruins, silence): kept for the breakdowns.
+ * aftermath (ruins, silence): kept for the breakdowns. "arc": a build plan whose drop is its own reveal (a fall that
+ * ends in a cavern, a maze left from above): the director keeps it on through the drop.
  */
-export type Role = "calm" | "build" | "drop" | "after";
+export type Role = "calm" | "build" | "drop" | "after" | "arc";
 
 /**
  * A plan ("shot"): a scene of the catalogue with its settings for this world. The same scene may appear
@@ -423,12 +424,44 @@ export const LOOKS: Look[] = [
     director: "chill",
   },
   {
+    id: "mycelium",
+    name: "Mycélium",
+    description: "La nuit sous la lune, en volume : forêt hantée, grotte aux vers luisants, champignons géants, terrier sans fond, labyrinthe sans sortie. Le mycélium relie tout et chaque kick y court comme un signal.",
+    swatch: ["#020705", "#B9CCDB", "#7DFFB4"],
+    palettes: ["boismort", "luciole", "spores"],
+    // the colour of the living lights: foxfire green, glowworm blue, violet, amber (a new one on every drop)
+    tints: ["#7DFFB4", "#7FE6FF", "#B98CFF", "#FFC46B"],
+    scenes: [
+      { id: "myc-forest", key: "foret", label: "Sous la lune", weight: 3, role: "calm", params: { palette: "boismort" } },
+      { id: "myc-forest", key: "eclosion", label: "Éclosion", weight: 2, role: "drop", params: { palette: "boismort", fungi: 0.9 } },
+      { id: "myc-grotto", weight: 2, role: "calm", params: { palette: "luciole" } },
+      { id: "myc-grotto", key: "silence", label: "Silence", weight: 2, role: "after", params: { palette: "luciole", silence: true } },
+      { id: "myc-giants", weight: 3, role: "drop", params: { palette: "spores" } },
+      { id: "myc-giants", key: "retrecir", label: "Rétrécir", weight: 2, role: "build", params: { palette: "spores", shrink: true } },
+      { id: "myc-fall", weight: 2, role: "arc", params: { palette: "boismort" } },
+      { id: "myc-maze", weight: 2, role: "arc", params: { palette: "boismort" } },
+      { id: "myc-den", weight: 2, role: "after", params: { palette: "boismort" } },
+      { id: "myc-mirror", weight: 2, role: "drop", params: { palette: "boismort" } },
+    ],
+    // no background: every scene draws its own night
+    title: {
+      id: "myc-grotto",
+      key: "titre",
+      label: "Titre",
+      role: "calm",
+      params: { palette: "luciole", end: "titre", titleFont: "tale", titleRelief: "cut" },
+    },
+    fx: { grain: 0.15, vignette: 0.5, bloom: 0.5, trails: 0.15, saturation: 1.05, accents: 0.5 },
+    transitions: { calm: ["fade", "luma", "dive"], drop: ["flash", "fade"] },
+    director: "chill",
+  },
+  {
     id: "classique",
     name: "Classique",
     description: "Les premières scènes et leurs couleurs vives, hors rotation des mondes.",
     swatch: ["#ff3cac", "#a855f7", "#22d3ee"],
     palettes: ["acid", "neon", "sunset", "ocean", "ice", "fire", "chrome", "vhs"],
-    scenes: SCENES.filter((s) => !["porcelain", "metamorphosis", "faithful", "torrent", "panopticon", "collective", "warehouse", "downpour", "pilgrimage", "mercury-beads", "mercury-wave", "mercury-blend", "mercury-flow", "mercury-melt", "flesh-morph", "flesh-radiolaria", "flesh-jelly", "canyon-cactus", "canyon-spirit", "canyon-vision", "topo-head", "profile-head", "halftone-head", "mercury", "cathedral", "monolith", "canyon-gorge", "canyon-mesas", "arcane-architect", "arcane-nomad", "arcane-prism", "arcane-portal", "arcane-road", "grimoire", "flesh", "flesh-skin", "signal", "museum", "rose", "organ", "kintsugi", "series", "wheel", "swirl"].includes(s.id)).map((s) => ({ id: s.id, weight: 1 })),
+    scenes: SCENES.filter((s) => !["porcelain", "metamorphosis", "faithful", "torrent", "panopticon", "collective", "warehouse", "downpour", "pilgrimage", "mercury-beads", "mercury-wave", "mercury-blend", "mercury-flow", "mercury-melt", "flesh-morph", "flesh-radiolaria", "flesh-jelly", "canyon-cactus", "canyon-spirit", "canyon-vision", "topo-head", "profile-head", "halftone-head", "mercury", "cathedral", "monolith", "canyon-gorge", "canyon-mesas", "arcane-architect", "arcane-nomad", "arcane-prism", "arcane-portal", "arcane-road", "grimoire", "flesh", "flesh-skin", "signal", "museum", "rose", "organ", "kintsugi", "series", "wheel", "swirl", "myc-forest", "myc-grotto", "myc-giants", "myc-fall", "myc-maze", "myc-den", "myc-mirror"].includes(s.id)).map((s) => ({ id: s.id, weight: 1 })),
     fx: {},
     classic: true,
   },
@@ -453,7 +486,7 @@ export interface Plan {
   title?: boolean;
 }
 
-const ROLE_ENERGY: Record<Role, Energy> = { calm: "calm", build: "medium", drop: "intense", after: "calm" };
+const ROLE_ENERGY: Record<Role, Energy> = { calm: "calm", build: "medium", drop: "intense", after: "calm", arc: "medium" };
 
 export const shotKey = (s: Shot) => s.key ?? s.id;
 
@@ -539,7 +572,7 @@ export function pickShot(shots: Shot[], avoid: (string | null)[] = []): Shot | n
 
 /** The art-directed worlds that take turns when "Enchaîner les mondes" is on. */
 /** The rotation alternates nature and machine: the cut between two worlds says something on its own. */
-const ROTATION_ORDER = ["porcelaine", "canyon", "monolithe", "chair", "signal", "bestiaire", "mercure", "arcanes", "cathedrale"];
+const ROTATION_ORDER = ["porcelaine", "canyon", "monolithe", "chair", "signal", "bestiaire", "mercure", "mycelium", "arcanes", "cathedrale"];
 export const ROTATION = [
   ...ROTATION_ORDER.filter((id) => LOOKS.some((l) => l.id === id && !l.classic)),
   ...LOOKS.filter((l) => !l.classic && !ROTATION_ORDER.includes(l.id)).map((l) => l.id),
