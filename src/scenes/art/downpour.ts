@@ -20,19 +20,21 @@ const FRAMINGS: Framing[] = [
 
 /**
  * The downpour: a figure stands still on black water, under a fine rain of light. Every drop is a notification:
- * it draws a one-pixel ring on the water and leaves a point of light on the figure. Through the breakdown the
- * rain thickens and the points pile up, until the figure is made of them. The hats bring bigger drops, the kick
- * lights up the rings.
+ * it draws a one-pixel ring on the water and leaves a point of light on the figure. The rain's own light catches
+ * the figure's edges (a fine contour, and its faint reflection in the water). Through the breakdown the rain
+ * thickens and the points pile up while the contour goes out, until the figure is made of points alone. The hats
+ * bring bigger drops, the kick lights up the rings. The scene covers the whole frame (no world background).
  */
 export const downpour = defineShaderScene({
   id: "downpour",
   name: "Averse",
   energy: "calm",
   hdr: true,
+  mask: true,
   renderScale: 0.9,
   camera: { framings: FRAMINGS, glideBars: 3 },
   description:
-    "Une silhouette immobile sur une eau noire, sous une pluie de gouttes de lumière : chaque goutte trace un anneau sur l'eau et laisse un point sur elle. La pluie s'épaissit jusqu'à la recouvrir.",
+    "Une silhouette immobile sur une eau noire, sous une pluie de gouttes de lumière qui en dessine le contour : chaque goutte trace un anneau sur l'eau et laisse un point sur elle, jusqu'à ce qu'elle ne soit plus faite que de points.",
   params: [paletteParam("mono")],
   uniforms: () => ({
     uDensity: { value: 0.2 },
@@ -50,11 +52,12 @@ export const downpour = defineShaderScene({
       for (const b of big) b.set(0, 0, -99, 0);
     }
     u.uLast.value = f.time;
-    const on = (u.uClock.value as number) + dt;
+    // The rain's clock runs twice as fast through a breakdown: that is where the figure gets covered
+    const on = (u.uClock.value as number) + dt * (f.section === "breakdown" ? 2 : 1);
     u.uClock.value = on;
     // The rain thickens over the scene, and starts denser as the night drifts; the points pile up a bit slower
-    u.uDensity.value = Math.min(1, 0.12 + 0.35 * f.drift + on / 50);
-    u.uCover.value = Math.min(1, 0.02 + 0.3 * f.drift + on / 75);
+    u.uDensity.value = Math.min(1, 0.12 + 0.35 * f.drift + on / 70);
+    u.uCover.value = Math.min(1, 0.02 + 0.3 * f.drift + on / 90);
     // A hat: a bigger drop near the figure (in the oldest slot)
     if (f.onset && f.time - (u.uHatAt.value as number) > 0.4) {
       u.uHatAt.value = f.time;
@@ -116,30 +119,40 @@ vec3 figN(vec3 p) {
   return normalize(k.xyy * figure(p + k.xyy * h) + k.yyx * figure(p + k.yyx * h) + k.yxy * figure(p + k.yxy * h) + k.xxx * figure(p + k.xxx * h));
 }
 
-/** Sphere-trace the figure, only where the ray crosses its box. */
-float marchFigure(vec3 ro, vec3 rd, float tmax) {
+/**
+ * Sphere-trace the figure, only where the ray crosses its box. x: where it hits (-1: it misses); y: how close a miss
+ * came to the figure, in pixels (the contour of light just outside its silhouette). pa: a pixel, in radians; t0: how
+ * far the ray has already travelled from the eye (a reflected ray).
+ */
+vec2 marchFigure(vec3 ro, vec3 rd, float tmax, float pa, float t0) {
   vec3 m = 1. / rd;
   vec3 n = m * (ro - BC);
   vec3 k = abs(m) * BH;
   vec3 t1 = -n - k, t2 = -n + k;
   float tn = max(max(t1.x, t1.y), t1.z), tf = min(min(min(t2.x, t2.y), t2.z), tmax);
-  if (tn > tf || tf < 0.) return -1.;
+  if (tn > tf || tf < 0.) return vec2(-1., 1e3);
   float t = max(tn, .02);
+  float close = 1e3;
   for (int i = 0; i < 80; i++) {
     float d = figure(ro + rd * t);
-    if (d < .0006 * t) return t;
+    if (d < .0006 * t) return vec2(t, 0.);
+    close = min(close, d / ((t0 + t) * pa));
     t += d;
     if (t > tf) break;
   }
-  return -1.;
+  return vec2(-1., close);
 }
+
+/** The contour of light just outside the silhouette, from how close (in pixels) a ray passed: about a pixel wide. */
+float contour(float close) { return exp(-close * close * .9); }
 
 /**
  * The points of light left on the figure: one per cell of a fine grid, if the cell's turn has come (uCover);
- * each flashes as it lands, then twinkles slowly. fp: a pixel's size at that distance.
+ * each flashes as it lands, then twinkles slowly. Small and sharp, so that even close up they stay points, not
+ * blots. fp: a pixel's size at that distance.
  */
 float glints(vec3 p, float fp) {
-  const float G = .04;
+  const float G = .03;
   vec3 b = floor(p / G - .5);
   float s = 0.;
   for (int i = 0; i < 8; i++) {
@@ -148,11 +161,11 @@ float glints(vec3 p, float fp) {
     float h = hash13(id + 7.7);
     if (h < uCover) {
       vec3 c = (id + .2 + .6 * vec3(hash13(id + 1.3), hash13(id + 2.7), hash13(id + 4.1))) * G;
-      float R = .0035 + .004 * hash13(id + 5.9);
+      float R = .002 + .0025 * hash13(id + 5.9);
       float r = length(p - c);
       float W = max(R, fp);
       // a hard core and a soft glow around it
-      float k = (1. - smoothstep(W * .5, W * 1.5, r)) * R / W * 1.6 + .45 * exp(-r * r / (R * R * 3.));
+      float k = (1. - smoothstep(W * .5, W * 1.5, r)) * R / W * 1.6 + .4 * exp(-r * r / (R * R * 2.));
       float flash = 1. + 4. * exp(-(uCover - h) * 70.);
       s += k * flash * (.7 + .3 * sin(uTime * (.6 + h) + h * 40.));
     }
@@ -160,11 +173,19 @@ float glints(vec3 p, float fp) {
   return s;
 }
 
+/** How much of the figure's own light is left: it goes out as the points cover it, until only the points remain. */
+float bodyLight() { return 1. - smoothstep(.45, .97, uCover); }
+
+/**
+ * The figure, wet and dark: the rain's light catches its edges (a fine rim, brighter on the shoulders and the head),
+ * a faint sheen on what faces the sky; then the points of light it has received.
+ */
 vec3 figureShade(vec3 p, vec3 n, vec3 rd, float fp) {
   float top = clamp(n.y * .5 + .5, 0., 1.);
-  float rim = pow(1. - clamp(dot(n, -rd), 0., 1.), 3.);
-  vec3 c = uInk * (.02 * top + .1 * rim * (.5 + .5 * top));
-  return c + uInk * glints(p, fp) * (1.4 + .3 * uBeat);
+  float rim = pow(1. - clamp(dot(n, -rd), 0., 1.), 4.);
+  float sheen = pow(clamp(reflect(rd, n).y, 0., 1.), 6.);
+  vec3 c = uInk * bodyLight() * (.012 * top + rim * (.18 + .5 * top) + .06 * sheen * top);
+  return c + uInk * glints(p, fp) * (2.2 + .4 * uBeat);
 }
 
 /** One ring (and its echo inside) spreading from o; adds its light to lum and its slope to g. */
@@ -200,7 +221,7 @@ vec3 ripples(vec2 x, float fp) {
     float age = uTime - b.z;
     if (age > 0. && age < 4.) ring(x, b.xy, age, .28, 4., .009, 2. * b.w, fp, lum, g);
   }
-  return vec3(lum * (1. + 1.6 * uBeat), g);
+  return vec3(lum * (1. + 2. * uBeat), g);
 }
 
 /** A falling drop: a short vertical streak of light from a, seen by the ray (up to tEnd). */
@@ -212,8 +233,10 @@ float streak(vec3 ro, vec3 rd, vec3 a, float tEnd, float pa) {
   float sc = dot(s - ro, rd);
   if (sc < .05 || sc > tEnd) return 0.;
   vec3 dv = ro + rd * sc - s;
-  float W = max(.005, sc * pa);
-  return exp(-dot(dv, dv) / (W * W)) * (.005 / W) * (1. - .7 * tc / SL) * exp(-sc * .04);
+  // a fine line however close the drop: never wider than a pixel and a half, a little brighter instead
+  float W = max(min(.005, sc * pa * 1.5), sc * pa * .7);
+  // a drop brushing past the eye would still flash across the frame: let it through unseen
+  return exp(-dot(dv, dv) / (W * W)) * min(1.6, .005 / W) * (1. - .7 * tc / SL) * exp(-sc * .04) * smoothstep(.5, 1.6, sc);
 }
 
 /** The rain the ray sees: the next drop of every cell it passes over, then the big drops. */
@@ -248,7 +271,9 @@ void main() {
   vec3 rd = lookAt(ro, uCamTarget) * normalize(vec3(uv, uFocal));
   float pa = 1. / (uRes.y * uFocal);   // a pixel, in radians
   float tw = rd.y < -1e-4 ? -ro.y / rd.y : 1e5;
-  float tt = marchFigure(ro, rd, min(tw, 40.));
+  vec2 fm = marchFigure(ro, rd, min(tw, 40.), pa, 0.);
+  float tt = fm.x;
+  float body = bodyLight();
   vec3 col = vec3(0.);
   float tEnd = rd.y > 1e-3 ? min(30., (HTOP + SL - ro.y) / rd.y) : 30.;
   if (tt > 0.) {
@@ -262,21 +287,24 @@ void main() {
     vec3 rp = ripples(p.xz, fp);
     vec3 n = normalize(vec3(-rp.y, 1., -rp.z));
     vec3 rr = reflect(rd, n);
-    // black water, a mirror: the figure trembles in it with the rings
+    // black water, a dark mirror: the figure trembles in it, faint, with the rings
     vec3 refl = uAccent * .03 * exp(-abs(rr.y) * 40.);
-    float tr = marchFigure(p + n * .002, rr, 12.);
-    if (tr > 0.) {
-      vec3 q = p + rr * tr;
-      refl = figureShade(q, figN(q), rr, (tw + tr) * pa);
-    }
+    vec2 fr = marchFigure(p + n * .002, rr, 12., pa, tw);
+    if (fr.x > 0.) {
+      vec3 q = p + rr * fr.x;
+      refl = figureShade(q, figN(q), rr, (tw + fr.x) * pa);
+    } else refl += uInk * .5 * body * contour(fr.y);
     float fre = pow(1. - clamp(dot(n, -rd), 0., 1.), 5.);
-    col = refl * (.45 + .55 * fre);
-    col += uInk * rp.x * .85 * exp(-tw * .06);
+    col = refl * (.3 + .4 * fre);
+    col += uInk * rp.x * 1.25 * exp(-tw * .045);
     tEnd = tw;
   }
+  // the contour of light around the figure, a pixel wide, just outside its silhouette
+  if (tt < 0.) col += uInk * .55 * body * contour(fm.y);
   // the horizon: the faintest line where the water meets the night
   col += uAccent * .035 * exp(-abs(rd.y) * 70.);
   col += uInk * rain(ro, rd, tEnd, pa);
+  // the scene covers the whole frame: the world's background never shows through the night
   gl_FragColor = vec4(hdrOut(col * 1.1), 1.);
 }
 `,
