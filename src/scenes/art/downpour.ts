@@ -8,22 +8,26 @@ import { CAMERA_GLSL, type Framing } from "./camera";
 const BIG = 8;
 
 const FRAMINGS: Framing[] = [
-  // wide, from the front, the horizon of the water low in the frame
-  { az: 0.25, el: 0.1, dist: 6.5, target: [0, 1, 0], focal: 1.8, weight: 3 },
-  // high above: the whole surface covered in rings, the figure in the middle
-  { az: 0.6, el: 1.3, dist: 6.5, target: [0, 0.3, 0], focal: 1.6, weight: 2 },
-  // close on the head and shoulders, a little below the bowed face
-  { az: 0.4, el: -0.08, dist: 1.4, target: [0, 1.48, 0.05], focal: 2, weight: 2 },
+  // very wide, low: the figure small on the water, a third of the way across, the horizon behind it
+  { az: 0.3, el: 0.05, dist: 19, target: [2.2, 1.6, 0], focal: 1.8, weight: 3 },
+  // from behind, far: the hood and the coat against the faint horizon, the screen's glow round the head
+  { az: 2.75, el: 0.08, dist: 9, target: [0, 1.15, 0], focal: 1.9, weight: 2 },
+  // high above: the whole water covered in rings, the screen a point of light in the middle
+  { az: 0.6, el: 1.25, dist: 11, target: [0, 0.3, 0], focal: 1.6, weight: 2 },
   // at the water line: the rings in perspective, the reflection
-  { az: 2, el: 0.02, dist: 5, target: [0, 0.85, 0], focal: 1.9, weight: 2 },
+  { az: 1.2, el: 0.02, dist: 7, target: [0, 0.8, 0], focal: 1.9, weight: 2 },
+  // close, a little below: the face in the hood's shadow, lit by the screen
+  { az: 0.3, el: -0.06, dist: 1.6, target: [0, 1.4, 0.1], focal: 2, weight: 1 },
 ];
 
 /**
- * The downpour: a figure stands still on black water, under a fine rain of light. Every drop is a notification:
- * it draws a one-pixel ring on the water and leaves a point of light on the figure. The rain's own light catches
- * the figure's edges (a fine contour, and its faint reflection in the water). Through the breakdown the rain
- * thickens and the points pile up while the contour goes out, until the figure is made of points alone. The hats
- * bring bigger drops, the kick lights up the rings. The scene covers the whole frame (no world background).
+ * The screen in the rain: a figure in a long hooded coat stands still on an endless black water, its head bowed
+ * over the phone it holds at its chest; the screen is the only light near it, it lights the face in the hood and
+ * the hands from below, and trembles in the water. A fine rain of light falls on the whole plain: every drop is a
+ * notification, it draws a one-pixel ring on the water and leaves a point of light on the figure. Through the
+ * breakdown the rain thickens and the points pile up while the figure's own light goes out, until it is made of
+ * points alone round the lit screen. The hats bring bigger drops, the kick lights up the rings. The scene covers
+ * the whole frame (no world background).
  */
 export const downpour = defineShaderScene({
   id: "downpour",
@@ -34,7 +38,7 @@ export const downpour = defineShaderScene({
   renderScale: 0.9,
   camera: { framings: FRAMINGS, glideBars: 3 },
   description:
-    "Une silhouette immobile sur une eau noire, sous une pluie de gouttes de lumière qui en dessine le contour : chaque goutte trace un anneau sur l'eau et laisse un point sur elle, jusqu'à ce qu'elle ne soit plus faite que de points.",
+    "Une silhouette en long manteau à capuche, immobile sur une immense eau noire, le visage éclairé par l'écran de son téléphone, sous une pluie de gouttes de lumière : chaque goutte trace un anneau sur l'eau et laisse un point sur elle, jusqu'à ce qu'il ne reste que des points autour de l'écran.",
   params: [paletteParam("mono")],
   uniforms: () => ({
     uDensity: { value: 0.2 },
@@ -81,8 +85,12 @@ const float RS = .38;    // ring speed
 const float VF = 7.;     // fall speed
 const float HTOP = 7.;   // the drops come out of the dark this high
 const float SL = .4;     // streak length
-const float HS = .17;    // head scale
-const vec3 BC = vec3(0., .92, .02), BH = vec3(.38, .93, .28);  // the figure's box
+const float HS = .15;    // head scale
+const vec3 BC = vec3(0., .93, .07), BH = vec3(.38, .94, .33);  // the figure's box
+// the phone, held at the chest, its screen turned up toward the face (NS: the screen's normal, PU: its long side)
+const vec3 PH = vec3(0., 1.12, .3);
+const vec3 NS = vec3(0., .921, -.39), PU = vec3(0., .39, .921);
+float gMat;              // 0 the coat, 1 the face and the hands, 2 the phone
 
 float cellPhase(vec2 c) { return hash12(c * 1.37 + uSeed) * P; }
 
@@ -93,24 +101,58 @@ vec4 dropOf(vec2 c, float k) {
   return vec4((c + .12 + .76 * h) * C, k * P - cellPhase(c), on);
 }
 
-/** The figure: standing still, arms down, head bowed; it breathes. */
+/**
+ * The figure: a long hooded coat down to the shins (its folds flaring a little), boots below; the forearms brought
+ * in front of the chest hold the phone; the head bowed over it, the face set back in the hood. It breathes.
+ */
 float figure(vec3 p) {
   vec3 q = vec3(abs(p.x), p.y, p.z);
   float br = .5 + .5 * sin(uTime * .8);
-  float d = sdEllipsoid(p - vec3(0., 1.3, 0.), vec3(.19, .17, .11) * (1. + .015 * br));
-  d = smin(d, sdEllipsoid(p - vec3(0., 1.08, -.005), vec3(.15, .16, .095)), .08);
-  d = smin(d, sdEllipsoid(p - vec3(0., .93, 0.), vec3(.17, .12, .1)), .07);
-  d = smin(d, sdEllipsoid(q - vec3(.19, 1.39, 0.), vec3(.08, .065, .07)), .06);
-  d = smin(d, sdCapsule(q, vec3(.21, 1.37, 0.), vec3(.235, 1.1, -.02), .042), .03);
-  d = smin(d, sdCapsule(q, vec3(.235, 1.1, -.02), vec3(.25, .85, .03), .035), .02);
-  d = smin(d, sdEllipsoid(q - vec3(.255, .77, .04), vec3(.024, .06, .036)), .03);
-  d = smin(d, sdCapsule(q, vec3(.09, .93, 0.), vec3(.1, .5, .01), .075), .05);
-  d = smin(d, sdCapsule(q, vec3(.1, .5, .01), vec3(.1, .1, -.01), .05), .03);
-  d = smin(d, sdEllipsoid(q - vec3(.1, .04, .05), vec3(.045, .04, .11)), .04);
-  vec3 h = p - vec3(0., 1.6, .015);
-  h.xy *= rot(.04 * sin(uTime * .17));
-  h.yz *= rot(-.38 - .06 * sin(uTime * .23));
-  return smin(d, sdHead(h / HS) * HS, .04);
+  // the chest and the shoulders (squarer than a body: the coat's shoulders), the fabric's folds and its closure
+  float d = sdEllipsoid(p - vec3(0., 1.18, 0.), vec3(.205, .29, .12) * (1. + .012 * br));
+  d = smin(d, sdEllipsoid(q - vec3(.165, 1.37, -.01), vec3(.1, .06, .095)), .05);
+  d += .004 * sin(atan(p.z, p.x) * 7. + p.y * 3.) * smoothstep(1.45, .9, p.y);
+  d += .003 * exp(-p.x * p.x * 4000.) * step(0., p.z);
+  // the coat's skirt: wider at the hem, cut straight there, its folds
+  vec3 c = vec3(p.x, p.y, p.z * 1.35);
+  float skirt;
+  {
+    vec3 pa = c - vec3(0., 1.02, 0.), ba = vec3(0., -.78, .02);
+    float h = clamp(dot(pa, ba) / dot(ba, ba), 0., 1.);
+    skirt = (length(pa - ba * h) - mix(.17, .265, h)) * .72;
+  }
+  skirt += .006 * sin(atan(p.z, p.x) * 9. + p.y * 2.) * smoothstep(1.05, .35, p.y);
+  skirt = max(skirt, .22 - p.y);
+  d = smin(d, skirt, .08);
+  // the legs below the hem, and the boots
+  d = min(d, sdCapsule(q, vec3(.09, .32, 0.), vec3(.095, .07, 0.), .052));
+  d = smin(d, sdEllipsoid(q - vec3(.095, .045, .035), vec3(.055, .045, .1)), .03);
+  // the sleeves: down to the elbows, then the forearms in to the phone
+  d = smin(d, sdCapsule(q, vec3(.205, 1.35, 0.), vec3(.215, 1.1, .1), .058), .04);
+  d = smin(d, sdCapsule(q, vec3(.215, 1.1, .1), vec3(.08, 1.1, .27), .048), .03);
+  gMat = 0.;
+  // the hands, on each side of the phone
+  float hands = sdEllipsoid(q - vec3(.052, 1.11, .3), vec3(.028, .045, .038));
+  // the head, bowed, in its hood (open at the face)
+  vec3 h = p - vec3(0., 1.585, .05);
+  h.xy *= rot(.03 * sin(uTime * .17));
+  h.yz *= rot(-.48 - .04 * sin(uTime * .23));
+  // the hood: taller than wide, a soft point at the back of the crown, its edge standing forward round the face,
+  // falling onto the shoulders
+  float hood = sdEllipsoid(h - vec3(0., .025, .025), vec3(.15, .2, .2));
+  hood = smin(hood, sdEllipsoid(h - vec3(0., .1, -.1), vec3(.09, .14, .12)), .06);
+  hood = smin(hood, sdEllipsoid(h - vec3(0., -.14, -.05), vec3(.17, .1, .16)), .08);
+  hood = max(hood, -(hood + .035));
+  hood = smax(hood, -sdEllipsoid(h - vec3(0., -.045, .23), vec3(.085, .125, .12)), .015);
+  d = smin(d, hood, .06);
+  float face = sdHead(h / HS) * HS;
+  float skin = min(face, hands);
+  if (skin < d) { d = skin; gMat = 1.; }
+  // the phone
+  vec3 sp = p - PH;
+  float ph = sdBox(vec3(sp.x, dot(sp, PU), dot(sp, NS)), vec3(.036, .074, .004)) - .003;
+  if (ph < d) { d = ph; gMat = 2.; }
+  return d;
 }
 
 vec3 figN(vec3 p) {
@@ -176,17 +218,47 @@ float glints(vec3 p, float fp) {
 /** How much of the figure's own light is left: it goes out as the points cover it, until only the points remain. */
 float bodyLight() { return 1. - smoothstep(.45, .97, uCover); }
 
+/** The screen's brightness now: it pulses a little with the kick. */
+float screenLevel() { return 1. + .25 * uBeat; }
+
 /**
- * The figure, wet and dark: the rain's light catches its edges (a fine rim, brighter on the shoulders and the head),
- * a faint sheen on what faces the sky; then the points of light it has received.
+ * The figure, wet and dark: the rain's light catches its edges (a fine rim, brighter on the shoulders and the hood),
+ * a faint sheen on what faces the sky; the screen lights from below what is in front of it (the face and the hands
+ * most); then the points of light it has received. The screen itself: a plain glow, light bands drifting up it.
  */
-vec3 figureShade(vec3 p, vec3 n, vec3 rd, float fp) {
+vec3 figureShade(vec3 p, vec3 n, vec3 rd, float fp, float mat) {
+  if (mat > 1.5) {
+    vec3 sp = p - PH;
+    float face = smoothstep(.3, .7, dot(n, NS));
+    float y = dot(sp, PU) / .074;
+    float feed = .82 + .18 * sin(y * 9. - uTime * 2.2) * sin(y * 3.1 + uTime * .7);
+    return uInk * (face * 2.8 * feed * screenLevel() + .02);
+  }
+  vec3 Lv = PH + NS * .01 - p;
+  float ld = length(Lv);
+  vec3 L = Lv / ld;
+  float lit = max(dot(-L, NS), 0.) * max(dot(n, L), 0.) / (1. + ld * ld / .02) * screenLevel();
   float top = clamp(n.y * .5 + .5, 0., 1.);
   float rim = pow(1. - clamp(dot(n, -rd), 0., 1.), 4.);
   float sheen = pow(clamp(reflect(rd, n).y, 0., 1.), 6.);
   vec3 c = uInk * bodyLight() * (.012 * top + rim * (.18 + .5 * top) + .06 * sheen * top);
+  c += uInk * lit * (mat > .5 ? 1.5 : .28);
   return c + uInk * glints(p, fp) * (2.2 + .4 * uBeat);
 }
+
+/** The screen's glow in the rain round it, seen along a ray (up to tEnd). */
+float screenGlow(vec3 ro, vec3 rd, float tEnd) {
+  float s = dot(PH - ro, rd);
+  if (s < 0. || s > tEnd + .05) return 0.;
+  vec3 v = ro + rd * s - PH;
+  float r2 = dot(v, v);
+  // brighter on the side the screen faces
+  float side = .4 + .6 * max(dot(normalize(-v + rd * .001), -NS), 0.);
+  return (exp(-r2 / .012) * .3 + exp(-r2 / .25) * .06) * side * screenLevel();
+}
+
+/** The night: black, a faint glow along the horizon (so the figure stands out against it). */
+vec3 sky(vec3 rd) { return uInk * (.01 + .075 * exp(-abs(rd.y) * 9.)); }
 
 /** One ring (and its echo inside) spreading from o; adds its light to lum and its slope to g. */
 void ring(vec2 x, vec2 o, float age, float speed, float life, float w, float amp, float fp, inout float lum, inout vec2 g) {
@@ -278,7 +350,9 @@ void main() {
   float tEnd = rd.y > 1e-3 ? min(30., (HTOP + SL - ro.y) / rd.y) : 30.;
   if (tt > 0.) {
     vec3 p = ro + rd * tt;
-    col = figureShade(p, figN(p), rd, tt * pa);
+    figure(p);
+    float mat = gMat;
+    col = figureShade(p, figN(p), rd, tt * pa, mat);
     tEnd = tt;
   } else if (tw < 60.) {
     vec3 p = ro + rd * tw;
@@ -287,22 +361,27 @@ void main() {
     vec3 rp = ripples(p.xz, fp);
     vec3 n = normalize(vec3(-rp.y, 1., -rp.z));
     vec3 rr = reflect(rd, n);
-    // black water, a dark mirror: the figure trembles in it, faint, with the rings
-    vec3 refl = uAccent * .03 * exp(-abs(rr.y) * 40.);
+    // black water, a dark mirror: the horizon's glow, the figure and its screen tremble in it, with the rings
+    vec3 refl = sky(rr) * 1.4;
     vec2 fr = marchFigure(p + n * .002, rr, 12., pa, tw);
     if (fr.x > 0.) {
       vec3 q = p + rr * fr.x;
-      refl = figureShade(q, figN(q), rr, (tw + fr.x) * pa);
+      figure(q);
+      float mat = gMat;
+      refl = figureShade(q, figN(q), rr, (tw + fr.x) * pa, mat);
     } else refl += uInk * .5 * body * contour(fr.y);
+    refl += uInk * screenGlow(p, rr, fr.x > 0. ? fr.x : 20.) * 1.5;
     float fre = pow(1. - clamp(dot(n, -rd), 0., 1.), 5.);
     col = refl * (.3 + .4 * fre);
     col += uInk * rp.x * 1.25 * exp(-tw * .045);
     tEnd = tw;
   }
+  // the night above the horizon
+  if (tt < 0. && tw > 59.) col = sky(rd);
   // the contour of light around the figure, a pixel wide, just outside its silhouette
   if (tt < 0.) col += uInk * .55 * body * contour(fm.y);
-  // the horizon: the faintest line where the water meets the night
-  col += uAccent * .035 * exp(-abs(rd.y) * 70.);
+  // the screen's glow in the rain
+  col += uInk * screenGlow(ro, rd, tEnd);
   col += uInk * rain(ro, rd, tEnd, pa);
   // the scene covers the whole frame: the world's background never shows through the night
   gl_FragColor = vec4(hdrOut(col * 1.1), 1.);
