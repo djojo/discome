@@ -61,6 +61,8 @@ interface ShaderSceneOptions {
    * uCamPos, uCamTarget and uFocal (include CAMERA_GLSL in the fragment).
    */
   camera?: { framings: Framing[]; glideBars?: number };
+  /** A scene moving on its own (not a Flight): how much radial speed blur the compositor applies, 0..1. */
+  motion?: (u: Uniforms) => number;
   update?: (u: Uniforms, frame: AudioFrame, params: ParamValues, dt: number, ctx: SceneCtx) => void;
 }
 
@@ -175,7 +177,7 @@ export function defineShaderScene(opts: ShaderSceneOptions): SceneGLDef {
           renderer.setRenderTarget(target);
           renderer.render(scene, camera);
         },
-        motion: flight ? () => flight.motion : undefined,
+        motion: opts.motion ? () => opts.motion!(uniforms) : flight ? () => flight.motion : undefined,
         describe: flight ? () => flight.describe() : undefined,
         dispose() {
           geometry.dispose();

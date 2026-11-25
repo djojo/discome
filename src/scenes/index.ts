@@ -52,6 +52,8 @@ import { skin } from "./art/skin";
 import { signal } from "./art/signal";
 import { forest } from "./art/forest";
 import { giants } from "./art/giants";
+import { maze } from "./art/maze";
+import { fall } from "./art/fall";
 
 /**
  * The scene library. To add a scene: create a file exporting a SceneDef
@@ -105,6 +107,8 @@ export const SCENES: SceneDef[] = [
   // Mycélium
   forest,
   giants,
+  maze,
+  fall,
   // Classics, recoloured by the worlds' palettes
   halo,
   kaleido,
