@@ -120,7 +120,13 @@ function emptyTexture() {
   return placeholder;
 }
 
-/** Uniforms of one head slot: suffix "" for uHead*, or "B" for a second head (uHeadTexB…). */
+/**
+ * The head slots a scene can load at once: "" (uHead*, HEAD_GLSL), then "B", "C", "D" for more heads at the same
+ * time (uHeadTexB…, headSlotGLSL). Each slot is one 3D texture.
+ */
+export const HEAD_SLOTS = ["", "B", "C", "D"] as const;
+
+/** Uniforms of one head slot: suffix "" for uHead*, or "B", "C", "D" for more heads (uHeadTexB…). */
 export function headUniforms(suffix = "") {
   return {
     [`uHeadTex${suffix}`]: { value: emptyTexture() },
@@ -254,4 +260,17 @@ float headBound(vec3 p) {
   if (uHeadOn > 1.5) return sdBox(p - vec3(uHeadMin.xy + uHeadSize.xy * .5, 0.), vec3(uHeadSize.xy * .5, uHeadRelief.x));
   return sdBox(p - uHeadMin - uHeadSize * .5, uHeadSize * .5);
 }
+`;
+
+/**
+ * GLSL of one more head slot ("B", "C", "D": see HEAD_SLOTS), after HEAD_GLSL: its uniforms (headUniforms(suffix),
+ * pointed at a head with setHead(u, id, suffix)) and headD<suffix>(p), the same field as headD for that slot.
+ */
+export const headSlotGLSL = (suffix: string) => /* glsl */ `
+uniform highp sampler3D uHeadTex${suffix};
+uniform float uHeadOn${suffix};
+uniform vec3 uHeadMin${suffix};
+uniform vec3 uHeadSize${suffix};
+uniform vec2 uHeadRelief${suffix};
+float headD${suffix}(vec3 p) { return headSlot(uHeadTex${suffix}, uHeadOn${suffix}, uHeadMin${suffix}, uHeadSize${suffix}, uHeadRelief${suffix}, p); }
 `;
