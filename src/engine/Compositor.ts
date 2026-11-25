@@ -26,6 +26,8 @@ export interface PostFx {
   fx: FxSettings;
   /** Photosensitivity: dimmer strobe, at most ~3 flashes per second, no inversion. */
   safeFlash: boolean;
+  /** 2 on a track's second drop (and the next ones): the accents hit harder. */
+  dropLevel?: number;
 }
 
 const COPY_FRAG = /* glsl */ `
@@ -128,6 +130,10 @@ export class Compositor {
   private strobeEnv = 0;
   /** The gap before a drop: the image goes dark while the music is silent. */
   private gapEnv = 0;
+  /** The accents: the kick, the claps, a drop's phrase starts. */
+  private kickEnv = 0;
+  private snapEnv = 0;
+  private phraseEnv = 0;
   /** The big moments, for effects that only flare up then (FxSettings.retroOnHits): the drop (falls off linearly, so the
    *  pixels resolve step by step) and the strong kicks (a short flash). */
   private dropHit = 0;
@@ -210,6 +216,8 @@ export class Compositor {
       uPixel: { value: 0 },
       uStrobe: { value: 0 },
       uGap: { value: 0 },
+      uAccentZoom: { value: 0 },
+      uAccentGain: { value: 0 },
       uStrobeMode: { value: 1 },
       uBg: { value: this.black as THREE.Texture },
       uBg2: { value: this.black as THREE.Texture },
@@ -557,6 +565,18 @@ export class Compositor {
     // impact comes out of it
     this.gapEnv = frame.gap ? Math.min(1, this.gapEnv + dt * 30) : Math.max(0, this.gapEnv - dt * 14);
     u.uGap.value = this.gapEnv * (post.safeFlash ? 0.6 : 0.97);
+
+    // The accents, the rhythm on every scene (FxSettings.accents): the frame punches in a little on the kick and
+    // lifts, the claps flicker, the first beat of a drop's phrase hits harder. Full in a drop, light in a groove,
+    // none in a breakdown (and the build has its own push); a second drop harder still.
+    const sectionDose = frame.section === "drop" ? 1 : frame.section === "calm" ? 0.4 : 0;
+    const dose = (fx.accents ?? 0) * sectionDose * ((post.dropLevel ?? 1) >= 2 && frame.section === "drop" ? 1.3 : 1);
+    this.kickEnv = frame.beat ? 1 : this.kickEnv * Math.exp(-dt * 9);
+    this.snapEnv = frame.onset && !frame.beat && frame.mid > 0.5 ? 1 : this.snapEnv * Math.exp(-dt * 16);
+    this.phraseEnv = frame.downbeat && frame.phraseBar === 0 && frame.section === "drop" ? 1 : this.phraseEnv * Math.exp(-dt * 4);
+    const tame = post.safeFlash ? 0.4 : 1;
+    u.uAccentZoom.value = dose * (0.018 * this.kickEnv + 0.03 * this.phraseEnv);
+    u.uAccentGain.value = dose * tame * (0.08 * this.kickEnv + (post.safeFlash ? 0 : 0.06) * this.snapEnv + 0.12 * this.phraseEnv);
     u.uStrobeMode.value = fx.strobe === "invert" && !post.safeFlash ? 2 : 1;
   }
 

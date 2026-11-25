@@ -423,7 +423,7 @@ export default function Visualizer() {
         (id) => params[id] ?? defaultParams(sceneOf(s, id)),
         dt,
         s.layer,
-        { tension: director.tension, fx: fxShown, safeFlash: s.safeFlash },
+        { tension: director.tension, fx: fxShown, safeFlash: s.safeFlash, dropLevel: director.dropLevel },
         {
           opacity: Math.min(1, s.background.opacity * director.bgLevel),
           tint: s.background.tint ? 1 : 0,

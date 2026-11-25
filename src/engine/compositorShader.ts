@@ -45,6 +45,8 @@ uniform float uPoster;
 uniform float uPixel;
 uniform float uStrobe;
 uniform float uGap;
+uniform float uAccentZoom;
+uniform float uAccentGain;
 uniform int uStrobeMode;
 // background (fond)
 uniform sampler2D uBg;
@@ -266,7 +268,8 @@ vec3 hueShift(vec3 c, float deg) {
 void main() {
   // Build-up tension: the frame pushes in on every beat and lifts toward white
   float push = uTension * (0.35 + 0.65 * uBeatPulse);
-  vec2 uv = 0.5 + (vUv - 0.5) * (1.0 - 0.07 * push);
+  // ... and the accents punch it in on the kick
+  vec2 uv = 0.5 + (vUv - 0.5) * (1.0 - 0.07 * push - uAccentZoom);
 
   uv = barrel(uv, uCrt);
   vec2 edge = abs(uv - 0.5) * 2.0;
@@ -335,6 +338,8 @@ void main() {
     else col = mix(col, 1.0 - clamp(col, 0.0, 1.0), step(0.5, uStrobe));
   }
 
+  // The accents lift the light on the kick and the claps
+  col *= 1.0 + uAccentGain;
   // The gap before the drop: the image holds its breath with the music
   col *= 1.0 - uGap;
 

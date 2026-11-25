@@ -28,6 +28,8 @@ export interface FxSettings {
   trails: number;
   /** Glow of light around the highlights (bloom). */
   bloom: number;
+  /** The rhythm on every scene: the frame punches in on the kick, flickers on the claps, hits on a drop's phrases. */
+  accents: number;
   /** Radial blur of travelling scenes, following their speed (nothing at cruise). */
   speedBlur: number;
   /** Strobe on the kicks of a drop. */
@@ -51,6 +53,7 @@ export const NEUTRAL_FX: FxSettings = {
   retroOnHits: false,
   trails: 0,
   bloom: 0,
+  accents: 0.5,
   speedBlur: 0.5,
   strobe: "off",
 };
@@ -62,6 +65,7 @@ export const FX_SLIDERS: { key: NumericFx; label: string; min: number; max: numb
   { key: "chroma", label: "Aberration chromatique", min: 0, max: 1, step: 0.01 },
   { key: "trails", label: "Traînées", min: 0, max: 0.95, step: 0.01 },
   { key: "bloom", label: "Halo lumineux (bloom)", min: 0, max: 1, step: 0.01 },
+  { key: "accents", label: "Accents rythmiques", min: 0, max: 1, step: 0.01 },
   { key: "speedBlur", label: "Flou de vitesse", min: 0, max: 1, step: 0.01 },
   { key: "scanlines", label: "Scanlines", min: 0, max: 1, step: 0.01 },
   { key: "crt", label: "Courbure CRT", min: 0, max: 1, step: 0.01 },
