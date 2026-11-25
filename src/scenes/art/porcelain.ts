@@ -548,7 +548,8 @@ void main() {
   // The heads float: below the cut of the neck they melt into the white of the studio
   if (tt > 0.) col = mix(bgCol, col, smoothstep(NECK - .4, NECK + .02, toHead(ro + rd * tt).y));
   // The glow of the core around the fractal
-  col += iri(uShift + .2) * glow * coreLight * (uOpen + .05) * (1. - .5 * uTitle);
+  // (in the white studio a wide glow only washes the white out: keep it close to the core)
+  col += iri(uShift + .2) * glow * coreLight * (uOpen + .05) * (1. - .5 * uTitle) * .4;
 
   // Sheet of light escaping the seam (build, open)
   if (uLeak > .01) {
