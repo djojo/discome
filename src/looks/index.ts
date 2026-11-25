@@ -76,22 +76,18 @@ export const LOOKS: Look[] = [
   {
     id: "porcelaine",
     name: "Porcelaine",
-    description: "Céramique blanche, lumière de studio, une fente vermillon. Calme et sculptural.",
+    description: "Le seul monde blanc : porcelaine émaillée dans un studio blanc, une fente vermillon, l'or du kintsugi. Calme et sculptural.",
     swatch: ["#121110", "#ECE7DF", "#E5482D"],
     palettes: ["porcelain", "bone"],
     scenes: [
       { id: "porcelain", key: "coquille", label: "Coquille", weight: 3, role: "calm", params: { style: "shell" } },
       { id: "porcelain", key: "eclats", label: "Éclats", weight: 2, role: "drop", params: { style: "shards" } },
       { id: "porcelain", key: "selfie", label: "Selfie", weight: 2, role: "build", params: { style: "shell", frame: "selfie" } },
-      { id: "profile-head", weight: 2, role: "calm", params: { palette: "porcelain" } },
-      { id: "halftone-head", weight: 1, role: "drop", params: { palette: "porcelain" } },
-      { id: "topo-head", label: "Os", weight: 1, role: "build", params: { palette: "bone" } },
+      { id: "kintsugi", weight: 2, role: "calm", params: { palette: "porcelain" } },
+      { id: "series", weight: 2, role: "drop", params: { palette: "porcelain" } },
+      { id: "wheel", weight: 2, role: "build", params: { palette: "porcelain" } },
     ],
-    backgrounds: [
-      { id: "nebula", weight: 2, params: { palette: "bone", trail: 0.92, amount: 0.6, speed: 0.6 } },
-      { id: "echoes", weight: 1, params: { palette: "bone", shape: "circle", zoom: 0.5, spin: 0.3 } },
-    ],
-    bgOpacity: 0.35,
+    // the only white world: its studio fills the frame, no background
     title: {
       id: "porcelain",
       key: "titre",
@@ -99,7 +95,8 @@ export const LOOKS: Look[] = [
       role: "calm",
       params: { head: "titre", titleFont: "didone", titleRelief: "puffy", style: "shards", kintsugi: 0.6 },
     },
-    fx: { grain: 0.18, vignette: 0.45, saturation: 0.9, contrast: 1.05, bloom: 0.3 },
+    // white on white: almost no bloom (it would turn the whole studio milky), a light vignette
+    fx: { grain: 0.1, vignette: 0.18, saturation: 0.95, contrast: 1.05, bloom: 0.04 },
     transitions: { calm: ["fade", "luma", "dive", "screen"], drop: ["flash", "fade"] },
     director: "chill",
   },
@@ -431,7 +428,7 @@ export const LOOKS: Look[] = [
     description: "Les premières scènes et leurs couleurs vives, hors rotation des mondes.",
     swatch: ["#ff3cac", "#a855f7", "#22d3ee"],
     palettes: ["acid", "neon", "sunset", "ocean", "ice", "fire", "chrome", "vhs"],
-    scenes: SCENES.filter((s) => !["porcelain", "metamorphosis", "faithful", "torrent", "panopticon", "collective", "warehouse", "downpour", "race", "mercury-beads", "mercury-wave", "mercury-blend", "mercury-flow", "mercury-melt", "flesh-morph", "flesh-radiolaria", "flesh-jelly", "canyon-cactus", "canyon-spirit", "canyon-vision", "topo-head", "profile-head", "halftone-head", "mercury", "cathedral", "monolith", "canyon-gorge", "canyon-mesas", "arcane-architect", "arcane-nomad", "arcane-prism", "arcane-portal", "arcane-road", "grimoire", "flesh", "flesh-skin", "signal", "museum", "rose", "organ"].includes(s.id)).map((s) => ({ id: s.id, weight: 1 })),
+    scenes: SCENES.filter((s) => !["porcelain", "metamorphosis", "faithful", "torrent", "panopticon", "collective", "warehouse", "downpour", "race", "mercury-beads", "mercury-wave", "mercury-blend", "mercury-flow", "mercury-melt", "flesh-morph", "flesh-radiolaria", "flesh-jelly", "canyon-cactus", "canyon-spirit", "canyon-vision", "topo-head", "profile-head", "halftone-head", "mercury", "cathedral", "monolith", "canyon-gorge", "canyon-mesas", "arcane-architect", "arcane-nomad", "arcane-prism", "arcane-portal", "arcane-road", "grimoire", "flesh", "flesh-skin", "signal", "museum", "rose", "organ", "kintsugi", "series", "wheel"].includes(s.id)).map((s) => ({ id: s.id, weight: 1 })),
     fx: {},
     classic: true,
   },
