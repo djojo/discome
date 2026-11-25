@@ -12,7 +12,7 @@ import { particleBody } from "./3d/humanoid/particleBody";
 import { porcelain } from "./art/porcelain";
 import { metamorphosis } from "./art/metamorphosis";
 import { faithful } from "./art/faithful";
-import { flux } from "./art/flux";
+import { torrent } from "./art/torrent";
 import { panopticon } from "./art/panopticon";
 import { collective } from "./art/collective";
 import { warehouse } from "./art/warehouse";
@@ -86,7 +86,7 @@ export const SCENES: SceneDef[] = [
   flesh,
   skin,
   signal,
-  flux,
+  torrent,
   // Classics, recoloured by the worlds' palettes
   halo,
   kaleido,
