@@ -28,8 +28,12 @@ export interface MusicState {
   /** True on the frame a drop happens (detected or triggered by hand). */
   drop: boolean;
   dropManual: boolean;
-  /** 0..1 while building up. */
+  /** 0..1 while building up (stretched over 16 then 32 bars when the build goes on, never going back). */
   buildProgress: number;
+  /** True while the music falls silent in a build: the gap right before the drop. */
+  gap: boolean;
+  /** 0..1, how full the music is now against the loudest of the track (smoothed over a few bars). */
+  intensity: number;
 }
 
 /** Linear amplitudes (not auto-gained): structure detection needs the real dynamics. */
@@ -59,7 +63,19 @@ export function emptyMusicState(): MusicState {
     drop: false,
     dropManual: false,
     buildProgress: 0,
+    gap: false,
+    intensity: 0,
   };
+}
+
+/**
+ * How far a build has come after `bars` bars: most of the way over its first 8 bars (.9), then a little more over
+ * the next 8 and the 16 after, for the builds that go on. It never goes back.
+ */
+export function buildProgressAt(bars: number) {
+  if (bars <= 8) return 0.9 * (bars / 8);
+  if (bars <= 16) return 0.9 + 0.07 * ((bars - 8) / 8);
+  return Math.min(1, 0.97 + 0.03 * ((bars - 16) / 16));
 }
 
 export class MusicAnalyzer {
@@ -95,6 +111,17 @@ export class MusicAnalyzer {
   private buildTime = 0;
   private breakBass = Infinity;
   private manualDrop = false;
+  // the drop's fast followers (the bass coming back is read within a few hundredths of a second)
+  private bassF = 0;
+  private shareF = 0;
+  // the gap: the build's own level, and how long the music has been silent
+  private buildLevel = 0;
+  private quiet = 0;
+  private gap = false;
+  // the intensity: loudness against the loudest of the track
+  private loud = 0;
+  private loudRef = 1e-6;
+  private intensity = 0;
 
   reset() {
     Object.assign(this, new MusicAnalyzer());
@@ -163,7 +190,9 @@ export class MusicAnalyzer {
     f.phraseBar = this.phraseBar;
     f.section = this.section;
     f.sectionTime = t - this.sectionStart;
-    f.buildProgress = this.section === "build" ? Math.min(1, f.sectionTime / (8 * this.barSeconds)) : 0;
+    f.buildProgress = this.section === "build" ? buildProgressAt(f.sectionTime / this.barSeconds) : 0;
+    f.gap = this.gap;
+    f.intensity = this.intensity;
   }
 
   // ------------------------------------------------------------------ tempo
@@ -238,6 +267,22 @@ export class MusicAnalyzer {
   private setSection(s: Section, t: number) {
     this.section = s;
     this.sectionStart = t;
+    this.gap = false;
+  }
+
+  /**
+   * A breakdown or a build is noticed a while after it began (`late` seconds, the time its detection took). It most
+   * likely began on the downbeat of a phrase: the section's start moves back to the downbeat nearest that moment,
+   * and the phrase counter is set from it, so the director's phrase cuts and the build's progress follow the music.
+   */
+  private startBack(t: number, late: number) {
+    if (this.bpm <= 0) return;
+    const bar = this.barSeconds;
+    // the downbeat of the bar we are in, and how many bars back the section began
+    const thisBar = t - (this.beatInBar + this.phase) * this.period;
+    const back = Math.max(0, Math.round((thisBar - (t - late)) / bar));
+    this.sectionStart = thisBar - back * bar;
+    this.phraseBar = back % 8;
   }
 
   private enterDrop(f: { drop: boolean; dropManual: boolean }, t: number, manual: boolean) {
@@ -264,7 +309,15 @@ export class MusicAnalyzer {
     this.bassRef = Math.max(this.bassM, this.bassRef * Math.exp(-dt / 40));
     this.shareS = ema(this.shareS, share, dt, 0.2);
     this.shareM = ema(this.shareM, share, dt, 1.5);
+    // (fast, not instant: a stray kick in a build must not pass for the drop)
+    this.bassF = ema(this.bassF, lv.bass, dt, 0.08);
+    this.shareF = ema(this.shareF, share, dt, 0.1);
     this.trebM = ema(this.trebM, lv.treble, dt, 1);
+    // the intensity: the music's level against the loudest stretch of the track (slowly forgotten)
+    const level = lv.bass + lv.mid + lv.treble;
+    this.loud = ema(this.loud, level, dt, 0.5);
+    this.loudRef = Math.max(this.loud, this.loudRef * Math.exp(-dt / 90));
+    this.intensity = ema(this.intensity, Math.min(1, this.loud / this.loudRef), dt, 2 * this.barSeconds);
     this.trebL = ema(this.trebL, lv.treble, dt, 8);
     const rate = f.onset ? 1 / Math.max(dt, 1e-3) : 0;
     this.onsetRate = ema(this.onsetRate, rate, dt, 1.5);
@@ -278,6 +331,8 @@ export class MusicAnalyzer {
     if (this.section === "calm" || this.section === "drop") {
       if (this.lowTime > bar) {
         this.setSection("breakdown", t);
+        // (the bass had been fading for a second before it counted as low)
+        this.startBack(t, this.lowTime + 1.2);
         this.breakBass = this.bassM;
         this.buildTime = 0;
         // New baselines: a build is "rising" relative to the breakdown, not to the groove's hi-hats.
@@ -293,10 +348,23 @@ export class MusicAnalyzer {
     this.breakBass = Math.min(this.breakBass, this.bassM);
     const rising = this.trebM > 1.3 * this.trebL || this.onsetRate > 1.4 * Math.max(this.onsetRateL, 0.5);
     this.buildTime = rising ? this.buildTime + dt : Math.max(0, this.buildTime - dt * 0.5);
-    if (this.section === "breakdown" && this.buildTime > 0.75 * bar) this.setSection("build", t);
+    if (this.section === "breakdown" && this.buildTime > 0.75 * bar) {
+      this.setSection("build", t);
+      // (the rise had been building for about a second before it counted)
+      this.startBack(t, this.buildTime + 1.1);
+      this.buildLevel = level;
+    }
+    // the gap: in a build, the music suddenly falls silent (most often the beat right before the drop)
+    if (this.section === "build") {
+      this.buildLevel = Math.max(level, this.buildLevel * Math.exp(-dt / 2));
+      this.quiet = level < 0.2 * this.buildLevel ? this.quiet + dt : 0;
+      if (this.quiet > 0.05) this.gap = true;
+      else if (level > 0.45 * this.buildLevel) this.gap = false;
+    }
 
     const longEnough = t - this.sectionStart > (this.section === "build" ? 0 : 2 * bar);
-    const bassBack = this.bassS > Math.max(3 * this.breakBass, 0.4 * this.bassRef) && this.shareS > 0.2;
+    // (read on the fast followers: the drop lands as soon as the bass is back, not a fifth of a second later)
+    const bassBack = this.bassF > Math.max(3 * this.breakBass, 0.4 * this.bassRef) && this.shareF > 0.2;
     if (longEnough && bassBack) this.enterDrop(f, t, false);
     else if (this.highTime > 2 * bar) this.setSection("calm", t); // bass crept back without a real drop
   }

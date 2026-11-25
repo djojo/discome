@@ -44,6 +44,7 @@ uniform float uMirror;
 uniform float uPoster;
 uniform float uPixel;
 uniform float uStrobe;
+uniform float uGap;
 uniform int uStrobeMode;
 // background (fond)
 uniform sampler2D uBg;
@@ -333,6 +334,9 @@ void main() {
     if (uStrobeMode == 1) col = mix(col, vec3(1.0), uStrobe);
     else col = mix(col, 1.0 - clamp(col, 0.0, 1.0), step(0.5, uStrobe));
   }
+
+  // The gap before the drop: the image holds its breath with the music
+  col *= 1.0 - uGap;
 
   // The night's signature, after the grade: it stays the same in every world
   if (uSigOn > 0.001) {

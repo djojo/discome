@@ -33,7 +33,15 @@ export interface TransitionSpec {
   type: TransitionId;
   /** Seconds. 0 = instant. */
   duration: number;
+  /** Where it starts (0..1 of its course): a drop starts at its accent, so the hit is on screen at once. */
+  from?: number;
 }
+
+/**
+ * Where a short transition hits (0..1 of its course): the punch's white hit, the flash's white, the glitch's flip.
+ * The director starts it that much ahead of the downbeat, so the hit lands on the 1.
+ */
+export const TRANSITION_ACCENT: Partial<Record<TransitionId, number>> = { punch: 0.3, glitch: 0.5, flash: 0.5 };
 
 export interface LayerSettings {
   sceneId: string | null;

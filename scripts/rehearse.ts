@@ -7,7 +7,9 @@
  *   node --experimental-transform-types --no-warnings --import ./scripts/ts-register.mjs scripts/rehearse.ts [world] [-v]
  */
 import { Director, dropHoldBars, type DirectorContext, type DirectorMode } from "@/engine/Director";
+import { TRANSITION_ACCENT, type TransitionId } from "@/engine/transitions";
 import type { AudioFrame } from "@/lib/audio/AudioEngine";
+import { buildProgressAt } from "@/lib/audio/MusicAnalyzer";
 import { directorPlans, LOOKS } from "@/looks";
 import { Cadrage, type Framing } from "@/scenes/art/camera";
 
@@ -44,6 +46,8 @@ interface Cut {
   type: string;
   dur: number;
   dropIndex: number;
+  /** When its hit is on screen (its accent, or its start for a fade). */
+  hit: number;
 }
 
 function frameAt(t: number, prevBeat: number, f: AudioFrame): AudioFrame {
@@ -76,7 +80,7 @@ function frameAt(t: number, prevBeat: number, f: AudioFrame): AudioFrame {
   f.sectionTime = sectionTime;
   f.drop = seg.section === "drop" && tick && bar === start && beatIndex % 4 === 0;
   f.dropManual = false;
-  f.buildProgress = seg.section === "build" ? Math.min(1, sectionTime / (8 * BAR)) : 0;
+  f.buildProgress = seg.section === "build" ? buildProgressAt(sectionTime / BAR) : 0;
   f.beat = tick && kick && !gap;
   f.onset = Math.floor(beats * 2) !== Math.floor((t - DT) / BEAT * 2) && !gap;
   f.beatPulse = f.beat ? 1 : f.beatPulse * Math.exp(-DT * 8);
@@ -85,7 +89,9 @@ function frameAt(t: number, prevBeat: number, f: AudioFrame): AudioFrame {
   f.bass = gap ? 0 : kick ? 0.8 : 0.2;
   f.volume = gap ? 0.02 : seg.section === "breakdown" ? 0.35 : 0.75;
   f.active = true;
-  (f as unknown as { gap: boolean }).gap = gap;
+  f.gap = gap;
+  // the intro is quiet, the grooves full
+  f.intensity = bar < 16 ? 0.3 : seg.section === "breakdown" ? 0.35 : seg.section === "build" ? 0.6 : 0.9;
   return f;
 }
 
@@ -124,6 +130,8 @@ function emptyFrame(): AudioFrame {
     drop: false,
     dropManual: false,
     buildProgress: 0,
+    gap: false,
+    intensity: 0,
   };
 }
 
@@ -181,6 +189,7 @@ for (const look of LOOKS) {
         type: d.transition.type,
         dur: d.transition.duration / BEAT,
         dropIndex: drops,
+        hit: t + Math.max(0, (TRANSITION_ACCENT[d.transition.type as TransitionId] ?? 0) - (d.transition.from ?? 0)) * d.transition.duration,
       });
       current = d.sceneId;
       transEnd = t + d.transition.duration;
@@ -209,21 +218,25 @@ for (const look of LOOKS) {
   if (verbose) {
     for (const c of cuts) {
       const short = c.to.split(":")[1];
-      console.log(`  ${fmt(c.bar, c.beat)} ${c.section.padEnd(9)} → ${short.padEnd(16)} [${role.get(c.to)}] ${c.type} ${c.dur.toFixed(2)} t.`);
+      const hb = Math.round(c.hit / BEAT);
+      console.log(`  ${fmt(Math.floor(hb / 4), hb % 4)} ${c.section.padEnd(9)} → ${short.padEnd(16)} [${role.get(c.to)}] ${c.type} ${c.dur.toFixed(2)} t.${c.hit > c.t + 1e-3 ? ` (lancée ${((c.hit - c.t) / BEAT).toFixed(2)} t. avant)` : ""}`);
     }
   }
 
   // ---- the rules
   const problems: string[] = [];
-  // a cut decided on the beat (the frame where the clock crossed it)
-  const offBeat = cuts.filter((c) => c.phase > DT / BEAT + 1e-6);
-  if (offBeat.length) problems.push(`${offBeat.length} coupe(s) hors du temps`);
+  // every cut hits on the beat (its accent, for the short transitions started ahead of the 1)
+  const offBeat = cuts.filter((c) => {
+    const b = c.hit / BEAT;
+    return Math.abs(b - Math.round(b)) > (1.5 * DT) / BEAT;
+  });
+  if (offBeat.length) problems.push(`${offBeat.length} coupe(s) qui ne frappent pas sur le temps`);
   // plans held as long as their story: no cut of the scene in the first bars after a drop
   const hold = dropHoldBars(mode);
   for (const c of cuts.filter((x) => x.section === "drop" && x.type !== "fade")) {
     const dropCut = cuts.find((x) => x.dropIndex === c.dropIndex && x.section === "drop");
-    if (dropCut && c !== dropCut && c.t - dropCut.t < hold * BAR - 1e-3) {
-      problems.push(`drop ${c.dropIndex} : coupé après ${((c.t - dropCut.t) / BAR).toFixed(1)} mes. (tenue ${hold})`);
+    if (dropCut && c !== dropCut && c.hit - dropCut.hit < hold * BAR - 1e-3) {
+      problems.push(`drop ${c.dropIndex} : coupé après ${((c.hit - dropCut.hit) / BAR).toFixed(1)} mes. (tenue ${hold})`);
       break;
     }
   }

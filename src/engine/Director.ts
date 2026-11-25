@@ -15,7 +15,7 @@ export interface DirectorPlan {
 }
 import { paletteOptions } from "@/scenes/palettes";
 import type { BrandFrequency } from "@/brand/brand";
-import type { TransitionId, TransitionSpec } from "./transitions";
+import { TRANSITION_ACCENT, type TransitionId, type TransitionSpec } from "./transitions";
 
 export const DIRECTOR_MODES = [
   { id: "manual", label: "Manuel", hint: "Tu choisis les scènes (Espace déclenche quand même un drop)." },
@@ -133,6 +133,9 @@ export interface Decision {
 
 const pickOne = <T>(xs: readonly T[]): T => xs[Math.floor(Math.random() * xs.length)];
 
+/** A transition started at its hit: for the cuts decided on the beat itself (a drop, a burst), the hit is on it. */
+const onHit = (type: TransitionId, duration: number): TransitionSpec => ({ type, duration, from: TRANSITION_ACCENT[type] ?? 0 });
+
 /** What a cut is for: a moment of the track (see Director.cast). */
 type Casting = "calm" | "build" | "drop" | "dropAfter" | "breakdown";
 
@@ -155,6 +158,8 @@ export class Director {
   private history: string[] = [];
   private plannedDrop: string | null = null;
   private plannedNext: string | null = null;
+  /** The transition of the next regular cut, picked ahead: a short one starts before the downbeat. */
+  private plannedType: TransitionId | null = null;
   private lastCutTime = 0;
   private now = 0;
   /** No scene cut before this beat: the drop plan's story plays out (its camera montage carries the rhythm). */
@@ -324,7 +329,7 @@ export class Director {
       if (this.titleDue(ctx) || (often && ctx.currentId !== ctx.title.key)) {
         this.plannedDrop = null;
         const type = pickOne(pacing.dropTransitions);
-        const d = this.cut(ctx, ctx.title.key, { type, duration: (SNAP_BEATS[type] ?? 1) * beat });
+        const d = this.cut(ctx, ctx.title.key, onHit(type, (SNAP_BEATS[type] ?? 1) * beat));
         this.noteTitle();
         return d;
       }
@@ -343,7 +348,7 @@ export class Director {
       const id = this.plannedDrop && this.plannedDrop !== ctx.currentId ? this.plannedDrop : this.cast(ctx, "drop");
       this.plannedDrop = null;
       const type = pickOne(pacing.dropTransitions);
-      return this.cut(ctx, id, { type, duration: (SNAP_BEATS[type] ?? 1) * beat });
+      return this.cut(ctx, id, onHit(type, (SNAP_BEATS[type] ?? 1) * beat));
     }
     if (!auto) return null;
     if (f.downbeat && f.phraseBar === 0) this.phrasesInWorld++;
@@ -353,6 +358,7 @@ export class Director {
     if (f.section !== this.lastSection) {
       this.lastSection = f.section;
       this.plannedNext = null;
+      this.plannedType = null;
       // A breakdown is the natural moment to change worlds (not too often though)
       if (f.section === "breakdown" && cycle === "breakdown" && this.phrasesInWorld >= 2) {
         return { changeWorld: true };
@@ -381,7 +387,7 @@ export class Director {
       const every = p.burstFrenzy && this.beats - this.burstStart < 4 ? 1 : p.burstEvery;
       if (this.beats - this.lastCutBeat >= every) {
         const type = pickOne(p.burstTransitions);
-        return this.cut(ctx, this.cast(ctx, "dropAfter"), { type, duration: (SNAP_BEATS[type] ?? 0.5) * beat });
+        return this.cut(ctx, this.cast(ctx, "dropAfter"), onHit(type, (SNAP_BEATS[type] ?? 0.5) * beat));
       }
       return null;
     }
@@ -394,7 +400,8 @@ export class Director {
       const id = this.plannedBuild && this.plannedBuild !== ctx.currentId ? this.plannedBuild : this.cast(ctx, "build");
       this.plannedBuild = null;
       if (this.roleOf(ctx, id) !== "build") return null;
-      return this.cut(ctx, id, { type: pickOne(pacing.calmTransitions), duration: Math.min(4, pacing.calmBeats) * beat });
+      const type = pickOne(pacing.calmTransitions);
+      return this.cut(ctx, id, onHit(type, Math.min(4, pacing.calmBeats) * beat));
     }
     // ---- The breakdown: get a build plan ready
     if (f.section === "breakdown" && !this.plannedBuild && f.downbeat) {
@@ -411,33 +418,55 @@ export class Director {
       if (this.phrasesInWorld >= every) return { changeWorld: true };
     }
 
-    // ---- Regular cuts, on half-phrase boundaries
+    // ---- Regular cuts, on (half) phrase boundaries. Each is looked at for the coming downbeat: a short transition
+    // starts ahead of it, so its hit lands on the 1; a long one starts on the 1.
     if (f.bpm > 0) {
-      if (!f.downbeat) return null;
-      const bars = (this.beats - this.lastCutBeat) / 4;
       const inDrop = f.section === "drop";
       const kind: Casting = f.section === "breakdown" ? "breakdown" : inDrop ? "dropAfter" : "calm";
-      const every = inDrop ? pacing.dropBars : pacing.calmBars;
+      // a quiet stretch (an intro) holds its plans twice as long; a breakdown holds its plan (a build comes next)
+      const every = inDrop
+        ? pacing.dropBars
+        : f.section === "breakdown"
+          ? Math.max(16, pacing.calmBars)
+          : pacing.calmBars * (f.section === "calm" && f.intensity < 0.45 ? 2 : 1);
       // whole phrases in Chill, half phrases otherwise
-      const aligned = inDrop ? true : f.phraseBar % (ctx.mode === "chill" ? 8 : 4) === 0;
-      if (bars >= every && aligned) {
+      const align = inDrop ? 1 : ctx.mode === "chill" ? 8 : 4;
+      const ahead = f.downbeat ? 0 : 4 - f.beatInBar;
+      const beatsAt = this.beats + ahead;
+      const bars = (beatsAt - this.lastCutBeat) / 4;
+      const phraseAt = f.downbeat ? f.phraseBar : (f.phraseBar + 1) % 8;
+      const toNext = f.downbeat ? 0 : (ahead - f.beatPhase) * beat;
+      if (bars >= every && phraseAt % align === 0) {
         // No drop came to show the title: the next regular cut does, once the world has settled
         if (ctx.title && this.titleDue(ctx) && this.phrasesInWorld >= 4 && !inDrop) {
+          if (!f.downbeat) return null;
           this.plannedNext = null;
-          const d = this.cut(ctx, ctx.title.key, { type: pickOne(pacing.calmTransitions), duration: pacing.calmBeats * beat });
+          this.plannedType = null;
+          const type = pickOne(pacing.calmTransitions);
+          const d = this.cut(ctx, ctx.title.key, onHit(type, pacing.calmBeats * beat));
           this.noteTitle();
           return d;
         }
-        const id = this.plannedNext && this.plannedNext !== ctx.currentId ? this.plannedNext : this.cast(ctx, kind);
-        this.plannedNext = null;
-        if (inDrop) {
-          const type = pickOne(pacing.burstTransitions);
-          return this.cut(ctx, id, { type, duration: (SNAP_BEATS[type] ?? 1) * beat });
+        const type = this.plannedType ?? pickOne(inDrop ? pacing.burstTransitions : pacing.calmTransitions);
+        const dur = (inDrop ? (SNAP_BEATS[type] ?? 1) : pacing.calmBeats) * beat;
+        const lead = (TRANSITION_ACCENT[type] ?? 0) * dur;
+        // a long transition on the downbeat; a short one as soon as it is within its lead of it (on the downbeat
+        // itself, had it been missed, it starts at its hit)
+        if (f.downbeat || (lead > 0 && toNext <= lead)) {
+          const id = this.plannedNext && this.plannedNext !== ctx.currentId ? this.plannedNext : this.cast(ctx, kind);
+          this.plannedNext = null;
+          this.plannedType = null;
+          const d = this.cut(ctx, id, f.downbeat ? onHit(type, dur) : { type, duration: dur });
+          // (counted from the downbeat it lands on)
+          this.lastCutBeat = beatsAt;
+          return d;
         }
-        return this.cut(ctx, id, { type: pickOne(pacing.calmTransitions), duration: pacing.calmBeats * beat });
+        if (!this.plannedType) this.plannedType = type;
+        return null;
       }
       if (bars >= every - 2 && !this.plannedNext) {
         this.plannedNext = this.cast(ctx, kind);
+        this.plannedType = pickOne(inDrop ? pacing.burstTransitions : pacing.calmTransitions);
         return { preload: this.plannedNext };
       }
       return null;

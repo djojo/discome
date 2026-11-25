@@ -126,6 +126,8 @@ export class Compositor {
   private elapsed = 0;
   private time = 0;
   private strobeEnv = 0;
+  /** The gap before a drop: the image goes dark while the music is silent. */
+  private gapEnv = 0;
   /** The big moments, for effects that only flare up then (FxSettings.retroOnHits): the drop (falls off linearly, so the
    *  pixels resolve step by step) and the strong kicks (a short flash). */
   private dropHit = 0;
@@ -207,6 +209,7 @@ export class Compositor {
       uPoster: { value: 0 },
       uPixel: { value: 0 },
       uStrobe: { value: 0 },
+      uGap: { value: 0 },
       uStrobeMode: { value: 1 },
       uBg: { value: this.black as THREE.Texture },
       uBg2: { value: this.black as THREE.Texture },
@@ -374,7 +377,7 @@ export class Compositor {
     }
     this.next = slot;
     this.transition = t;
-    this.elapsed = 0;
+    this.elapsed = (t.from ?? 0) * t.duration;
   }
 
   /**
@@ -550,6 +553,10 @@ export class Compositor {
     }
     this.strobeEnv *= Math.exp(-dt * 18);
     u.uStrobe.value = this.strobeEnv * (post.safeFlash ? 0.35 : 0.85);
+    // The gap before the drop: black while the music holds its breath (only dimmed with flashes tamed), the drop's
+    // impact comes out of it
+    this.gapEnv = frame.gap ? Math.min(1, this.gapEnv + dt * 30) : Math.max(0, this.gapEnv - dt * 14);
+    u.uGap.value = this.gapEnv * (post.safeFlash ? 0.6 : 0.97);
     u.uStrobeMode.value = fx.strobe === "invert" && !post.safeFlash ? 2 : 1;
   }
 
