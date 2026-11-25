@@ -35,8 +35,27 @@ void main() {
 interface Performer {
   group: THREE.Group;
   main: Dancer;
+  /** Depth-only copy of the main body (see depthTwin). */
+  twin: THREE.SkinnedMesh;
   echoes: Dancer[];
   phase: number;
+}
+
+/**
+ * A depth-only copy of a skinned body, on the same skeleton, drawn before the glow: the additive hologram then
+ * lights only the body's front surface, instead of every hair card and fold stacked behind it adding up into a
+ * white blob (the head, the trouser cuffs). Echoes behind the body are hidden too: only where they leave its
+ * silhouette do they trail.
+ */
+function depthTwin(mesh: THREE.SkinnedMesh, mat: THREE.Material) {
+  const twin = new THREE.SkinnedMesh(mesh.geometry, mat);
+  twin.bind(mesh.skeleton, mesh.bindMatrix);
+  twin.position.copy(mesh.position);
+  twin.quaternion.copy(mesh.quaternion);
+  twin.scale.copy(mesh.scale);
+  twin.frustumCulled = false;
+  mesh.parent?.add(twin);
+  return twin;
 }
 
 const ECHO_OPACITY = [0.5, 0.32, 0.2, 0.12];
@@ -78,6 +97,14 @@ export const dancer: SceneGLDef = {
     const psyche = createPsycheBody(uniforms);
     const wire = createWireBody();
     const echoMats = ECHO_OPACITY.map((o) => createGlowBody(uniforms, o));
+    // (pushed back a hair, so the glow drawn on the very same surface still passes the depth test)
+    const depthMat = new THREE.MeshBasicMaterial({
+      colorWrite: false,
+      side: THREE.DoubleSide,
+      polygonOffset: true,
+      polygonOffsetFactor: 1,
+      polygonOffsetUnits: 4,
+    });
     let chrome: THREE.MeshPhysicalMaterial | null = null;
 
     // Coloured lights for the chrome look (the environment does the rest)
@@ -108,6 +135,7 @@ export const dancer: SceneGLDef = {
     const disposePerformers = (list: Performer[]) => {
       for (const p of list) {
         scene.remove(p.group);
+        p.twin.removeFromParent();
         p.main.dispose();
         p.echoes.forEach((e) => e.dispose());
       }
@@ -121,6 +149,7 @@ export const dancer: SceneGLDef = {
       try {
         for (let i = 0; i < count; i++) {
           const main = await createDancer();
+          uniforms.uHeadBone.value = main.mesh.skeleton.bones.findIndex((bone) => /Head$/.test(bone.name));
           const echoes: Dancer[] = [];
           for (let k = 0; k < echoCount; k++) echoes.push(await createDancer());
           const group = new THREE.Group();
@@ -133,7 +162,7 @@ export const dancer: SceneGLDef = {
             group.position.set(Math.sin(a) * 1.8, 0, Math.cos(a) * 1.8);
             group.rotation.y = a;
           }
-          next.push({ group, main, echoes, phase: formation === "circle" ? i * 0.35 : 0 });
+          next.push({ group, main, twin: depthTwin(main.mesh, depthMat), echoes, phase: formation === "circle" ? i * 0.35 : 0 });
         }
       } catch (e) {
         console.warn("Danseuse : modèle indisponible", e);
@@ -230,6 +259,7 @@ export const dancer: SceneGLDef = {
         psyche.dispose();
         wire.dispose();
         echoMats.forEach((m) => m.dispose());
+        depthMat.dispose();
         chrome?.dispose();
         env.dispose();
         floorGeo.dispose();

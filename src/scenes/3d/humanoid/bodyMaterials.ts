@@ -6,10 +6,18 @@ import { PALETTE_GLSL, paletteUniforms } from "../../palettes";
 const BODY_VERT = /* glsl */ `
 #include <common>
 #include <skinning_pars_vertex>
+uniform float uHeadBone;
 varying vec3 vN;
 varying vec3 vView;
 varying vec3 vWorld;
+varying float vHead;
 void main() {
+  // how much the vertex follows the head (its hair, crinkled, catches far more rim light than the body)
+  #ifdef USE_SKINNING
+  vHead = dot(skinWeight, vec4(equal(skinIndex, vec4(uHeadBone))) + vec4(equal(skinIndex, vec4(uHeadBone + 1.0))));
+  #else
+  vHead = 0.0;
+  #endif
   #include <beginnormal_vertex>
   #include <skinbase_vertex>
   #include <skinnormal_vertex>
@@ -34,6 +42,7 @@ uniform float uMode;
 varying vec3 vN;
 varying vec3 vView;
 varying vec3 vWorld;
+varying float vHead;
 ${PALETTE_GLSL}
 void main() {
   float fres = pow(1.0 - abs(dot(normalize(vN), normalize(vView))), 2.0);
@@ -43,7 +52,9 @@ void main() {
     float scan = 0.55 + 0.45 * sin(vWorld.y * 90.0 - uTime * 8.0);
     float sweep = 1.0 - smoothstep(0.0, 0.06, abs(fract(vWorld.y * 0.45 - uTime * 0.4) - 0.5));
     vec3 c = pal(vWorld.y * 0.35 + uTime * 0.05);
-    col = c * ((0.05 + fres * 0.8) * scan + sweep * (0.25 + uBeat * 0.5));
+    // (only the front surface lights: see the dancer's depth twin)
+    col = c * ((0.12 + fres * 1.5) * scan + sweep * (0.4 + uBeat * 0.7));
+    col *= 1.0 - 0.65 * clamp(vHead, 0.0, 1.0);
   } else {
     // Psychedelic skin: interfering waves of colour flowing over the body
     float n = sin(vWorld.x * 9.0 + uTime * 1.3) + sin(vWorld.y * 7.0 - uTime * 1.7)
@@ -71,6 +82,8 @@ export function createBodyUniforms() {
     uTime: { value: 0 },
     uBeat: { value: 0 },
     uBass: { value: 0 },
+    /** The head's bone in the skeleton (the next one is its tip): see BODY_VERT. */
+    uHeadBone: { value: -1 },
     ...paletteUniforms(),
   };
 }
