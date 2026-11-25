@@ -7,7 +7,7 @@ import { kaleido } from "./shader/kaleido";
 import { orb } from "./3d/orb";
 import { terrain } from "./3d/terrain";
 import { dancer } from "./3d/humanoid/dancer";
-import { android } from "./3d/humanoid/android";
+import { android } from "./art/android";
 import { particleBody } from "./3d/humanoid/particleBody";
 import { porcelain } from "./art/porcelain";
 import { metamorphosis } from "./art/metamorphosis";
