@@ -110,10 +110,11 @@ vec4 ${name}(vec3 ro, vec3 rd, float ts, float sc) {
     vec3 e = sk * skin * .7 + vn * vein * .35 + vn * curtains * .55 * gAuroraCurtains + mix(vec3(.15, .5, .45), sk, .5) * inside * gAuroraCore;
     // the kick: a wave of light rising through it; the build: brighter; the drop: ablaze from within
     float wave = exp(-pow((h.y + 1. - gAuroraKick * 2.4) * 2.6, 2.)) * exp(-gAuroraKick * 1.3);
-    e *= 1. + .8 * gAuroraCharge + 2.5 * wave;
+    e *= 1. + .8 * gAuroraCharge + 1.6 * wave;
     e += sk * inside * gAuroraBlaze * .5;
     acc += tr * e * stepL / sc;
-    tr *= exp(-stepL / sc * (inside * .2 + skin * .4));
+    // (the far side gives less: a thick form, seen through its length, does not burn white)
+    tr *= exp(-stepL / sc * (inside * .5 + skin * .4));
     t += stepL;
   }
   return vec4(acc, tr);
