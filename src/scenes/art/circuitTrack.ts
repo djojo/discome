@@ -53,7 +53,6 @@ export function trackRoll(s: number) {
 
 /** A racer's weave across its lane at s. */
 export const weave = (s: number, phase: number) => 0.8 * Math.sin(WEAVE_N * K * s + phase);
-const weaveD = (s: number, phase: number) => 0.8 * WEAVE_N * K * Math.cos(WEAVE_N * K * s + phase);
 
 /**
  * The drop's leap: the track sinks away ahead (a bell DIP metres deep between start and start + len), while everything
@@ -155,7 +154,7 @@ interface Racer {
 }
 
 /** Racers drawn at most (uniform arrays). */
-export const PACK_MAX = 10;
+export const PACK_MAX = 12;
 /** Points along each light trail (3 segments). */
 export const TRAIL_PTS = 4;
 
@@ -165,29 +164,77 @@ const hashF = (n: number) => {
 };
 
 /**
- * The pack around the camera: each racer keeps its lane and weaves across it, drifts ahead and falls back on its own
- * slow clock (some pass the camera now and then), and leaves two trails of light behind its pods. The CPU places
- * them on the track (world positions, frames, trail points) for the shader.
+ * The racers as the shader reads them (world, relative to the lap origin): position (w: colour index, < 0 = not
+ * drawn), right, up, forward, and their two trails (TRAIL_PTS points per pod).
  */
-export class Pack {
-  private racers: Racer[] = [];
-  /** World uniforms: position (w: colour index, < 0 = not drawn), right, up, forward. */
+export class Racers {
   readonly pos = Array.from({ length: PACK_MAX }, () => new THREE.Vector4(0, 0, 0, -1));
   readonly right = Array.from({ length: PACK_MAX }, () => new THREE.Vector3());
   readonly up = Array.from({ length: PACK_MAX }, () => new THREE.Vector3());
   readonly fwd = Array.from({ length: PACK_MAX }, () => new THREE.Vector3());
-  /** The trails: TRAIL_PTS points per pod, left pods then right pods. */
   readonly trailL = Array.from({ length: PACK_MAX * TRAIL_PTS }, () => new THREE.Vector3());
   readonly trailR = Array.from({ length: PACK_MAX * TRAIL_PTS }, () => new THREE.Vector3());
   private frame: TrackFrame = { pos: new THREE.Vector3(), right: new THREE.Vector3(), up: new THREE.Vector3(), fwd: new THREE.Vector3() };
   private tmp = new THREE.Vector3();
 
+  hide(i: number) {
+    this.pos[i].w = -1;
+  }
+
+  /**
+   * Place racer i at s on the track: `xAt(s)` its line across the track (where it is, and where it was: its trails
+   * follow it), `lift` above its hover height, its trails reaching back `trail` metres but never before `from`.
+   */
+  place(i: number, s: number, s0: number, xAt: (s: number) => number, lift: number, colour: number, trail: number, leap: Leap | null, from = -Infinity) {
+    const x = xAt(s);
+    const f = trackFrame(s, s0, this.frame);
+    trackPoint(s, s0, x, HOVER + lift, leap, this.tmp);
+    this.pos[i].set(this.tmp.x, this.tmp.y, this.tmp.z, colour);
+    // turned along its line
+    const yaw = Math.atan(xAt(s + 0.5) - xAt(s - 0.5));
+    const c = Math.cos(yaw);
+    const sn = Math.sin(yaw);
+    this.fwd[i].copy(f.fwd).multiplyScalar(c).addScaledVector(f.right, sn).normalize();
+    this.up[i].copy(f.up);
+    this.right[i].crossVectors(this.fwd[i], this.up[i]).normalize();
+    // its trails: points behind it, along the track (where it was), from the pods
+    const tail = Math.max(0, Math.min(trail, s - 1.05 - from));
+    for (let k = 0; k < TRAIL_PTS; k++) {
+      const ts = s - 1.05 - (tail * k) / (TRAIL_PTS - 1);
+      const tx = xAt(ts);
+      trackPoint(ts, s0, tx - 0.46, HOVER + 0.12, leap, this.trailL[i * TRAIL_PTS + k]);
+      trackPoint(ts, s0, tx + 0.46, HOVER + 0.12, leap, this.trailR[i * TRAIL_PTS + k]);
+    }
+  }
+
+  /** The racers' uniforms. */
+  uniforms() {
+    return {
+      uRacerP: { value: this.pos },
+      uRacerR: { value: this.right },
+      uRacerU: { value: this.up },
+      uRacerF: { value: this.fwd },
+      uTrailL: { value: this.trailL },
+      uTrailR: { value: this.trailR },
+    };
+  }
+}
+
+/**
+ * The pack around the camera: each racer keeps its lane and weaves across it, drifts ahead and falls back on its own
+ * slow clock (some pass the camera now and then), and leaves two trails of light behind its pods. The CPU places
+ * them on the track (world positions, frames, trail points) for the shader.
+ */
+export class Pack extends Racers {
+  private racers: Racer[] = [];
+
   constructor(seed = Math.random() * 100) {
+    super();
     this.reseed(seed);
   }
 
   reseed(seed: number) {
-    const lanes = [-2.7, 2.7, -0.9, 0.9, -1.8, 1.8, 0, -2.7, 2.7, 0.9];
+    const lanes = [-2.7, 2.7, -0.9, 0.9, -1.8, 1.8, 0, -2.7, 2.7, 0.9, -0.9, 1.8];
     this.racers = lanes.map((lane, i) => {
       const h = hashF(seed + i * 7.3);
       return {
@@ -213,40 +260,11 @@ export class Pack {
       r.clock += dt * r.rate;
       r.ahead = (r.base + r.swing * Math.sin(r.clock)) * spread;
       if (i >= count) {
-        this.pos[i].w = -1;
+        this.hide(i);
         continue;
       }
-      const rs = s + r.ahead;
-      const x = r.lane + weave(rs, r.phase);
       const bob = 0.04 * Math.sin(time * (2.1 + i * 0.37) + i);
-      const f = trackFrame(rs, s0, this.frame);
-      trackPoint(rs, s0, x, HOVER + bob, leap, this.tmp);
-      this.pos[i].set(this.tmp.x, this.tmp.y, this.tmp.z, r.colour);
-      // turned along its weave
-      const yaw = Math.atan(weaveD(rs, r.phase));
-      const c = Math.cos(yaw);
-      const sn = Math.sin(yaw);
-      this.fwd[i].copy(f.fwd).multiplyScalar(c).addScaledVector(f.right, sn).normalize();
-      this.up[i].copy(f.up);
-      this.right[i].crossVectors(this.fwd[i], this.up[i]).normalize();
-      // its trails: points behind it, along the track (where it was), from the pods
-      for (let k = 0; k < TRAIL_PTS; k++) {
-        const ts = rs - 1.05 - (trail * k) / (TRAIL_PTS - 1);
-        const tx = r.lane + weave(ts, r.phase);
-        const y = HOVER + 0.13;
-        trackPoint(ts, s0, tx - 0.42, y, leap, this.trailL[i * TRAIL_PTS + k]);
-        trackPoint(ts, s0, tx + 0.42, y, leap, this.trailR[i * TRAIL_PTS + k]);
-      }
+      this.place(i, s + r.ahead, s0, (x) => r.lane + weave(x, r.phase), bob, r.colour, trail, leap);
     }
   }
 }
-
-/** The pack's uniforms (see Pack). */
-export const packUniforms = (pack: Pack) => ({
-  uRacerP: { value: pack.pos },
-  uRacerR: { value: pack.right },
-  uRacerU: { value: pack.up },
-  uRacerF: { value: pack.fwd },
-  uTrailL: { value: pack.trailL },
-  uTrailR: { value: pack.trailR },
-});

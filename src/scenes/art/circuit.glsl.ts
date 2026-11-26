@@ -115,50 +115,58 @@ vec3 glassEnv(vec3 rd) { return nightSky(rd); }
 /** Schlick's Fresnel for glass. */
 float fresnel(vec3 n, vec3 rd) { return .04 + .96 * pow(1. - clamp(dot(n, -rd), 0., 1.), 5.); }
 
-/**
- * The racer, in its own frame (x right, y up, z forward; its belly at y = 0): a flat arrowhead of black glass with a
- * raised spine, a canopy, two pods at the back with their engines, two small fins. About 2.3 m long.
+/*
+ * The racer, in its own frame (x right, y up, z forward; its belly at y = 0): a long arrowhead of black glass, a raised
+ * spine running to the nose, two nacelles blended into its flanks with their engines at the back, a low canopy of
+ * smoked glass. About 2.4 m long, 1.1 m wide at the back.
  */
+float craftHalfW(float z) { float u = clamp((z + 1.15) / 2.4, 0., 1.); return mix(.52, .05, u * (.6 + .4 * u)); }
 float craftD(vec3 c) {
-  float u = clamp((c.z + 1.1) / 2.35, 0., 1.);
-  float hw = mix(.56, .06, u);
-  vec3 q = vec3(abs(c.x), c.y - .1, c.z);
-  float plan = max(q.x - hw, abs(c.z - .075) - 1.175);
-  float th = mix(.12, .045, u) * (1. - .6 * clamp(q.x / hw, 0., 1.));
-  float hull = max(plan, abs(q.y) - th) * .75;
-  float can = sdEllipsoid(c - vec3(0., .2, -.05), vec3(.17, .1, .5));
-  float pod = sdCapsule(vec3(q.x, c.y, c.z), vec3(.44, .1, -1.12), vec3(.44, .1, -.38), .11);
-  float fin = sdBox(vec3(q.x - .44, c.y - .25, c.z + .92), vec3(.015, .1, .13));
-  return min(min(hull, can), min(pod, fin));
+  float u = clamp((c.z + 1.15) / 2.4, 0., 1.);
+  float hw = craftHalfW(c.z);
+  float ax = abs(c.x);
+  float plan = max(ax - hw, abs(c.z - .05) - 1.2);
+  // the top rises to a spine in the middle, lower toward the nose
+  float k = clamp(1. - ax / max(hw, .01), 0., 1.);
+  float top = .07 + .15 * sqrt(k) * (1. - .65 * u);
+  float hull = max(plan, max(c.y - top, .03 - c.y)) * .6;
+  float nac = sdCapsule(vec3(ax, c.y, c.z), vec3(.46, .12, -1.12), vec3(.42, .11, -.25), .1);
+  float can = sdEllipsoid(c - vec3(0., .2, -.02), vec3(.14, .08, .4));
+  return min(smin(hull, nac, .06), can);
 }
 
 /**
  * The racer's light at a point of its body (c: its frame, n: the normal in its frame, rd: the view in its frame):
- * black glass reflecting the night, a neon line round its edges, the canopy's rim, the engines burning at the back,
- * the glow of its levitation underneath. col: its colour; burn: how hard its engines burn.
+ * black glass reflecting the night, neon along its edges and spine, the canopy's smoked glass and its lit base, the
+ * engines' rings burning at the back, the glow of its levitation underneath. col: its colour; burn: how hard its
+ * engines burn.
  */
 vec3 craftColor(vec3 c, vec3 n, vec3 rd, vec3 col, float burn, float fw) {
   float fr = fresnel(n, rd);
-  vec3 cc = vec3(.008, .009, .012) + glassEnv(reflect(rd, n)) * fr * 1.2;
-  float u = clamp((c.z + 1.1) / 2.35, 0., 1.);
-  float hw = mix(.56, .06, u);
+  vec3 cc = vec3(.006, .007, .01) + glassEnv(reflect(rd, n)) * fr * 1.4;
+  float hw = craftHalfW(c.z);
   float ax = abs(c.x);
-  // the edge line of the hull, and the spine
-  float edge = neon(abs(ax - hw + .02), .012, fw) * step(c.y, .2) * step(-1.1, c.z) * step(c.z, 1.25);
-  float spine = neon(ax, .01, fw) * step(.16, c.y) * step(.2, c.z);
-  cc += col * (edge * 2.2 + spine * 1.2);
-  // the canopy: dark, its rim lit
-  float can = length((c - vec3(0., .2, -.05)) / vec3(.17, .1, .5));
-  cc += col * neon(abs(can - 1.), .03, fw * 4.) * step(.18, c.y) * .8;
-  // the pods: a ring of light, the engine burning white-hot at their back
-  float pod = length(vec2(ax - .44, c.y - .1));
-  if (pod < .14 && c.z < -.3) {
-    cc += col * neon(abs(c.z + .5), .02, fw) * 1.5;
-    float back = smoothstep(-1.05, -1.2, c.z);
-    cc += mix(col, vec3(1.), .55) * back * (1.5 + 2.5 * burn);
+  // the hull's rim and the spine to the nose
+  float rim = neon(hw - ax, .014, fw) * step(c.y, .14) * step(-1.15, c.z);
+  float spine = neon(ax, .012, fw) * step(.12, c.y) * step(.35, c.z);
+  cc += col * (rim * 2.4 + spine * 1.6);
+  // the canopy: smoked glass, a thin line where it meets the hull
+  float can = length((c - vec3(0., .2, -.02)) / vec3(.14, .08, .4));
+  if (can < 1.08) {
+    cc = vec3(.01, .012, .02) + glassEnv(reflect(rd, n)) * fr * 2.;
+    cc += col * neon(abs(c.y - .145), .008, fw) * 1.5;
+  }
+  // the nacelles: a stripe along them; at the back the engine, a ring of light round a burning core
+  float r = length(vec2(ax - .46 + .04 * clamp((c.z + 1.12) / .9, 0., 1.), c.y - .12));
+  if (r < .13 && c.z < -.2) {
+    cc += col * neon(abs(c.y - .16), .006, fw) * step(-1.05, c.z) * step(.47, ax) * .9;
+    float back = smoothstep(-1.1, -1.18, c.z);
+    float ring = neon(abs(r - .075), .012, fw);
+    float core = 1. - smoothstep(.03, .065, r);
+    cc += back * (col * ring * (2. + 2. * burn) + mix(col, vec3(1.), .35) * core * (.6 + 1.6 * burn));
   }
   // underneath: the levitation's glow
-  cc += col * smoothstep(.0, -.6, n.y) * .5 * (.6 + .4 * burn);
+  cc += col * smoothstep(-.2, -.8, n.y) * .5 * (.6 + .4 * burn);
   return cc;
 }
 `;

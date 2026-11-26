@@ -479,8 +479,16 @@ export const LOOKS: Look[] = [
     scenes: [
       { id: "circuit-track", weight: 3, role: "drop", params: { palette: "piste" } },
       { id: "circuit-track", key: "croisiere", label: "Croisière", weight: 2, role: "calm", params: { palette: "piste", cruise: true, speed: 0.7 } },
+      { id: "circuit-grid", weight: 2, role: "arc", params: { palette: "piste" } },
     ],
     // no background: every scene draws its own night
+    title: {
+      id: "circuit-grid",
+      key: "titre",
+      label: "Titre",
+      role: "calm",
+      params: { palette: "piste", end: "titre", titleFont: "race", titleRelief: "cut" },
+    },
     fx: {
       grain: 0.08,
       vignette: 0.35,
