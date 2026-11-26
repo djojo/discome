@@ -71,7 +71,7 @@ vec3 cityLights(vec2 xz, float fw) {
     float lit = step(.45, bh) * on;
     vec2 wg = fract(lc / 3.) - .5;
     float win = (1. - smoothstep(.15, .28, max(abs(wg.x), abs(wg.y)))) * step(.55, hash12(floor(lc / 3.) + bc));
-    win = mix(win, .18, smoothstep(.6, 2.5, fw));
+    win = mix(win, .18, smoothstep(.25, 1.1, fw));
     vec3 wc = mix(vec3(1., .8, .52), vec3(.62, .82, 1.), step(.72, bh));
     c += wc * win * lit * (.3 + .7 * hash12(bc + 1.7));
     // a neon sign, rarely: a bright stroke on a roof
@@ -147,7 +147,7 @@ vec3 craftColor(vec3 c, vec3 n, vec3 rd, vec3 col, float burn, float fw) {
   float hw = craftHalfW(c.z);
   float ax = abs(c.x);
   // the hull's rim and the spine to the nose
-  float rim = neon(hw - ax, .014, fw) * step(c.y, .14) * step(-1.15, c.z);
+  float rim = neon(abs(hw - ax), .014, fw) * step(c.y, .14) * step(-1.15, c.z);
   float spine = neon(ax, .012, fw) * step(.12, c.y) * step(.35, c.z);
   cc += col * (rim * 2.4 + spine * 1.6);
   // the canopy: smoked glass, a thin line where it meets the hull
@@ -166,7 +166,7 @@ vec3 craftColor(vec3 c, vec3 n, vec3 rd, vec3 col, float burn, float fw) {
     cc += back * (col * ring * (2. + 2. * burn) + mix(col, vec3(1.), .35) * core * (.6 + 1.6 * burn));
   }
   // underneath: the levitation's glow
-  cc += col * smoothstep(-.2, -.8, n.y) * .5 * (.6 + .4 * burn);
+  cc += col * smoothstep(-.2, -.8, n.y) * step(c.y, .06) * step(abs(c.x), .38) * .5 * (.6 + .4 * burn);
   return cc;
 }
 `;

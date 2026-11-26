@@ -312,7 +312,7 @@ vec3 signColor(vec3 q, vec3 n, vec3 rd, float fw) {
   float on = smoothstep(.3, 1.6, uTitleT) * (uTitleT < 1.6 ? step(.35, fract(sin(floor(uTitleT * 14.) * 43.7) * 917.3)) : 1.);
   float inside = 1. - smoothstep(-fw, fw, d2);
   vec3 lc = mix(uTint, vec3(1.), .55);
-  c += lc * on * (inside * 2.6 + neon(abs(d2 + .02), .03, fw) * 1.5);
+  c += lc * on * (inside * 1.4 + neon(abs(d2 + .02), .03, fw) * 1.2);
   // the frame
   vec2 e = sb.xy - abs(lp);
   c += uTint * neon(min(e.x, e.y), .03, fw) * .9;
