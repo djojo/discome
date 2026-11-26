@@ -67,6 +67,8 @@ export interface AudioFrame extends MusicState {
   shot: string | null;
   /** The director's camera cut (set by the visualizer): scenes with framings cut to another one on this frame. */
   camCut: boolean;
+  /** How deep the trip is now, 0..1 (set by the visualizer: the track's moment times the world's « Trip » dose). */
+  trip: number;
 }
 
 export const BAND_COUNT = 64;
@@ -144,6 +146,7 @@ export class AudioEngine {
       safeFlash: false,
       shot: null,
       camCut: false,
+      trip: 0,
       ...emptyMusicState(),
     };
   }

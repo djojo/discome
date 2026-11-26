@@ -57,6 +57,7 @@ import { fall } from "./art/fall";
 import { grotto } from "./art/grotto";
 import { mirror } from "./art/mirror";
 import { den } from "./art/den";
+import { visions } from "./art/visions";
 
 /**
  * The scene library. To add a scene: create a file exporting a SceneDef
@@ -115,6 +116,7 @@ export const SCENES: SceneDef[] = [
   grotto,
   mirror,
   den,
+  visions,
   // Classics, recoloured by the worlds' palettes
   halo,
   kaleido,

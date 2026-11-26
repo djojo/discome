@@ -218,6 +218,9 @@ export class Compositor {
       uGap: { value: 0 },
       uAccentZoom: { value: 0 },
       uAccentGain: { value: 0 },
+      uBreathe: { value: 0 },
+      uBreathPhase: { value: 0 },
+      uTrailHue: { value: 0 },
       uStrobeMode: { value: 1 },
       uBg: { value: this.black as THREE.Texture },
       uBg2: { value: this.black as THREE.Texture },
@@ -529,7 +532,13 @@ export class Compositor {
       const w = (h * this.signatureAspect * this.uniforms.uRes.value.y) / this.uniforms.uRes.value.x;
       u.uSigRect.value.set(1 - 0.028 - w, 0.04, w, h);
     }
-    u.uTrails.value = fx.trails;
+    // the trip (AudioFrame.trip): the picture breathes deeper, the trails grow longer and turn through the colours
+    const trip = frame.trip;
+    u.uBreathe.value = (fx.breathe ?? 0) * (0.003 + 0.012 * trip);
+    u.uBreathPhase.value =
+      frame.bpm > 0 ? Math.PI * ((frame.bar % 2) + (frame.beatInBar + frame.beatPhase) / 4) : this.time * 0.5;
+    u.uTrailHue.value = (fx.trailHue ?? 0) * (6 + 14 * trip);
+    u.uTrails.value = (fx.trailHue ?? 0) > 0.01 ? Math.min(0.92, fx.trails * (0.6 + 0.9 * trip)) : fx.trails;
     u.uChroma.value = fx.chroma;
     u.uScan.value = fx.scanlines;
     u.uCrt.value = fx.crt;

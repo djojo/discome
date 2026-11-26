@@ -5,6 +5,50 @@
  * photographic (`hdr: true`): these return linear light.
  */
 export const MYCELIUM_GLSL = /* glsl */ `
+// ---- the trip (see mycTrip.ts): how deep it is (0..1, following the track), where the enchanted colours are,
+// and the breath (a swell over two bars, -1..1)
+uniform float uTrip;
+uniform float uTripHue;
+uniform float uBreath;
+
+/** The enchanted colours: violet, turquoise, gold, magenta, sliding along (t: 0..1 round them). */
+vec3 tripPal(float t) {
+  float x = fract(t + uTripHue) * 4.;
+  vec3 c0 = vec3(.38, .12, 1.), c1 = vec3(.06, .85, .72), c2 = vec3(1., .6, .1), c3 = vec3(1., .14, .55);
+  float f = smoothstep(0., 1., fract(x));
+  if (x < 1.) return mix(c0, c1, f);
+  if (x < 2.) return mix(c1, c2, f);
+  if (x < 3.) return mix(c2, c3, f);
+  return mix(c3, c0, f);
+}
+
+/** A thin film's sheen (a soap bubble, a beetle's wing): its colours turn with the angle (c: cos of it) and k. */
+vec3 iridescence(float c, float k) {
+  float x = k + c * 1.7;
+  return .5 + .5 * cos(6.2832 * (x + vec3(0., .33, .67)));
+}
+
+/** The enchanted night: the moon's silver turned toward the drifting colours, more as the trip deepens. */
+vec3 enchant(vec3 moon) {
+  float l = dot(moon, vec3(.3, .5, .2));
+  return mix(moon, tripPal(.05) * l * 1.4 + moon * .25, .3 + .45 * uTrip);
+}
+
+/** An aurora toward rd: curtains of the enchanted colours rippling across the sky (stronger with the trip). */
+vec3 aurora(vec3 rd) {
+  if (rd.y < .02) return vec3(0.);
+  vec3 acc = vec3(0.);
+  for (int i = 0; i < 3; i++) {
+    float fi = float(i);
+    vec2 p = rd.xz / (rd.y + .15) * (.5 + .2 * fi);
+    float n = vnoise(vec3(p * 1.2 + vec2(uTime * .02 * (1. + fi), fi * 7.), fi * 3. + uTime * .03));
+    float curtain = smoothstep(.42, .72, n) * smoothstep(.02, .25, rd.y) * exp(-rd.y * 1.6);
+    float rays = .55 + .45 * sin(p.x * 26. + n * 9. + uTime * .2);
+    acc += tripPal(n * .6 + fi * .23) * curtain * rays;
+  }
+  return acc * (.06 + .3 * uTrip);
+}
+
 /** A limb from a to b, tapering from ra to rb. */
 float sdTaper(vec3 p, vec3 a, vec3 b, float ra, float rb) {
   vec3 pa = p - a, ba = b - a;
@@ -145,5 +189,25 @@ vec3 mycMotes(vec3 ro, vec3 rd, float tmax, float c, float dens, float sz, float
     ip += m * st;
   }
   return acc;
+}
+
+/**
+ * Living patterns crawling on a surface (p: 2D coordinates on it, in metres; w: a pixel there): thin organic lines,
+ * the contours of a warped field that drifts and breathes; patches of them spread as the trip deepens. Returns their
+ * light (0..1) and in .y a hue along the enchanted colours.
+ */
+vec2 tripFlow(vec2 p, float w) {
+  float t = uTime * .12;
+  vec2 q = p * .8;
+  q += .7 * vec2(vnoise(vec3(q * .6, t)), vnoise(vec3(q * .6 + 3.1, t + 1.7)));
+  float n = vnoise(vec3(q * 1.4, t * .8)) * .65 + vnoise(vec3(q * 3.3, t * 1.3 + 4.)) * .35;
+  // (few contours, well apart: at a scene's own lower resolution, crowded thin lines would blur into bands)
+  float bands = 2.5 + 2.5 * uTrip;
+  // distance to the nearest contour, in metres (the field changes about 1.2 a metre)
+  float e = abs(fract(n * bands + uTime * .05) - .5) / (bands * 1.2);
+  float line = mycLine(e, .015, w);
+  // where they grow: patches that widen with the trip
+  float cover = smoothstep(.62 - .55 * uTrip, .82 - .45 * uTrip, vnoise(vec3(p * .25, 2.3 + t * .3)));
+  return vec2(line * cover, n * .7 + p.x * .02);
 }
 `;

@@ -47,6 +47,9 @@ uniform float uStrobe;
 uniform float uGap;
 uniform float uAccentZoom;
 uniform float uAccentGain;
+uniform float uBreathe;      // the picture breathing and melting: how far it moves (a fraction of the frame)
+uniform float uBreathPhase;  // its swell, over two bars
+uniform float uTrailHue;     // degrees the trails turn each frame (rainbow tracers)
 uniform int uStrobeMode;
 // background (fond)
 uniform sampler2D uBg;
@@ -76,6 +79,11 @@ varying vec2 vUv;
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
+float vnoise2(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
+}
 
 /** Zoom blur toward the centre, jittered per pixel so the 8 taps read as streaks, not copies. */
 vec3 zoomTap(sampler2D t, vec2 uv, float amount) {
@@ -270,6 +278,15 @@ void main() {
   float push = uTension * (0.35 + 0.65 * uBeatPulse);
   // ... and the accents punch it in on the kick
   vec2 uv = 0.5 + (vUv - 0.5) * (1.0 - 0.07 * push - uAccentZoom);
+  // Breathing: the whole picture swells and slowly melts (an organic drift of low noise, never a ripple)
+  if (uBreathe > 0.00001) {
+    vec2 q = vec2(uv.x * uRes.x / uRes.y, uv.y) * 1.7;
+    float t = uTime * 0.11;
+    vec2 w = vec2(vnoise2(q + vec2(t, -t * 0.7)), vnoise2(q * 1.3 + vec2(5.2 - t * 0.8, 1.3 + t))) - 0.5;
+    w += 0.5 * (vec2(vnoise2(q * 2.6 + vec2(-t * 1.3, 9.1)), vnoise2(q * 2.6 + vec2(3.7, t * 1.1))) - 0.5);
+    uv += w * uBreathe * 2.0;
+    uv = 0.5 + (uv - 0.5) * (1.0 - uBreathe * 0.6 * (0.5 + 0.5 * sin(uBreathPhase)));
+  }
 
   uv = barrel(uv, uCrt);
   vec2 edge = abs(uv - 0.5) * 2.0;
@@ -324,7 +341,12 @@ void main() {
   }
 
   // Light trails: keep the brighter of now and a slightly zoomed previous frame
-  if (uHasPrev > 0.5) col = max(col, texture2D(uPrev, 0.5 + (vUv - 0.5) * 0.985).rgb * uTrails);
+  // (irisées: the trail turns a little in hue on every frame, so what moves leaves a rainbow behind it)
+  if (uHasPrev > 0.5) {
+    vec3 prev = texture2D(uPrev, 0.5 + (vUv - 0.5) * 0.985).rgb;
+    if (uTrailHue > 0.01) prev = max(hueShift(prev, uTrailHue), 0.0);
+    col = max(col, prev * uTrails);
+  }
 
   // Screen texture
   col *= 1.0 - uScan * 0.4 * (0.5 + 0.5 * sin(gl_FragCoord.y * 2.0));

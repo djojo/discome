@@ -24,6 +24,7 @@ import {
   type Settings,
 } from "./settings";
 import { NEUTRAL_FX, type FxSettings } from "@/engine/fx";
+import { TripEnvelope } from "@/engine/trip";
 import { directorPlans, findPlan, lookBackgrounds, lookPlans, planDefaults, sceneForKey, shownPlans, titlePlan } from "@/looks";
 import { brandOn, type Brand } from "@/brand/brand";
 import { BrandSettings } from "./BrandSettings";
@@ -213,6 +214,8 @@ export default function Visualizer() {
     const tintNow: [number, number, number] = [1, 1, 1];
     const director = new Director();
     const fxShown: FxSettings = { ...NEUTRAL_FX, ...settingsRef.current.fx };
+    // How deep the trip is now (the track's moment), dosed by the world
+    const tripEnv = new TripEnvelope();
     // Director pool derived from the active look, rebuilt only when the look changes
     let lookKey = "";
     let lookCtx: Pick<DirectorContext, "plans" | "palettes" | "transitions" | "freeVary"> = { plans: [] };
@@ -415,6 +418,7 @@ export default function Visualizer() {
         }
       }
       lookContext(s); // keeps the background ink in sync with the world
+      frame.trip = tripEnv.update(frame, dt) * fxShown.trip;
       compositor.signatureShown = compositor.sceneId !== titleHere?.key;
       frame.safeFlash = s.safeFlash;
       frame.shot = compositor.sceneId ? sceneOf(s, compositor.sceneId).id : null;

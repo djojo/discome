@@ -129,6 +129,7 @@ function emptyFrame(): AudioFrame {
     safeFlash: false,
     shot: null,
     camCut: false,
+    trip: 0,
     bpm: 0,
     beatPhase: 0,
     beatInBar: 0,

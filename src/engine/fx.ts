@@ -30,6 +30,12 @@ export interface FxSettings {
   bloom: number;
   /** The rhythm on every scene: the frame punches in on the kick, flickers on the claps, hits on a drop's phrases. */
   accents: number;
+  /** How deep this world's trip goes (AudioFrame.trip): 0 none. */
+  trip: number;
+  /** The whole picture breathes and slowly melts (deeper with the trip). */
+  breathe: number;
+  /** The trails turn through the colours (rainbow tracers behind every moving light; longer with the trip). */
+  trailHue: number;
   /** Radial blur of travelling scenes, following their speed (nothing at cruise). */
   speedBlur: number;
   /** Strobe on the kicks of a drop. */
@@ -54,6 +60,9 @@ export const NEUTRAL_FX: FxSettings = {
   trails: 0,
   bloom: 0,
   accents: 0.5,
+  trip: 0,
+  breathe: 0,
+  trailHue: 0,
   speedBlur: 0.5,
   strobe: "off",
 };
@@ -66,6 +75,9 @@ export const FX_SLIDERS: { key: NumericFx; label: string; min: number; max: numb
   { key: "trails", label: "Traînées", min: 0, max: 0.95, step: 0.01 },
   { key: "bloom", label: "Halo lumineux (bloom)", min: 0, max: 1, step: 0.01 },
   { key: "accents", label: "Accents rythmiques", min: 0, max: 1, step: 0.01 },
+  { key: "trip", label: "Trip", min: 0, max: 1, step: 0.01 },
+  { key: "breathe", label: "Respiration", min: 0, max: 1, step: 0.01 },
+  { key: "trailHue", label: "Traînées irisées", min: 0, max: 1, step: 0.01 },
   { key: "speedBlur", label: "Flou de vitesse", min: 0, max: 1, step: 0.01 },
   { key: "scanlines", label: "Scanlines", min: 0, max: 1, step: 0.01 },
   { key: "crt", label: "Courbure CRT", min: 0, max: 1, step: 0.01 },
