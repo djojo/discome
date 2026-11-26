@@ -4,6 +4,7 @@ import { ART_LIB } from "./lib.glsl";
 import { CAMERA_GLSL, type Framing } from "./camera";
 import { HEAD_GLSL, headUniforms, setHead, TITLE_HEAD } from "./heads";
 import { NIGHT_GLSL } from "./night.glsl";
+import { AURORA_GLSL, auroraGlass } from "./aurora.glsl";
 
 const FRAMINGS: Framing[] = [
   // Always from the front or three-quarters (the animal must read), never so close that its ears leave the frame
@@ -25,10 +26,13 @@ const FRAMINGS: Framing[] = [
 const ANIMALS = ["loup", "faucon", "belier", "hibou"];
 
 /**
- * L'Esprit: a fire in the night of the desert, its flames in tongues of yarn; its smoke rises, twisting, and becomes an
- * animal spirit (the sculpted heads of the library) wound in threads of colour, lit from below by the fire, its
- * contour drawn by a bright thread. Embers rise; on the kick the fire flares and throws a sheaf of sparks; on the drop
- * the spirit comes undone into its smoke and forms again as another animal, in a burst of sparks.
+ * L'Esprit: a fire in the night of the desert, its flames in tongues of yarn; its smoke rises, twisting, turns to the
+ * colours of the aurora and becomes an animal spirit (the sculpted heads of the library) of aurora glass: translucent,
+ * lit from within, curtains of green and violet light rising through it, a glowing contour, the night showing through
+ * it; its neck dissolves into a veil. A light aurora rises behind it. Embers rise; on the kick the fire flares, throws
+ * a sheaf of sparks and sends a wave of light up through the spirit; through the build its curtains quicken; on the
+ * drop it blazes, comes undone into light and forms again as another animal, in a burst of sparks. With the night's
+ * title (or logo) instead, the same glass, its curtains fainter over the letters so that they read.
  */
 export const spirit = defineShaderScene({
   id: "canyon-spirit",
@@ -39,7 +43,7 @@ export const spirit = defineShaderScene({
   mask: true,
   camera: { framings: FRAMINGS, glideBars: 2 },
   description:
-    "Un feu dans la nuit du désert ; de sa fumée naît un esprit animal (loup, aigle, bélier, hibou) dessiné en fumée et en lignes de lumière ; le feu crache des braises au kick, l'esprit change d'animal au drop.",
+    "Un feu dans la nuit du désert ; sa fumée prend les couleurs de l'aurore boréale et devient un esprit animal (loup, aigle, bélier, hibou) en verre d'aurore, translucide, lumineux de l'intérieur, traversé de rideaux verts et violets. Au kick une onde de lumière le traverse, au drop il s'embrase et change d'animal.",
   params: [
     paletteParam("peyote"),
     {
@@ -61,6 +65,10 @@ export const spirit = defineShaderScene({
     uFlare: { value: 0 },
     uBurst: { value: 99 },
     uTwist: { value: 0.3 },
+    // the aurora: seconds since the kick, the build, the drop's blaze
+    uKickT: { value: 9 },
+    uCharge: { value: 0 },
+    uBlaze: { value: 0 },
     // CPU side only
     uIdx: { value: Math.floor(Math.random() * ANIMALS.length) },
     uHold: { value: 0 },
@@ -98,6 +106,11 @@ export const spirit = defineShaderScene({
     setHead(u, title ? TITLE_HEAD : ANIMALS[(idx + 1) % n], "B", p);
     u.uBurst.value = (u.uBurst.value as number) + dt;
     u.uFlare.value = f.beat ? 1 : (u.uFlare.value as number) * Math.exp(-dt * 3.5);
+    u.uKickT.value = f.beat ? 0 : (u.uKickT.value as number) + dt;
+    const charge = f.section === "build" ? f.buildProgress : 0;
+    u.uCharge.value = (u.uCharge.value as number) + (charge - (u.uCharge.value as number)) * (1 - Math.exp(-dt * 2));
+    const barS = f.bpm > 0 ? 240 / f.bpm : 2;
+    u.uBlaze.value = f.drop ? 1 : (u.uBlaze.value as number) * Math.exp(-dt / barS);
     const tw = f.section === "build" ? 0.3 + 2 * f.buildProgress : f.section === "drop" ? 2.2 : 0.3;
     const t = u.uTwist.value as number;
     u.uTwist.value = t + (tw - t) * (1 - Math.exp(-dt * 0.5));
@@ -108,6 +121,9 @@ uniform float uFlare;    // the kick: the fire flares
 uniform float uBurst;    // seconds since the change of animal
 uniform float uTwist;
 uniform float uTitle;    // the night's title instead of the animals
+uniform float uKickT;    // seconds since the kick
+uniform float uCharge;   // the build
+uniform float uBlaze;    // the drop's blaze
 uniform highp sampler3D uHeadTexB;
 uniform float uHeadOnB;
 uniform vec3 uHeadMinB;
@@ -117,6 +133,7 @@ ${ART_LIB}
 ${HEAD_GLSL}
 ${CAMERA_GLSL}
 ${NIGHT_GLSL}
+${AURORA_GLSL}
 const vec3 HC = vec3(0., 3.5, 0.);   // the spirit's head, above the fire
 const float HS = 1.25;
 
@@ -140,15 +157,17 @@ vec3 toHead(vec3 p) {
 
 float spiritD(vec3 p) {
   vec3 h = toHead(p);
-  float b = sdBox(h - vec3(0., .02 - .2 * uTitle, 0.), vec3(.85 + .36 * uTitle, 1. + .2 * uTitle, .92));
+  // (a bound only: tall enough for a crest or a crown, wide enough for a title)
+  float b = sdBox(h - vec3(0., .1 - .2 * uTitle, 0.), vec3(.9 + .32 * uTitle, 1.25, .95));
   if (b > .2) return b * HS;
   float m = smoothstep(0., 1., uMorph);
   float d = headD(h);
   if (m > .001) d = mix(d, headSlot(uHeadTexB, uHeadOnB, uHeadMinB, uHeadSizeB, uHeadReliefB, h), m);
-  // it dissolves into smoke below the neck (the title, lower: all of it stands)
-  d = max(d, -.55 - .45 * uTitle - h.y);
+  // under the neck it is cut away, out of sight in the veil it dissolves into (the title, lower: all of it stands)
+  d = max(d, -.95 - .45 * uTitle - h.y);
   return d * HS;
 }
+${auroraGlass("spiritGlass", "spiritD", "toHead")}
 
 float spiritMarch(vec3 ro, vec3 rd, out float dmin) {
   dmin = 1e3;
@@ -203,6 +222,8 @@ vec4 column(vec3 ro, vec3 rd, float tEnd) {
     float sm = smoothstep(.4, .74, fbm3(q * 1.5 - vec3(0., uTime * .6, 0.)))
       * (1. - smoothstep(.15, 1., r / (.22 + .22 * p.y))) * smoothstep(.9, 1.9, p.y) * (1. + 1.5 * undo);
     vec3 sc = mix(uPal1, uInk, .5) * .45 + uAccent * .35 * exp(-max(p.y - 1.5, 0.) * .9);
+    // rising toward the spirit, the smoke turns to the aurora
+    sc = mix(sc, mix(AURORA_GREEN, AURORA_VIOLET, smoothstep(2.6, 4.3, p.y)) * .45, smoothstep(1.4, 3., p.y));
     float dens = (fire * 2. + sm * .8) * dt;
     acc += tr * (fc * fire * 2. + sc * sm) * dt * 1.6;
     tr *= exp(-dens * 1.5);
@@ -242,7 +263,14 @@ void main() {
   vec3 ro = uCamPos;
   vec3 rd = lookAt(ro, uCamTarget) * normalize(vec3(uv, uFocal));
   float pa = 1. / (uRes.y * uFocal);
-  vec3 col = nightSky(rd, uTwist);
+  gAuroraKick = uKickT;
+  gAuroraCharge = uCharge;
+  gAuroraBlaze = uBlaze;
+  // the title: fainter curtains over the letters, so that they read
+  gAuroraCurtains = 1. - .55 * uTitle;
+  gAuroraCore = .04 + .3 * uTitle;
+  // the night, and a light aurora rising behind the spirit
+  vec3 col = nightSky(rd, uTwist) + auroraOverHorizon(rd) * (.3 + .4 * uCharge + .6 * uBlaze);
   float solid = 0.;
   float tEnd = 60.;
   float tg = rd.y < -1e-4 ? -ro.y / rd.y : 1e5;
@@ -263,35 +291,22 @@ void main() {
     vec3 p = ro + rd * ts;
     vec3 n = spiritN(p);
     vec3 h = toHead(p);
-    float fre = clamp(1. - abs(dot(n, -rd)), 0., 1.);
-    // light: the fire below (warm), the night above (cool); hollows darker (one step of occlusion)
-    vec3 Lf = normalize(vec3(0., 1.2, 0.) - p);
-    float fireL = clamp(dot(n, Lf), 0., 1.) * (.8 + .5 * uFlare);
-    float skyL = clamp(dot(n, normalize(vec3(-.4, .7, .5))), 0., 1.);
-    float occ = clamp(spiritD(p + n * .15) / .15, 0., 1.);
-    float lit = (.2 + .8 * occ) * (.3 + .9 * fireL + .35 * skyL);
-    // threads of yarn wound round the form, rising like smoke, a dark thread between them
-    // (their average once finer than a pixel)
-    float g = h.y * 26. + .8 * fbm3(h * 2. + vec3(0., -uTime * .3, 0.)) - uTime * .25;
-    float thread = mix(1. - smoothstep(.3, .42, abs(fract(g) - .5)), .72, smoothstep(.3, .8, fwidth(g)));
-    thread = mix(thread, 1., .75 * uTitle);   // the title's letters stay legible
-    vec3 yc = yarn(fract(floor(g) * .19 + uTime * .02));
-    vec3 c = yc * thread * lit * 1.3;
-    // the contour: a bright thread where the form turns away, so the animal reads
-    c += mix(yc, vec3(1.), .45) * smoothstep(.62, .94, fre) * 1.3;
-    // embers glow in its hollows (eyes, nostrils)
-    c += mix(uAccent, vec3(1., .8, .4), .5) * (1. - smoothstep(.15, .4, occ)) * (1. - fre) * (.7 + .3 * sin(uTime * 3.)) * (1. - uTitle);
-    // stars glinting in the smoke
-    c += vec3(1.) * starSpeck(h * 1.6) * .6;
-    // it fades into its smoke below the neck, and comes undone while it changes
-    float fade = smoothstep(-.6 - .45 * uTitle, -.25 - .45 * uTitle, h.y) * (1. - .65 * sin(3.1416 * smoothstep(0., 1., uMorph)));
-    col = mix(col, c, .92 * fade);
-    solid = max(solid, .92 * fade);
+    float fre = pow(clamp(1. - abs(dot(n, -rd)), 0., 1.), 2. - .6 * uTitle);
+    // aurora glass: the night behind it shows through, a little bent; its light, its bright contour
+    vec4 g = spiritGlass(ro, rd, ts, HS);
+    vec3 behind = mix(col, nightSky(refract(rd, n, .92), uTwist) + auroraOverHorizon(refract(rd, n, .92)) * .3, .5);
+    vec3 c = behind * g.a + g.rgb + auroraRim(h, fre) * (1. + .5 * uTitle);
+    // stars caught in it
+    c += vec3(1.) * starSpeck(h * 1.6) * .35;
+    // it dissolves into a veil below the neck, and comes undone into light while it changes
+    float fade = smoothstep(-.9 - .45 * uTitle, -.15 - .45 * uTitle, h.y) * (1. - .65 * sin(3.1416 * smoothstep(0., 1., uMorph)));
+    col = mix(col, c, fade);
+    solid = max(solid, .7 * fade);
     tEnd = ts;
   }
-  // the spirit's smoky halo
+  // its halo, the aurora's colours
   float dh = length(cross(rd, HC - ro)) / HS;
-  col += mix(uPal1, uInk, .4) * exp(-dh * 2.2) * .16;
+  col += mix(AURORA_GREEN, AURORA_VIOLET, .35) * exp(-dh * 2.2) * (.08 + .1 * uBlaze);
   // fire and smoke, then the embers
   vec4 fcol = column(ro, rd, tEnd);
   col = col * (1. - fcol.a) + fcol.rgb;
