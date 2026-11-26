@@ -57,6 +57,13 @@ export const HEADS = [
   { id: "seneque", label: "Pseudo-Sénèque", family: "visage", licence: "domaine-public", kind: "file" },
   { id: "homere", label: "Homère", family: "visage", licence: "domaine-public", kind: "file" },
   { id: "patron", label: "Le Patron", family: "archetype", licence: "code", kind: "sculpted" },
+  // the archetypes of Antiquity: a headdress sculpted in code, cooked on a portrait (sculpt/cast.ts)
+  { id: "empereur", label: "L'Empereur", family: "archetype", licence: "domaine-public", kind: "code" },
+  { id: "imperatrice", label: "L'Impératrice", family: "archetype", licence: "domaine-public", kind: "code" },
+  { id: "athena", label: "Athéna", family: "archetype", licence: "domaine-public", kind: "code" },
+  { id: "vestale", label: "La Vestale", family: "archetype", licence: "domaine-public", kind: "code" },
+  { id: "dionysos", label: "Dionysos", family: "archetype", licence: "domaine-public", kind: "code" },
+  { id: "silene", label: "Silène", family: "archetype", licence: "domaine-public", kind: "code" },
   { id: "tigre", label: "Tigre", family: "animal", licence: "personnel", kind: "file" },
   { id: "loup", label: "Loup", family: "animal", licence: "personnel", kind: "file" },
   { id: "faucon", label: "Faucon", family: "animal", licence: "personnel", kind: "file" },

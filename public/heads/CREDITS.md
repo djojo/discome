@@ -49,3 +49,17 @@ Aucun fichier : sculptées dans `src/scenes/art/sculpt/` et cuites sur la carte 
 | humain, patron | La tête sculptée et Le Patron (`src/scenes/art/lib.glsl.ts`) |
 | cobra, panthere, ours, cerf, elephant | Les animaux |
 | tragedie, comedie | Les masques du théâtre grec |
+
+## Archétypes : une coiffe sculptée en code sur un portrait du SMK
+
+La coiffe est sculptée dans `src/scenes/art/sculpt/` et cuite sur la carte graphique avec le portrait qui la porte (le
+fichier du SMK ci-dessus, domaine public). Libres.
+
+| Tête | Coiffe | Portrait |
+| --- | --- | --- |
+| empereur | Couronne de laurier et ses rubans | marcaurele |
+| imperatrice | Diadème en croissant | dame |
+| athena | Casque grec à crête | minatia |
+| vestale | Voile | romaine |
+| dionysos | Couronne de lierre et grappes | memnon |
+| silene | Couronne de lierre et grappes | socrate |

@@ -5,16 +5,24 @@
  *
  * Needs ART_LIB (sdEllipsoid, sdCapsule, sdBox, smin, smax, vnoise, hash13) and rot().
  */
+
+/** The samples of the ring a wreath or a diadem follows round a bust (oven.ts traces it). */
+export const RING_N = 48;
+
 export const SCULPT_GLSL = /* glsl */ `
-// ---- the recipe (cast.ts): which head; for a headdress, which one and how it is fitted to its bust
+// ---- the recipe (cast.ts): which head; for a headdress laid on a bust, which one
 uniform int uKind;
 uniform int uWear;
-uniform vec4 uFit;
-// ---- the bust a headdress is laid on (oven.ts): its grid
+// ---- the bust a headdress is laid on (oven.ts): its grid; the ring traced round it (its centre over the brow, how
+// much lower it runs at the back, its radius at RING_N angles from the back, through the front, round to the back)
 uniform float uBaseOn;
 uniform highp sampler3D uBaseTex;
 uniform vec3 uBaseMin;
 uniform vec3 uBaseSize;
+#define RING_N ${RING_N}
+uniform vec3 uRingC;
+uniform float uRingDrop;
+uniform float uRing[RING_N];
 
 float sdSph(vec3 p, float r) { return length(p) - r; }
 /** A capsule from a (radius ra) to b (radius rb), tapering. */
@@ -38,7 +46,7 @@ float cobra(vec3 p) {
   hood = smin(hood, sdEllipsoid(h - vec3(0., -.26, .01), vec3(.28, .44, .07)), .18);
   d = smin(d, hood, .08);
   // the broad scales of the throat, across the front of the neck and hood
-  d += .005 * abs(sin(p.y * 36.)) * smoothstep(.02, .07, p.z) * smoothstep(.22, .1, q.x);
+  d += .005 * abs(sin(p.y * 36.)) * smoothstep(.02, .07, p.z) * (1. - smoothstep(.1, .22, q.x));
   // the head, looking ahead and a little down
   vec3 hp = p - vec3(0., .68, .14);
   hp.yz *= rot(.2);
@@ -112,7 +120,7 @@ float bear(vec3 p) {
   // the neck, huge
   d = smin(d, sdCapsule(p, vec3(0., .2, -.2), vec3(0., -1.6, -.3), .42), .25);
   // its fur, in tufts (not on the muzzle)
-  return d + .007 * (vnoise(p * 24.) - .5) * smoothstep(.35, .15, p.z);
+  return d + .007 * (vnoise(p * 24.) - .5) * (1. - smoothstep(.15, .35, p.z));
 }
 
 /** The antlers of the stag (q: the point with |x|): the beam sweeping up and back, its tines. */
@@ -257,117 +265,170 @@ float baseD(vec3 p) {
   vec3 c = clamp(uvw, 0., 1.);
   return textureLod(uBaseTex, c, 0.).r + length((uvw - c) * uBaseSize);
 }
-
-/** The ring round the head a wreath or a diadem follows: its radius at the angle a (0 at the front). */
-float ringR(float a) {
-  return 1. / length(vec2(sin(a) / .47, cos(a) / .56));
+/** The bust's distance, blurred: a smooth surface round its curls, for what is laid over them. */
+float baseSoft(vec3 p) {
+  const float e = .05;
+  return (2. * baseD(p) + baseD(p + vec3(e, 0., 0.)) + baseD(p - vec3(e, 0., 0.)) + baseD(p + vec3(0., e, 0.)) +
+    baseD(p - vec3(0., e, 0.)) + baseD(p + vec3(0., 0., e)) + baseD(p - vec3(0., 0., e))) / 8.;
 }
-/** A point's place relative to the ring: (out from it, above it), and its angle. The ring is lower at the back. */
+
+/** The ring's radius at the angle a (0 at the front, the sign of x): read round the profile traced by the oven. */
+float ringR(float a) {
+  float t = (a / 6.2831853 + .5) * float(RING_N);
+  float f = floor(t);
+  return mix(uRing[int(mod(f, float(RING_N)))], uRing[int(mod(f + 1., float(RING_N)))], t - f);
+}
+/** The ring's height at the angle a, from its centre: lower at the back of the head. */
+float ringY(float a) {
+  return -.5 * uRingDrop * (1. - cos(a));
+}
+/** A point's place relative to the ring: (out from it, above it), and its angle. */
 vec3 ringFrame(vec3 p) {
-  vec3 c = p - vec3(0., .42, -.06);
+  vec3 c = p - uRingC;
   float a = atan(c.x, c.z);
-  return vec3(length(c.xz) - ringR(a), c.y + .06 * (1. - cos(a)), a);
+  return vec3(length(c.xz) - ringR(a), c.y - ringY(a), a);
+}
+/** The point of the ring at the angle a. */
+vec3 ringAt(float a) {
+  return uRingC + vec3(sin(a) * ringR(a), ringY(a), cos(a) * ringR(a));
 }
 
 /**
- * A wreath: two rows of leaves along the ring, pointing towards the brow from both sides, on a slender band; ivy:
- * broader leaves, and a cluster of grapes over each temple.
+ * A wreath: two rows of leaves along the ring, pointing towards the brow from both sides, on a slender band. Laurel:
+ * long narrow leaves, and the two ribbons of the knot falling on the nape; ivy: broad leaves, and a cluster of grapes
+ * over each temple.
  */
 float wreath(vec3 p, float ivy) {
-  vec3 c = p - vec3(0., .42, -.06);
+  vec3 c = p - uRingC;
   float a = atan(c.x, c.z);
-  const float N = 30.;
+  float N = ivy > .5 ? 22. : 28.;
   float w = 6.2831853 / N;
+  vec3 size = ivy > .5 ? vec3(.065, .052, .013) : vec3(.09, .036, .014);
   float d = 10.;
   for (int j = -1; j <= 1; j++) {
     float ai = (floor(a / w) + .5 + float(j)) * w;
     float rr = ringR(ai);
-    vec3 cen = vec3(sin(ai) * rr, -.06 * (1. - cos(ai)), cos(ai) * rr);
     vec3 rad = vec3(sin(ai), 0., cos(ai));
-    // along the ring, towards the front
-    vec3 tng = vec3(cos(ai), 0., -sin(ai)) * -sign(ai + 1e-4);
+    vec3 cen = rad * rr + vec3(0., ringY(ai), 0.);
+    // along the ring (and down it, towards the back), towards the front
+    vec3 tng = normalize(vec3(cos(ai), -.5 * uRingDrop * sin(ai) / rr, -sin(ai))) * -sign(ai + 1e-4);
     for (int r = -1; r <= 1; r += 2) {
       float fr = float(r);
-      vec3 dir = normalize(tng + vec3(0., .5 * fr, 0.));
+      // each row splayed out from the band, and tilted out from the head
+      vec3 dir = normalize(tng + vec3(0., .55 * fr, 0.));
       vec3 side = normalize(cross(rad, dir));
-      vec3 v = c - cen - vec3(0., .022 * fr, 0.) - rad * .012;
-      vec3 l = vec3(dot(v, dir) - .045, dot(v, side), dot(v, rad));
+      vec3 v = c - cen - vec3(0., .024 * fr, 0.);
+      vec3 l = vec3(dot(v, dir) - size.x * .7, dot(v, side), dot(v, rad));
       // the leaf, curved a little, its middle vein
-      l.z += 3. * l.x * l.x;
-      float leaf = sdEllipsoid(l, vec3(.07, .026 + .02 * ivy, .012));
-      leaf = smax(leaf, -max(abs(l.y) - .003, abs(l.z - .012) - .006), .004);
+      l.z += 1.5 * l.x * l.x - 6. * l.y * l.y;
+      float leaf = sdEllipsoid(l, size);
+      leaf = smax(leaf, -max(abs(l.y) - .003, abs(l.z - size.z) - .006), .004);
       d = min(d, leaf);
     }
   }
   // the band under the leaves
   vec3 f = ringFrame(p);
-  d = smin(d, length(f.xy) - .016, .01);
+  d = smin(d, length(f.xy) - .018, .01);
+  vec3 q = vec3(abs(c.x), c.y, c.z);
   if (ivy > .5) {
-    // the grapes, over each temple
-    vec3 q = vec3(abs(p.x), p.y, p.z);
-    float g = sdEllipsoid(q - vec3(.45, .3, .14), vec3(.08, .13, .08));
+    // the grapes, a cluster hanging over each temple, just out of the ring
+    const float ag = 1.25;
+    vec3 gc = vec3(sin(ag), 0., cos(ag)) * (ringR(ag) + .05) + vec3(0., ringY(ag) - .09, 0.);
+    float g = sdEllipsoid(q - gc, vec3(.07, .12, .07));
     d = min(d, smax(bumps(p, .045, .028), g, .008));
+  } else {
+    // the knot at the back, its two ribbons falling, waving a little
+    vec3 k = ringAt(3.14159) - uRingC;
+    vec3 v = q - k;
+    v.x -= .012 * sin(v.y * 16.);
+    float rib = sdCapsule(vec3(v.x, v.y, (v.z + .03) * 2.), vec3(.04, 0., 0.), vec3(.1, -.4, -.24), .034) / 2.;
+    d = min(d, min(rib, sdSph(v - vec3(0., 0., -.02), .035)));
   }
   return d;
 }
 
-/** A diadem: a crescent standing over the brow, highest at the front, its edge carved with a row of beads. */
+/**
+ * A diadem: a crescent of metal standing over the brow, tall in front and tapering away above the temples, flaring
+ * out a little as it rises (as Hera's); a row of beads along its upper edge, a palmette at its front.
+ */
 float diadem(vec3 p) {
   vec3 f = ringFrame(p);
-  float h = .02 + .12 * smoothstep(1.7, 0., abs(f.z));
-  float v = f.y - h;
-  // leaning back a little as it rises
-  float band = max(abs(f.x + .15 * max(f.y, 0.) - .012) - .014, abs(v) - h);
-  band = max(band, (abs(f.z) - 1.75) * .5);
-  band += .003 * sin(f.z * 60.) * smoothstep(.0, .02, f.y);
-  return band;
+  float hAt = .2;
+  float h = hAt * (1. - smoothstep(0., 1.25, abs(f.z)));
+  float t = f.x - .3 * max(f.y, 0.) - .014;
+  float band = max(abs(t) - .013, abs(f.y - .5 * h) - .5 * h);
+  band = max(band, (abs(f.z) - 1.25) * .3);
+  // the beads along its edge
+  const float w = .09;
+  float ai = (floor(f.z / w) + .5) * w;
+  float hi = hAt * (1. - smoothstep(0., 1.25, abs(ai)));
+  float bead = length(vec3((f.z - ai) * ringR(ai), f.y - hi, t - .3 * hi + .3 * max(f.y, 0.))) - .017;
+  band = min(band, max(bead, (abs(ai) - 1.) * .3));
+  // the palmette at the front: a fan of five lobes
+  vec3 pf = p - ringAt(0.) - vec3(0., .5 * hAt, .022 + .15 * hAt);
+  float palm = 10.;
+  for (int i = -2; i <= 2; i++) {
+    vec3 o = pf;
+    o.xy *= rot(float(i) * .35);
+    palm = min(palm, sdEllipsoid(o - vec3(0., .035, 0.), vec3(.016, .045, .012)));
+  }
+  return min(band, palm);
 }
 
 /**
- * A Corinthian helmet pushed back up on the head (as Athena wears it): its bowl on the crown, its face (the nose
- * guard, the cheek pieces, the eye holes) turned up over the brow, the crest of horsehair front to back.
+ * A Greek helmet, as Athena wears it: its bowl round the head above the ring, the brow guard rising over the forehead
+ * and flaring forward, tallest in front, its crest of horsehair from the brow down to the nape.
  */
 float helmet(vec3 p) {
-  vec3 c = p - vec3(0., .52, -.12);
-  c.yz *= rot(-.4);
-  vec3 q = vec3(abs(c.x), c.y, c.z);
-  float bowl = sdEllipsoid(c, vec3(.5, .44, .6));
-  bowl = smax(bowl, -c.y - .04, .04);
-  // the face of the helmet, turned up: a plate over the brow, the cheek pieces, the guard, the eyes
-  float face = sdEllipsoid(c - vec3(0., .02, .38), vec3(.42, .2, .24));
-  face = smin(face, sdEllipsoid(q - vec3(.2, -.1, .44), vec3(.15, .14, .07)), .05);
-  face = smax(face, -sdEllipsoid(q - vec3(.13, .05, .6), vec3(.08, .045, .2)), .02);
-  face = smin(face, sdCapsule(c, vec3(0., .1, .58), vec3(0., -.08, .63), .03), .02);
-  float d = smin(bowl, smax(face, -c.y - .2, .03), .04);
-  // the crest and its holder
-  float crest = sdEllipsoid(c - vec3(0., .5, -.04), vec3(.05, .2, .52));
-  crest = smax(crest, .38 - c.y, .03) + .003 * sin(c.z * 90.);
-  crest = smin(crest, sdCapsule(c, vec3(0., .42, .3), vec3(0., .42, -.42), .03), .03);
+  vec3 f = ringFrame(p);
+  float b = baseSoft(p);
+  // the bowl, its edge thinning down to the hair at the rim
+  float bowl = smax(b - .015 - .05 * smoothstep(0., .1, f.y), -f.y, .015);
+  // the rim, rising in front into the brow guard, its edge rolled
+  float h = .025 + .11 * (1. - smoothstep(0., 1.4, abs(f.z)));
+  float t = f.x + .03 - .5 * max(f.y, 0.);
+  float guard = max(abs(t) - .014, abs(f.y - .5 * h) - .5 * h);
+  guard = min(guard, length(vec2(t, f.y - h)) - .02);
+  float d = smin(bowl, guard, .015);
+  // the crest, its horsehair combed across: rising from behind the brow guard, over the top, down to the nape
+  vec2 s = p.zy - vec2(uRingC.z, uRingC.y - .1);
+  float th = atan(s.y, s.x);
+  th += th < -1.6 ? 6.2831853 : 0.;
+  float tall = .07 + .18 * smoothstep(1., 1.6, th);
+  float crest = smax(b - tall, abs(p.x) - .01 - .035 * smoothstep(1., 1.5, th) + .015 * smoothstep(1.6, 3.4, th), .02);
+  crest = smax(crest, max(max(1. - th, th - 3.9), .06 - f.y) * .5, .04) + .003 * sin(p.y * 140. + p.z * 80.);
   return min(d, crest);
 }
 
 /**
- * A veil laid over the head and falling behind to the shoulders, the face left open: the bust's own surface a little
- * further out (it follows the hair), its folds falling.
+ * A veil laid over the head, its front edge over the brow and down behind the jaw, the face left open; it falls from
+ * the head to the shoulders, flaring a little, in folds deepening as it falls.
  */
 float veil(vec3 p) {
-  float folds = .012 * sin(atan(p.x, p.z) * 14.) * smoothstep(.4, -.4, p.y);
-  float b = baseD(p) + folds;
-  float cloth = max(b - .06, .035 - b);
-  // its front edge: over the crown, down behind the jaw
-  float edge = (p.z - .1 - .5 * (p.y - .3)) / 1.12;
+  // the cloth hangs straight down from the head, from wherever it reaches furthest above (a knot of the hair, the
+  // back of the skull), round those knots too (the blur would let them through)
+  float b = 10.;
+  for (int k = 0; k < 6; k++) {
+    vec3 h = vec3(p.x, max(p.y, .25 + .1 * float(k)), p.z);
+    // (smoothly: the cloth stretches across the hollows between them)
+    b = smin(b, min(baseSoft(h), baseD(h) + .02), .12);
+  }
+  float below = max(.25 - p.y, 0.);
+  b += (.006 + .03 * below) * sin(atan(p.x, p.z) * 12.) - .12 * below;
+  float cloth = b - .07;
+  // its front edge, a hem
+  float edge = (p.z - .48 - .6 * (p.y - .6)) / 1.17;
   return smax(cloth, edge, .03);
 }
 
-/** A bust of the library (uBaseOn) wearing a headdress (uWear), fitted to it by uFit. */
+/**
+ * A bust of the library (uBaseOn) wearing a headdress (uWear): a wreath, a diadem or a helmet along the ring traced
+ * round it, a veil on its surface.
+ */
 float wornHead(vec3 p) {
   float d = baseD(p);
-  if (uWear == 4) return min(d, veil(p));
-  vec3 h = p - vec3(0., uFit.y, uFit.z);
-  h.yz *= rot(uFit.w);
-  h /= uFit.x;
-  float w = uWear == 0 ? wreath(h, 0.) : uWear == 1 ? wreath(h, 1.) : uWear == 2 ? diadem(h) : helmet(h);
-  return min(d, w * uFit.x);
+  float w = uWear == 4 ? veil(p) : uWear == 3 ? helmet(p) : uWear == 2 ? diadem(p) : wreath(p, float(uWear));
+  return min(d, w);
 }
 
 /** The head being cooked. */

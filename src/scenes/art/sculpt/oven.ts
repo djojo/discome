@@ -1,8 +1,8 @@
 import * as THREE from "three";
 import { ART_LIB } from "../lib.glsl";
 import type { HeadGrid } from "../heads";
-import { SCULPT_GLSL } from "./sculpt.glsl";
-import { RECIPES, recipeUniforms } from "./cast";
+import { RING_N, SCULPT_GLSL } from "./sculpt.glsl";
+import { RECIPES, recipeUniforms, type Ring } from "./cast";
 
 /**
  * The oven: the heads sculpted in code (sculpt.glsl.ts, set by cast.ts) are cooked on the graphics card into the same
@@ -25,6 +25,8 @@ interface Job {
   id: string;
   /** The bust a headdress is laid on (cast.ts: worn), its grid; null: a head of its own. */
   base: HeadGrid | null;
+  /** The ring a wreath or a diadem follows round that bust, traced on its grid. */
+  ring: Traced | null;
   min: THREE.Vector3;
   size: THREE.Vector3;
   n: [number, number, number];
@@ -85,6 +87,9 @@ function start(r: THREE.WebGLRenderer) {
       uBaseTex: { value: null },
       uBaseMin: { value: new THREE.Vector3() },
       uBaseSize: { value: new THREE.Vector3(1, 1, 1) },
+      uRingC: { value: new THREE.Vector3() },
+      uRingDrop: { value: 0 },
+      uRing: { value: new Float32Array(RING_N) },
       ...recipeUniforms(),
     },
     vertexShader: "void main() { gl_Position = vec4(position.xy, 0., 1.); }",
@@ -111,6 +116,56 @@ function start(r: THREE.WebGLRenderer) {
     });
 }
 
+interface Traced {
+  /** The ring's centre, over the brow. */
+  c: THREE.Vector3;
+  drop: number;
+  /** Its radius at RING_N angles, from the back (-pi), through the front, round to the back. */
+  radii: Float32Array;
+}
+
+/**
+ * The ring a wreath or a diadem follows round a bust (cast.ts: Ring), traced on the bust's grid: at each angle round
+ * the head, how far out its hair reaches at the ring's height; smoothed, so that the curls do not make it waver.
+ */
+function traceRing(g: HeadGrid, ring: Ring): Traced | null {
+  const img = g.tex.image as { data?: Uint16Array; width: number; height: number; depth: number };
+  const data = img.data;
+  if (!data) return null;
+  const { width: nx, height: ny, depth: nz } = img;
+  // inside the bust at p (the nearest texel)
+  const inside = (x: number, y: number, z: number) => {
+    const i = Math.round(((x - g.min.x) / g.size.x) * nx - 0.5);
+    const j = Math.round(((y - g.min.y) / g.size.y) * ny - 0.5);
+    const k = Math.round(((z - g.min.z) / g.size.z) * nz - 0.5);
+    if (i < 0 || j < 0 || k < 0 || i >= nx || j >= ny || k >= nz) return false;
+    return THREE.DataUtils.fromHalfFloat(data[i + nx * (j + ny * k)]) < 0;
+  };
+  // from (x0, y, z0) along (dx, dz): how far the bust's outer surface is (0: none)
+  const reach = (x0: number, y: number, z0: number, dx: number, dz: number) => {
+    for (let r = 0.9; r > 0; r -= 0.004) if (inside(x0 + dx * r, y, z0 + dz * r)) return r;
+    return 0;
+  };
+  const height = (a: number) => ring.y - 0.5 * ring.drop * (1 - Math.cos(a));
+  // the middle of the head, front to back
+  const cz = (reach(0, ring.y, 0, 0, 1) - reach(0, ring.y - ring.drop, 0, 0, -1)) / 2;
+  let r = Array.from({ length: RING_N }, (_, i) => {
+    const a = (i / RING_N - 0.5) * 2 * Math.PI;
+    return reach(0, height(a), cz, Math.sin(a), Math.cos(a));
+  });
+  if (!r.some((v) => v > 0)) return null;
+  // a gap (nothing at that height): the nearest radius found
+  r = r.map((v, i) => {
+    for (let s = 0; v <= 0 && s < RING_N; s++) v = Math.max(r[(i + s) % RING_N], r[(i - s + RING_N) % RING_N]);
+    return v;
+  });
+  for (let pass = 0; pass < 2; pass++) {
+    const p = r;
+    r = p.map((_, i) => [-2, -1, 0, 1, 2].reduce((s, o) => s + p[(i + o + RING_N) % RING_N], 0) / 5);
+  }
+  return { c: new THREE.Vector3(0, ring.y, cz), drop: ring.drop, radii: Float32Array.from(r, (v) => v + (ring.out ?? 0)) };
+}
+
 /**
  * Cook a head sculpted in code (an id of cast.ts): its grid, once written. A headdress laid on a bust (recipe.base)
  * waits for that bust's grid, asked of loadBase.
@@ -120,6 +175,8 @@ export async function cook(id: string, loadBase: (id: string) => Promise<HeadGri
   if (!recipe) return null;
   const base = recipe.base ? await loadBase(recipe.base) : null;
   if (recipe.base && !base) return null;
+  const ring = base && recipe.ring ? traceRing(base, recipe.ring) : null;
+  if (recipe.ring && !ring) return null;
   return new Promise((resolve) => {
     const min = BOX_MIN.clone();
     const max = BOX_MAX.clone();
@@ -127,7 +184,7 @@ export async function cook(id: string, loadBase: (id: string) => Promise<HeadGri
     if (recipe.top) max.y = recipe.top;
     const size = max.clone().sub(min);
     const n = [size.x, size.y, size.z].map((s) => 2 * Math.round(s / VOXEL / 2)) as [number, number, number];
-    queue.push({ id, base, min, size, n, layer: 0, rt: null, resolve });
+    queue.push({ id, base, ring, min, size, n, layer: 0, rt: null, resolve });
   });
 }
 
@@ -165,6 +222,11 @@ export function ovenStep() {
   if (job.base) {
     (u.uBaseMin.value as THREE.Vector3).copy(job.base.min);
     (u.uBaseSize.value as THREE.Vector3).copy(job.base.size);
+  }
+  if (job.ring) {
+    (u.uRingC.value as THREE.Vector3).copy(job.ring.c);
+    u.uRingDrop.value = job.ring.drop;
+    (u.uRing.value as Float32Array).set(job.ring.radii);
   }
   RECIPES[job.id].apply(u);
   const prev = r.getRenderTarget();
