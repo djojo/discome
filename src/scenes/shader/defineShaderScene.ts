@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import type { AudioFrame } from "@/lib/audio/AudioEngine";
-import type { Energy, ParamDef, ParamValues, SceneGLDef } from "../types";
+import type { Energy, ParamDef, ParamValues, SceneGLDef, SceneMeta } from "../types";
 import { applyPalette, PALETTE_GLSL, paletteUniforms } from "../palettes";
 import { Flight, flightUniforms } from "../art/flight";
 import { Cadrage, cameraUniforms, type Framing } from "../art/camera";
@@ -47,7 +47,7 @@ interface ShaderSceneOptions {
   /** Photographic scene: ends with `hdrOut(col)` (ART_LIB), the compositor grades it (see SceneMeta.hdr). */
   hdr?: boolean;
   /** The library heads the scene shows by itself (see SceneMeta.heads). */
-  heads?: readonly string[];
+  heads?: SceneMeta["heads"];
   params: ParamDef[];
   /** Fragment shader body. Has access to the header uniforms above and `pal(t)`. */
   fragment: string;

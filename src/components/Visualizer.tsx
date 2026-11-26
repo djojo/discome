@@ -38,16 +38,20 @@ import type { DirectorContext } from "@/engine/Director";
 const IDLE_MS = 3500;
 
 /**
- * The library heads a world can show: its plans' heads (as set by the world, as tweaked, their variations) and those
- * its scenes show by themselves (SceneMeta.heads).
+ * The library heads a world can show: its plans' heads (as set by the world, as tweaked, in each of their variations)
+ * and those its scenes show by themselves (SceneMeta.heads, for those settings: a collection, a cycle).
  */
 const lookHeads = (s: Settings, look: Look) =>
-  lookPlans(look).flatMap((p) => [
-    planDefaults(p).head,
-    s.params[p.key]?.head,
-    ...(p.shot.vary?.choices?.head ?? []),
-    ...(p.scene.heads ?? []),
-  ]);
+  lookPlans(look).flatMap((p) => {
+    const set = { ...planDefaults(p), ...s.params[p.key] };
+    const variants = [
+      planDefaults(p),
+      set,
+      ...Object.entries(p.shot.vary?.choices ?? {}).flatMap(([k, opts]) => opts.map((o) => ({ ...set, [k]: o }))),
+    ];
+    const own = p.scene.heads;
+    return variants.flatMap((v) => [v.head, ...((typeof own === "function" ? own(v) : own) ?? [])]);
+  });
 
 /** The heads of every world that is on. */
 const onHeads = (s: Settings) => [...new Set(activeWorlds(s).flatMap((id) => lookHeads(s, findLook(s, id))))];

@@ -23,7 +23,7 @@ const FRAMINGS: Framing[] = [
 ];
 
 /** The animal spirits (heads of the library), in the order they come. */
-const ANIMALS = ["loup", "faucon", "belier", "hibou"];
+const ANIMALS = ["loup", "cerf", "faucon", "ours", "hibou", "panthere", "belier", "cobra", "elephant"];
 
 /**
  * L'Esprit: a fire in the night of the desert, its flames in tongues of yarn; its smoke rises, twisting, turns to the
@@ -44,7 +44,7 @@ export const spirit = defineShaderScene({
   mask: true,
   camera: { framings: FRAMINGS, glideBars: 2 },
   description:
-    "Un feu dans la nuit du désert ; sa fumée prend les couleurs de l'aurore boréale et devient un esprit animal (loup, aigle, bélier, hibou) en verre d'aurore, translucide, lumineux de l'intérieur, traversé de rideaux verts et violets. Au kick une onde de lumière le traverse, au drop il s'embrase et change d'animal.",
+    "Un feu dans la nuit du désert ; sa fumée prend les couleurs de l'aurore boréale et devient un esprit animal (loup, cerf, faucon, ours, hibou, panthère, bélier, cobra, éléphant) en verre d'aurore, translucide, lumineux de l'intérieur, traversé de rideaux verts et violets. Au kick une onde de lumière le traverse, au drop il s'embrase et change d'animal.",
   params: [
     paletteParam("peyote"),
     {
@@ -158,8 +158,10 @@ vec3 toHead(vec3 p) {
 
 float spiritD(vec3 p) {
   vec3 h = toHead(p);
-  // (a bound only: tall enough for a crest or a crown, wide enough for a title)
-  float b = sdBox(h - vec3(0., .1 - .2 * uTitle, 0.), vec3(.9 + .32 * uTitle, 1.25, .95));
+  // (a bound only: up to the top of either grid, antlers included; wide enough for a title)
+  float top = uTitle > .5 ? 1.15 : max(1.35, max(uHeadMin.y + uHeadSize.y, uHeadMinB.y + uHeadSizeB.y) + .05);
+  float bot = -1.15 - .2 * uTitle;
+  float b = sdBox(h - vec3(0., .5 * (top + bot), 0.), vec3(.9 + .32 * uTitle, .5 * (top - bot), .95));
   if (b > .2) return b * HS;
   float m = smoothstep(0., 1., uMorph);
   float d = headD(h);

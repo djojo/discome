@@ -2,13 +2,24 @@ import { defineShaderScene } from "../shader/defineShaderScene";
 import { paletteParam } from "../palettes";
 import { ART_LIB } from "./lib.glsl";
 import { FLIGHT_GLSL, flightParams } from "./flight";
-import { HEAD_GLSL, headUniforms, setHead } from "./heads";
+import { HEAD_GLSL, headsOf, headUniforms, setHead, type HeadId } from "./heads";
 import { AURORA_GLSL, auroraGlass } from "./aurora.glsl";
+import { Casting, pick } from "./casting";
 
-/** The ancestors met on the way: the animal spirits and faces of old, each in its own head slot. */
-const ANCESTORS = ["loup", "faucon", "belier", "hibou", "moai", "nefertiti", "humain"] as const;
+/**
+ * The ancestors met on the way, each in its own head slot: animal spirits, faces of old (portraits of Rome and
+ * Greece, their archetypes, the sculptures of the world) and now and then a mask of the theatre. A different cast
+ * on each passage; the first (loaded with the world) stands in while the next one loads.
+ */
+const FIRST: HeadId[] = ["loup", "cerf", "faucon", "hibou", "moai", "athena", "tragedie"];
+const ANIMALS = headsOf("animal");
+const FACES: HeadId[] = [...headsOf("visage"), ...headsOf("archetype").filter((h) => h !== "patron"), ...headsOf("sculpture")];
+const MASKS = headsOf("masque");
+const casting = new Casting(FIRST, () => [...pick(ANIMALS, 3), ...pick(FACES, 3), ...(Math.random() < 0.5 ? pick(MASKS, 1) : pick(FACES, 1))]);
 /** Their slots (the first is HEAD_GLSL's own). */
 const SLOTS = ["", "B", "C", "D", "E", "F", "G"];
+/** Each instance's passage: its seed (redrawn when it comes back on screen), its cast. */
+const passages = new WeakMap<object, { seed: number; cast: readonly HeadId[] }>();
 
 const smooth = (x: number) => {
   const t = Math.min(1, Math.max(0, x));
@@ -16,8 +27,9 @@ const smooth = (x: number) => {
 };
 
 /**
- * Les Ancêtres: our spirit travels through space and is judged by the ancestors, the animal spirits (wolf, falcon,
- * ram, owl) and faces of old (a Moai, Nefertiti, a human face), all of aurora glass like the spirit of the fire:
+ * Les Ancêtres: our spirit travels through space and is judged by the ancestors, the animal spirits and faces of old
+ * (portraits of Rome and Greece, an emperor, Athena, a Moai…), a mask of the theatre now and then, a different cast
+ * on each passage, all of aurora glass like the spirit of the fire:
  * translucent, lit from within, curtains of light rising through them, their necks dissolving into a veil. They stand
  * in a line on either side of the way, above us, every one of them looking at us: their heads follow us as we pass,
  * looking down on us; now and then a great elder hangs high over the way. All round, the aurora's veils on every side
@@ -33,9 +45,9 @@ export const ancestors = defineShaderScene({
   hdr: true,
   renderScale: 0.65,
   flight: { cruise: 1.6 },
-  heads: ANCESTORS,
+  heads: FIRST,
   description:
-    "Notre esprit voyage dans l'espace, jugé par les ancêtres (esprits animaux, Moai, Néfertiti, un visage humain) en verre d'aurore boréale : alignés de part et d'autre de la route, au-dessus de nous, ils nous regardent tous et nous suivent des yeux. Au drop, l'aurore s'embrase et ils se resserrent autour de nous.",
+    "Notre esprit voyage dans l'espace, jugé par les ancêtres (esprits animaux, portraits antiques, Athéna, un empereur, un Moai, parfois un masque de théâtre ; une distribution différente à chaque passage) en verre d'aurore boréale : alignés de part et d'autre de la route, au-dessus de nous, ils nous regardent tous et nous suivent des yeux. Au drop, l'aurore s'embrase et ils se resserrent autour de nous.",
   params: [paletteParam("peyote"), ...flightParams()],
   uniforms: () => ({
     ...Object.assign({}, ...SLOTS.map((s) => headUniforms(s))),
@@ -49,7 +61,10 @@ export const ancestors = defineShaderScene({
     uDropT: { value: 99 },
   }),
   update(u, f, _p, dt) {
-    ANCESTORS.forEach((id, i) => setHead(u, id, SLOTS[i]));
+    const seed = u.uSeed.value as number;
+    let pass = passages.get(u);
+    if (!pass || pass.seed !== seed) passages.set(u, (pass = { seed, cast: casting.pass() }));
+    pass.cast.forEach((id, i) => setHead(u, id, SLOTS[i]));
     const bar = f.bpm > 0 ? 240 / f.bpm : 2;
     u.uKickT.value = f.beat ? 0 : (u.uKickT.value as number) + dt;
     const charge = f.section === "build" ? f.buildProgress : 0;
@@ -81,17 +96,24 @@ ${HEAD_GLSL}
 ${FLIGHT_GLSL}
 ${AURORA_GLSL}
 
-// ---- the ancestor being drawn: its centre, scale, turn (yaw, then pitch: its gaze), slot
+// ---- the ancestor being drawn: its centre, scale, turn (yaw, then pitch: its gaze), slot, the top of its bound
 vec3 gC;
 float gS;
 float gYaw;
 float gPitch;
 float gSlot;
+float gTop;
 vec3 ancHead(vec3 p) {
   vec3 h = (p - gC) / gS;
   h.xz *= rot(gYaw);
   h.yz *= rot(gPitch);
   return h;
+}
+float slotTop() {
+  if (gSlot < .5) return uHeadMin.y + uHeadSize.y;
+${SLOTS.slice(1)
+  .map((s, i) => `  ${i < SLOTS.length - 2 ? `if (gSlot < ${i + 1.5}) ` : ""}return uHeadMin${s}.y + uHeadSize${s}.y;`)
+  .join("\n")}
 }
 float slotD(vec3 h) {
   if (gSlot < .5) return headD(h);
@@ -104,8 +126,8 @@ ${SLOTS.slice(1)
 }
 float ancD(vec3 p) {
   vec3 h = ancHead(p);
-  // (a bound only: tall enough for a crown)
-  float b = sdBox(h - vec3(0., .1, 0.), vec3(.95, 1.25, .95));
+  // (a bound only: from under the neck to the top of its grid, a crest or antlers)
+  float b = sdBox(h - vec3(0., .5 * gTop - .575, 0.), vec3(.95, .5 * gTop + .575, .95));
   if (b > .2) return b * gS;
   // under the neck it is cut away, out of sight in the veil it dissolves into
   return max(slotD(h), -.95 - h.y) * gS;
@@ -150,6 +172,7 @@ void main() {
         gC = vec3((h2 - .5) * 3., (5.5 + 2. * h4) * gather, -(ci * CELL + 2. + 3. * h5));
       }
       gSlot = floor(hash12(vec2(ci * 1.7, fs + 3.1)) * 6.999);
+      gTop = max(1.35, slotTop() + .05);
       // every one of them looks at us: the head follows us as we pass, bowed toward us; a slight sway of its own
       // (ancHead turns by multiplying on the right, h.xz *= rot(a): its face points to (sin yaw, cos yaw) on xz, and
       // up by sin pitch)

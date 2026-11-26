@@ -49,7 +49,7 @@ export interface SceneInstance {
 /** How hard a scene hits: the auto director picks scenes that fit the music. */
 export type Energy = "calm" | "medium" | "intense";
 
-interface SceneMeta {
+export interface SceneMeta {
   id: string;
   name: string;
   description: string;
@@ -68,9 +68,10 @@ interface SceneMeta {
   hdr?: boolean;
   /**
    * The library heads (scenes/art/heads.ts) the scene shows by itself, besides its "head" setting: they load with
-   * the worlds that hold the scene, so that none pops in late.
+   * the worlds that hold the scene, so that none pops in late. Given the plan's settings when they depend on them
+   * (a museum's collection, a cycle of heads).
    */
-  heads?: readonly string[];
+  heads?: readonly string[] | ((p: ParamValues) => readonly string[]);
   params: ParamDef[];
 }
 

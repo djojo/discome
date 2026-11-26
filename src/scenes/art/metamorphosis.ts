@@ -3,7 +3,7 @@ import { paletteParam } from "../palettes";
 import { num } from "../utils";
 import { ART_LIB, MARCH } from "./lib.glsl";
 import { CAMERA_GLSL, type Framing } from "./camera";
-import { HEAD_GLSL, headUniforms, preloadHeads, setHead, TITLE_HEAD, type HeadId } from "./heads";
+import { HEAD_GLSL, headReady, headUniforms, letGo, preloadHeads, setHead, TITLE_HEAD, type HeadId } from "./heads";
 import { DETAIL_GLSL } from "./detail.glsl";
 
 const FRAMINGS: Framing[] = [
@@ -21,14 +21,53 @@ const FRAMINGS: Framing[] = [
   { az: -0.24, el: 0.02, dist: 4.4, target: [0, -0.05, 0], focal: 1.95, weight: 2, tag: "title" },
 ];
 
-/** The heads each cycle goes through, in an order drawn from the scene's seed. */
-const CYCLES: Record<string, HeadId[]> = {
-  bestiaire: ["tigre", "loup", "faucon", "lion", "hibou", "belier"],
-  egypte: ["faucon", "nefertiti", "lion", "belier"],
-  tout: ["humain", "tigre", "loup", "faucon", "lion", "hibou", "belier", "moai", "nefertiti"],
+/**
+ * The antiques: each portrait of Rome and Greece that has an archetype is followed by it (its headdress grows on it:
+ * Marcus Aurelius is crowned with laurel, Socrates with ivy…); the others come alone.
+ */
+const ANTIQUES: HeadId[][] = [
+  ["marcaurele", "empereur"],
+  ["minatia", "athena"],
+  ["romaine", "vestale"],
+  ["memnon", "dionysos"],
+  ["socrate", "silene"],
+  ["dame", "imperatrice"],
+  ["hera"],
+  ["antinous"],
+  ["homere"],
+  ["seneque"],
+  ["lysimache"],
+  ["giulia"],
+];
+const ANIMALS: HeadId[] = ["tigre", "loup", "faucon", "lion", "hibou", "belier", "panthere", "ours", "cerf", "elephant"];
+
+/** The heads each cycle goes through (in groups that stay together), in an order drawn from the scene's seed. */
+const CYCLES: Record<string, HeadId[][]> = {
+  bestiaire: ANIMALS.map((h) => [h]),
+  egypte: (["faucon", "nefertiti", "lion", "belier", "cobra"] as HeadId[]).map((h) => [h]),
+  antiques: ANTIQUES,
+  // the mask of tragedy turns into the mask of comedy, and back
+  masques: [["tragedie", "comedie"]],
+  tout: (["humain", "tigre", "loup", "faucon", "lion", "hibou", "moai", "nefertiti", "cerf", "elephant", "cobra", "tragedie"] as HeadId[])
+    .map((h) => [h])
+    .concat([["marcaurele", "empereur"], ["socrate", "silene"], ["hera"]]),
   // the animals one after the other, and the human head last: it stays alone
-  extinction: ["tigre", "loup", "faucon", "lion", "hibou", "belier"],
+  extinction: [...ANIMALS, "cobra" as HeadId].map((h) => [h]),
 };
+/**
+ * The heads of a cycle that load with the world: all of a short one; of a long one, a few (they come first, being
+ * ready, and the others load two ahead as the cycle goes).
+ */
+const firstHeads = (cycle: string): HeadId[] => {
+  const all = (CYCLES[cycle] ?? CYCLES.bestiaire).flat();
+  return cycle === "antiques" ? ["marcaurele", "empereur", "socrate", "silene", "hera"] : cycle === "tout" ? all.slice(0, 8) : all;
+};
+/** A cycle's order for a seed: its groups shuffled, those already loaded first, so that the plan opens at once. */
+function cycleOrder(cycle: string, seed: number): HeadId[] {
+  const groups = shuffled(CYCLES[cycle] ?? CYCLES.bestiaire, seed);
+  const ready = (g: HeadId[]) => g.every(headReady);
+  return [...groups.filter(ready), ...groups.filter((g) => !ready(g))].flat();
+}
 
 interface MorphState {
   seed: number;
@@ -66,7 +105,7 @@ function shuffled<T>(list: T[], seed: number): T[] {
  */
 export const metamorphosis = defineShaderScene({
   id: "metamorphosis",
-  heads: [...new Set(Object.values(CYCLES).flat())],
+  heads: (p) => firstHeads(String(p.cycle ?? "bestiaire")),
   name: "Métamorphose",
   tag: "Visage",
   energy: "calm",
@@ -75,7 +114,7 @@ export const metamorphosis = defineShaderScene({
   mask: true,
   camera: { framings: FRAMINGS, glideBars: 2 },
   description:
-    "Buste de musée qui se transforme lentement d'une tête en une autre (loup, faucon, lion…) ; la couture d'or du front flashe au kick et s'embrase au drop.",
+    "Buste de musée qui se transforme lentement d'une tête en une autre (loup, faucon, lion… ; portraits antiques qui se couronnent de leur archétype ; masques de théâtre) ; la couture d'or du front flashe au kick et s'embrase au drop.",
   params: [
     paletteParam("porcelain"),
     {
@@ -95,6 +134,8 @@ export const metamorphosis = defineShaderScene({
       options: [
         { value: "bestiaire", label: "Bestiaire" },
         { value: "egypte", label: "Égypte" },
+        { value: "antiques", label: "Antiques" },
+        { value: "masques", label: "Masques du théâtre" },
         { value: "tout", label: "Toutes" },
         { value: "extinction", label: "Extinction" },
         { value: "titre", label: "Le titre de la soirée" },
@@ -124,11 +165,13 @@ export const metamorphosis = defineShaderScene({
     let s = states.get(u);
     if (!s || s.seed !== seed || s.cycle !== cycle) {
       const order: string[] = title
-        ? shuffled(CYCLES.bestiaire, seed).flatMap((a) => [TITLE_HEAD, a])
-        : shuffled(CYCLES[cycle] ?? CYCLES.bestiaire, seed);
+        ? cycleOrder("bestiaire", seed).flatMap((a) => [TITLE_HEAD, a])
+        : cycleOrder(cycle, seed);
       if (cycle === "extinction") order.push("humain");
+      // (the heads of the last passage are let go, unless a world that is on holds them)
+      if (s) letGo(s.order, order.slice(0, 3));
       s = { seed, cycle, order, i: 0, t: 0, rate: 0, morphing: false, held: 0, lastBar: f.bar };
-      preloadHeads(order);
+      preloadHeads(order.slice(0, 3));
       states.set(u, s);
     }
     const extinction = s.cycle === "extinction";
@@ -164,7 +207,14 @@ export const metamorphosis = defineShaderScene({
       if (s.t >= 1) {
         // the head that just went extinct leaves the cycle for good
         if (extinction) s.order.splice(s.i % n, 1);
-        else s.i = (s.i + 1) % n;
+        else {
+          // the head that has gone is let go, the one after next starts loading
+          const gone = s.order[s.i % n];
+          s.i = (s.i + 1) % n;
+          const coming = [0, 1, 2].map((k) => s!.order[(s!.i + k) % n]);
+          preloadHeads(coming);
+          letGo([gone], coming);
+        }
         s.t = 0;
         s.morphing = false;
         s.held = 0;
@@ -201,6 +251,7 @@ const float K = .16;    // half width of the transformation front
 float gYaw;
 float gPitch = 0.;
 float gFront;           // height of the front: below it, head B
+float gTop;             // the top of the taller head (a crest, antlers)
 vec3 toHead(vec3 p) { p.y += .1; p.xz *= rot(gYaw); p.yz *= rot(gPitch); return p; }
 vec3 fromHead(vec3 h) { h.yz *= rot(-gPitch); h.xz *= rot(-gYaw); h.y -= .1; return h; }
 float frontY(vec3 h) { return h.y + (vnoise(h * 2.6 + uSeed) - .5) * .35; }
@@ -245,8 +296,8 @@ float morphD(vec3 h) {
 float map(vec3 p) {
   vec3 h = toHead(p);
   float m = museumD(p, h);
-  // both heads fit in the common box (wider for the title)
-  float b = sdBox(h - vec3(0., .025, 0.), vec3(.84 + .36 * uTitle, 1., .92));
+  // both heads fit in the common box (wider for the title, as tall as the taller head)
+  float b = sdBox(h - vec3(0., .5 * gTop - .4875, 0.), vec3(.84 + .36 * uTitle, .5 * gTop + .4875, .92));
   if (b > .2) return min(b, m);
   return min(max(morphD(h), CUT - h.y), m);
 }
@@ -371,7 +422,8 @@ void main() {
   // (the title only sways: it must keep reading)
   gYaw = (.3 * sin(uTime * .045 + uSeed) + .07 * sin(uTime * .11 + uSeed * 2.)) * (1. - .65 * uTitle) * (1. - .6 * uFlat);
   gPitch = .05 * sin(uTime * .06 + uSeed * 3.) * (1. - .65 * uTitle);
-  gFront = mix(-1.25, 1.3, uMorph);
+  gTop = max(1.025, max(uHeadMin.y + uHeadSize.y, uHeadMinB.y + uHeadSizeB.y));
+  gFront = mix(-1.25, gTop + .275, uMorph);
   vec3 ro = uCamPos;
   vec3 rd = lookAt(ro, uCamTarget) * normalize(vec3(uv, uFocal));
   // museum dark, a soft spot behind the bust

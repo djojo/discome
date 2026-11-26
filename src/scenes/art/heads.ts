@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { titleShape } from "@/brand/shape";
 import { cook } from "./sculpt/oven";
+import { RECIPES } from "./sculpt/cast";
 import type { ParamDef, ParamValues } from "../types";
 
 /** The families of the head library (the "Tête" setting lists them in this order). */
@@ -180,20 +181,50 @@ export function preloadHeads(ids: Iterable<unknown>) {
   for (const id of ids) void loadHead(id);
 }
 
+/** The heads of the worlds still on (the last releaseHeads): never let go by a scene. */
+let kept = new Set<unknown>();
+
+function release(id: string, g: HeadGrid) {
+  if (g.dispose) g.dispose();
+  else g.tex.dispose();
+  loaded.delete(id);
+  loading.delete(id);
+}
+
 /**
  * Let go of the loaded heads that are not in `keep` (the heads of the worlds still on): their texture leaves the
  * graphics card. A scene that still shows one keeps it until it changes heads; asked for again, it loads again.
  */
 export function releaseHeads(keep: Iterable<unknown>) {
-  const k = new Set(keep);
-  for (const [id, g] of loaded) {
-    if (k.has(id)) continue;
-    if (g.dispose) g.dispose();
-    else g.tex.dispose();
-    loaded.delete(id);
-    loading.delete(id);
+  kept = new Set(keep);
+  for (const [id, g] of loaded) if (!kept.has(id)) release(id, g);
+}
+
+/**
+ * Let go of heads a scene no longer shows (a cast that has played: see casting.ts), unless a world that is on holds
+ * them or the scene still shows them (`still`). The bust a headdress was cooked on goes with it, on the same terms.
+ */
+export function letGo(ids: Iterable<unknown>, still: Iterable<unknown> = []) {
+  const keep = new Set(still);
+  const drop = (id: unknown) => {
+    const g = loaded.get(id as string);
+    if (g && !kept.has(id) && !keep.has(id)) release(id as string, g);
+  };
+  for (const id of ids) {
+    if (keep.has(id)) continue;
+    drop(id);
+    const base = RECIPES[id as string]?.base;
+    if (base) drop(base);
   }
 }
+
+/** Whether a head can be shown at once: loaded, or not a grid at all (the sculpted heads, the title). */
+export function headReady(id: unknown) {
+  return !isBaked(id) || loaded.has(id);
+}
+
+/** The heads of a family of the library, in its order. */
+export const headsOf = (family: HeadFamily): HeadId[] => HEADS.filter((h) => h.family === family).map((h) => h.id);
 
 /** The grid if it is ready; starts loading it otherwise. */
 export function headGrid(id: unknown): HeadGrid | undefined {

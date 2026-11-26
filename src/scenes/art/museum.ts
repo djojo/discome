@@ -3,7 +3,8 @@ import { defineShaderScene } from "../shader/defineShaderScene";
 import { paletteParam } from "../palettes";
 import { ART_LIB } from "./lib.glsl";
 import { CAMERA_GLSL, type Cadrage, type Framing } from "./camera";
-import { HEAD_GLSL, HEAD_SLOTS, headSlotGLSL, headUniforms, preloadHeads, setHead, type HeadId } from "./heads";
+import { HEAD_GLSL, HEAD_SLOTS, headSlotGLSL, headsOf, headUniforms, preloadHeads, setHead, type HeadId } from "./heads";
+import { Casting, pick } from "./casting";
 import { DETAIL_GLSL } from "./detail.glsl";
 
 /** The gallery: pairs of cases along an aisle running down -z, and the human head alone at its end. */
@@ -25,13 +26,23 @@ const YB = YP + SOC - CUT * S;
 const DUST = 36;
 /** What is left of a lamp that has gone out. */
 const REMNANT = 0.12;
-/** The animals of the library that make a bust from every side (not the Bélier: a wall relief, flat behind). */
-const ANIMALS: HeadId[] = ["tigre", "loup", "faucon", "lion", "hibou"];
+/**
+ * The animals of the library that make a bust from every side (not the Bélier: a wall relief, flat behind) and fit
+ * under the glass (not the stag: its antlers would touch it).
+ */
+const ANIMALS: HeadId[] = ["tigre", "loup", "faucon", "lion", "hibou", "panthere", "ours", "elephant", "cobra"];
+/**
+ * The other collection, the antiques: the portraits of Rome and Greece and their archetypes, four of them on each
+ * passage; the first four load with the world and stand in while the next ones load.
+ */
+const ANTIQUES: HeadId[] = [...headsOf("visage"), ...headsOf("archetype")].filter((h) => h !== "humain" && h !== "patron");
+const FIRST_ANTIQUES: HeadId[] = ["hera", "marcaurele", "socrate", "dame"];
+const antiques = new Casting(FIRST_ANTIQUES, () => pick(ANTIQUES, 4));
 
 const caseX = (j: number) => (j >= N ? 0 : j % 2 === 0 ? -XC : XC);
 const caseZ = (j: number) => (j >= N ? ZH : Z0 - Math.floor(j / 2) * SP);
 
-/** A framing on some cases of the gallery: drawn only while one of them still holds its animal. */
+/** A framing on some cases of the gallery: drawn only while one of them still holds its bust. */
 interface CaseFraming extends Framing {
   cases?: number[];
 }
@@ -63,7 +74,9 @@ const night = { dead: new Array<number>(N).fill(-1), queue: 0, wait: 0, peak: 0 
 
 interface View {
   seed: number;
-  animals: HeadId[];
+  collection: string;
+  /** The four busts of the cases, repeated along the aisle. */
+  busts: readonly HeadId[];
   /** Seconds since the last drop. */
   sinceDrop: number;
   haze: number;
@@ -157,15 +170,16 @@ const f3 = (x: number) => x.toFixed(3);
 
 /**
  * A natural history gallery at night: on each side of an aisle, glass cases on plinths, each holding the marble bust
- * of an animal under its own round of light; the human head alone at the end of the aisle. The subject is the
+ * of an animal (or, in the other collection, a portrait of Rome or Greece) under its own round of light; the human
+ * head alone at the end of the aisle. The subject is the
  * gallery itself: the camera glides along it, the busts never move. On each drop one light flickers and goes out, and
- * its animal crumbles to dust inside its case, which stays empty under a faint remnant of light; as the night drifts
+ * its bust crumbles to dust inside its case, which stays empty under a faint remnant of light; as the night drifts
  * the gallery empties, until only the human head is lit. The kick breathes the lights, the hats make the dust glint
  * in the beams.
  */
 export const museum = defineShaderScene({
   id: "museum",
-  heads: ANIMALS,
+  heads: (p) => (p.collection === "antiques" ? FIRST_ANTIQUES : ANIMALS),
   name: "Le Muséum",
   tag: "Visage",
   energy: "calm",
@@ -174,8 +188,20 @@ export const museum = defineShaderScene({
   mask: true,
   camera: { framings: FRAMINGS, glideBars: 3 },
   description:
-    "Une galerie d'histoire naturelle la nuit : des bustes d'animaux en marbre sous vitrine, chacun sous son rond de lumière ; à chaque drop une lumière s'éteint et son animal tombe en poussière, jusqu'à ce que seule la tête humaine reste éclairée au bout de l'allée.",
-  params: [paletteParam("fauve")],
+    "Une galerie de musée la nuit : des bustes en marbre sous vitrine (des animaux, ou des portraits antiques), chacun sous son rond de lumière ; à chaque drop une lumière s'éteint et son buste tombe en poussière, jusqu'à ce que seule la tête humaine reste éclairée au bout de l'allée.",
+  params: [
+    paletteParam("fauve"),
+    {
+      type: "select",
+      key: "collection",
+      label: "Collection",
+      options: [
+        { value: "bestiaire", label: "Le bestiaire" },
+        { value: "antiques", label: "Les antiques" },
+      ],
+      default: "bestiaire",
+    },
+  ],
   uniforms: () => ({
     ...headUniforms(),
     ...headUniforms("B"),
@@ -198,14 +224,16 @@ export const museum = defineShaderScene({
     const seed = u.uSeed.value as number;
     const bar = f.bpm > 0 ? 240 / f.bpm : 2;
     let v = views.get(u);
-    // back on screen (the seed is redrawn): four animals of the library, repeated along the aisle
-    const fresh = !v || v.seed !== seed;
+    // back on screen (the seed is redrawn): four busts of the collection, repeated along the aisle
+    const collection = p.collection === "antiques" ? "antiques" : "bestiaire";
+    const fresh = !v || v.seed !== seed || v.collection !== collection;
     if (!v || fresh) {
-      v = { seed, animals: shuffled(ANIMALS, seed).slice(0, 4), sinceDrop: 99, haze: v?.haze ?? 1 };
-      preloadHeads(v.animals);
+      const busts = collection === "antiques" ? antiques.pass() : shuffled(ANIMALS, seed).slice(0, 4);
+      v = { seed, collection, busts, sinceDrop: 99, haze: v?.haze ?? 1 };
+      preloadHeads(v.busts);
       views.set(u, v);
     }
-    v.animals.forEach((id, i) => setHead(u, id, HEAD_SLOTS[i], p));
+    v.busts.forEach((id, i) => setHead(u, id, HEAD_SLOTS[i], p));
     u.uShift.value = Math.floor(seed * 7) % 4;
 
     // The night: a new one starts when the drift falls back
@@ -318,7 +346,7 @@ uniform float uWave;    // seconds since the kick
 uniform float uDip;     // the drop dims every lamp a little
 uniform float uStir;    // the drop stirs up the dust
 uniform float uHaze;    // dust in the air (the build, the night)
-uniform float uShift;   // which animal each case holds
+uniform float uShift;   // which bust each case holds
 uniform float uSafe;    // limited flashes
 uniform float uDolly;   // the wide views glide along the aisle
 ${ART_LIB}
@@ -425,7 +453,7 @@ float crumbleFront(vec3 h, float c) {
   return crumbleBase(c) + (vnoise(h * 2.6 + gSeedC) - .5) * .32 + (vnoise(h * 9. + gSeedC) - .5) * .16;
 }
 
-/** A bust of the gallery in its own frame: animal k (4: the human head), crumbled by c, on its little block. */
+/** A bust of the gallery in its own frame: bust k (4: the human head), crumbled by c, on its little block. */
 float bust(vec3 h, int k, float c) {
   float d;
   if (k == 0) d = headD(h);

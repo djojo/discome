@@ -343,7 +343,8 @@ float colossus(vec3 ro, vec3 rd, out vec3 c) {
     ? vec3(0., TITLE_Y - (uHeadMin.y + uHeadSize.y * .5) * TITLE_S, ro.z - TITLE_D)
     : vec3(0., COL_S * (patron ? .58 : .3), ro.z - 42.);
   vec3 oc = ro - c;
-  float R = gColS * (title ? length(uHeadSize.xy) * .5 + .1 : 1.2);
+  // (a head reaches the top of its grid: antlers, a crest rise higher)
+  float R = gColS * (title ? length(uHeadSize.xy) * .5 + .1 : max(1.2, uHeadMin.y + uHeadSize.y + .1));
   float b = dot(oc, rd), h = b * b - dot(oc, oc) + R * R;
   if (h < 0.) return -1.;
   h = sqrt(h);
