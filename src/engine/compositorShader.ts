@@ -285,7 +285,8 @@ void main() {
     vec2 w = vec2(vnoise2(q + vec2(t, -t * 0.7)), vnoise2(q * 1.3 + vec2(5.2 - t * 0.8, 1.3 + t))) - 0.5;
     w += 0.5 * (vec2(vnoise2(q * 2.6 + vec2(-t * 1.3, 9.1)), vnoise2(q * 2.6 + vec2(3.7, t * 1.1))) - 0.5);
     uv += w * uBreathe * 2.0;
-    uv = 0.5 + (uv - 0.5) * (1.0 - uBreathe * 0.6 * (0.5 + 0.5 * sin(uBreathPhase)));
+    // (a margin taken in from the edges, so the melt never reaches past the frame)
+    uv = 0.5 + (uv - 0.5) * (1.0 - uBreathe * 2.6 - uBreathe * 0.6 * (0.5 + 0.5 * sin(uBreathPhase)));
   }
 
   uv = barrel(uv, uCrt);
