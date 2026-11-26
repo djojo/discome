@@ -25,20 +25,10 @@ import {
 } from "./settings";
 import { NEUTRAL_FX, type FxSettings } from "@/engine/fx";
 import { TripEnvelope } from "@/engine/trip";
-import {
-  directorPlans,
-  findPlan,
-  lookBackgrounds,
-  lookPlans,
-  planDefaults,
-  sceneForKey,
-  SEAL_STYLES,
-  shownPlans,
-  titlePlan,
-} from "@/looks";
+import { directorPlans, findPlan, lookBackgrounds, lookPlans, planDefaults, sceneForKey, shownPlans, titlePlan } from "@/looks";
 import { brandOn, type Brand } from "@/brand/brand";
 import { BrandSettings } from "./BrandSettings";
-import { sealCanvas, setBrandContent, signatureCanvas, titleReady, titleShape } from "@/brand/shape";
+import { setBrandContent, signatureCanvas, titleReady, titleShape } from "@/brand/shape";
 import { HEADS, preloadHeads } from "@/scenes/art/heads";
 import { getPalette, hex, ink } from "@/scenes/palettes";
 import { preloadDancer } from "@/scenes/3d/humanoid/dancerAsset";
@@ -232,9 +222,6 @@ export default function Visualizer() {
     // The night's title: the plan of the world on screen, and the next world's typeface (drawn ahead of time)
     let titleHere: { key: string; font: unknown; world: string } | null = null;
     let nextTitle: { font: unknown; world: string } | null = null;
-    // the seal: how it comes in in this world, how long the title plan has been on screen
-    let sealStyle = 0;
-    let titleTime = 0;
     let bgShots: { id: string; weight?: number }[] = [];
     let bgInk: [number, number, number] = [1, 1, 1];
     let firstBg = true;
@@ -245,7 +232,6 @@ export default function Visualizer() {
         const look = findLook(s);
         const tp = titlePlan(look);
         titleHere = tp ? { key: tp.key, font: tp.shot.params?.titleFont, world: look.name } : null;
-        sealStyle = Math.max(0, SEAL_STYLES.indexOf(look.seal ?? "fade"));
         const np = titlePlan(findLook(s, nextWorldId(s)));
         nextTitle = np ? { font: np.shot.params?.titleFont, world: np.look.name } : null;
         lookCtx = {
@@ -434,15 +420,6 @@ export default function Visualizer() {
       lookContext(s); // keeps the background ink in sync with the world
       frame.trip = tripEnv.update(frame, dt) * fxShown.trip;
       compositor.signatureShown = compositor.sceneId !== titleHere?.key;
-      // ---- The seal: on the title plan, after four bars of the world's own sculpture, the logo as it is comes in
-      // and holds until the plan is cut
-      if (titleHere && compositor.sceneId === titleHere.key) {
-        titleTime += dt;
-        if (titleTime > (frame.bpm > 0 ? 240 / frame.bpm : 2) * 4) compositor.showSeal(sealStyle);
-      } else {
-        titleTime = 0;
-        compositor.hideSeal();
-      }
       frame.safeFlash = s.safeFlash;
       frame.shot = compositor.sceneId ? sceneOf(s, compositor.sceneId).id : null;
       frame.camCut = director.camCut;
@@ -502,17 +479,6 @@ export default function Visualizer() {
     let alive = true;
     void signatureCanvas(b, sigFont)
       .then((c) => alive && compositorRef.current?.setSignature(c))
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, [settings.brand, sigFont]);
-
-  // The seal: the night's logo as it is (or its title, in the typeface of the world on screen)
-  useEffect(() => {
-    let alive = true;
-    void sealCanvas(settings.brand, sigFont)
-      .then((seal) => alive && compositorRef.current?.setSeal(seal))
       .catch(() => {});
     return () => {
       alive = false;

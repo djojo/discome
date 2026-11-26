@@ -18,8 +18,8 @@ export interface Brand {
   subtitle: string;
   /** The logo's silhouette: a PNG, white shape on transparent, cropped (made by importLogo). */
   logo: string | null;
-  /** The logo in its own colours, opaque, cropped like the silhouette, which gives it its shape (null: a logo saved
-   * before the colours were kept: re-import it). */
+  /** The logo in its own colours, opaque, cropped like the silhouette: where two of them meet, the sculpted shape gets
+   * a groove (null: a logo saved before they were kept: re-import it). */
   logoArt: string | null;
   /** Its leading colours, the most present first. */
   logoColors: string[];

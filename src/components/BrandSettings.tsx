@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   BRAND_FREQUENCIES,
   brandOn,
@@ -107,18 +107,6 @@ export function BrandSettings({ brand, onBrand, onError, onShowTitle, compact }:
         <div className="brand-logo">
           {brand.logo ? (
             <>
-              {brand.logoArt && (
-                <>
-                  <span className="brand-caption">Ton logo, tel qu&apos;il sera affiché</span>
-                  <div className="brand-art" role="img" aria-label="Ton logo dans ses couleurs, sur fond sombre et sur fond clair">
-                    {["dark", "light"].map((bg) => (
-                      <span key={bg} className={`brand-art-tile brand-art-${bg}`}>
-                        <span className="brand-art-logo" style={artStyle(brand.logoArt!, brand.logo!)} />
-                      </span>
-                    ))}
-                  </div>
-                </>
-              )}
               <span className="brand-caption">La forme que sculptent les mondes</span>
               {/* eslint-disable-next-line @next/next/no-img-element -- a local data URL, nothing for next/image to optimise */}
               <img
@@ -128,8 +116,8 @@ export function BrandSettings({ brand, onBrand, onError, onShowTitle, compact }:
               />
               {!brand.logoArt && (
                 <p className="hint brand-warn">
-                  Ce logo a été enregistré avant que Discome garde ses couleurs : réimporte-le (« Changer ») pour les
-                  retrouver.
+                  Ce logo a été enregistré avant que Discome sache garder les lettres posées sur une autre couleur :
+                  réimporte-le (« Changer ») pour qu&apos;elles se lisent dans chaque monde.
                 </p>
               )}
               {brand.logoThin && (
@@ -169,8 +157,8 @@ export function BrandSettings({ brand, onBrand, onError, onShowTitle, compact }:
             )}
           </div>
           <p className="hint">
-            Discome garde ton logo tel quel pour l&apos;afficher net, et sa silhouette pour que chaque monde la sculpte
-            dans sa matière. Idéal : un logo en aplat sur fond transparent (PNG ou SVG).
+            Discome garde sa silhouette, et ses couleurs pour tailler une rainure là où elles se touchent : chaque monde
+            la sculpte dans sa matière. Idéal : un logo en aplat sur fond transparent (PNG ou SVG).
           </p>
         </div>
       )}
@@ -222,10 +210,3 @@ export function BrandSettings({ brand, onBrand, onError, onShowTitle, compact }:
     </div>
   );
 }
-
-/** The logo in its colours, shaped by its silhouette (both images line up: same crop, same size). */
-const artStyle = (art: string, logo: string): CSSProperties => ({
-  backgroundImage: `url(${art})`,
-  WebkitMaskImage: `url(${logo})`,
-  maskImage: `url(${logo})`,
-});

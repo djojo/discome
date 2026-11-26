@@ -1,8 +1,9 @@
 /**
- * A logo file turned into what Discome shows: its silhouette (its transparency when it has some, otherwise what stands
- * out from the colour of its edges), which the worlds sculpt; and its art, the logo itself in its own colours, shown
- * as it is. Both cropped alike, at most 1024 px, saved as PNGs: the silhouette white on transparent, the art opaque
- * (its colours carried a little past the shape, so that its edges stay clean once masked by the silhouette).
+ * A logo file turned into what the worlds sculpt: its silhouette (its transparency when it has some, otherwise what
+ * stands out from the colour of its edges); and its art, the logo in its own colours, kept to find where two of them
+ * meet inside it (a groove is cut there, so that letters laid over a shape stay readable). Both cropped alike, at most
+ * 1024 px, saved as PNGs: the silhouette white on transparent, the art opaque (its colours carried a little past the
+ * shape).
  */
 const MAX = 1024;
 

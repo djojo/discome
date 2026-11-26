@@ -75,72 +75,10 @@ uniform float uBloomAmt;
 uniform sampler2D uSig;
 uniform float uSigOn;
 uniform vec4 uSigRect;
-// The seal: the night's logo (or title) as it is, crisp, over everything; its halo, a frame half as large again
-uniform sampler2D uSealArt;
-uniform sampler2D uSealHalo;
-uniform float uSealOn;
-uniform float uSealT;
-uniform float uSealStyle;
-uniform vec4 uSealRect;
-uniform float uSealDark;
-uniform vec3 uSealTint;
 varying vec2 vUv;
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
-float vnoise(vec2 p) {
-  vec2 i = floor(p), f = fract(p);
-  f = f * f * (3.0 - 2.0 * f);
-  return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
-}
-
-/**
- * The seal over the frame: the frame dims, the ground right round the logo darkens (or lightens, for a dark logo),
- * then the logo comes in in the world's style (0 a fade from a little larger, 1 a sheen sweeping across it, 2 a neon
- * flickering on, 3 pixels gathering, 4 smoke dissolving) and always ends whole, its colours untouched.
- */
-vec3 seal(vec3 col, vec2 uv) {
-  float on = uSealOn;
-  float t = uSealT;
-  vec2 hq = (uv - uSealRect.xy) / uSealRect.zw;
-  col *= 1.0 - 0.25 * on;
-  vec2 hh = (hq - 0.5) / 1.5 + 0.5;
-  if (hh.x > 0.0 && hh.x < 1.0 && hh.y > 0.0 && hh.y < 1.0) {
-    float halo = texture2D(uSealHalo, hh).a;
-    col = mix(col, uSealDark > 0.5 ? vec3(0.86) : vec3(0.0), smoothstep(0.0, 0.85, halo) * 0.85 * on);
-  }
-  vec2 q = hq;
-  float reveal;
-  float s = uSealStyle;
-  if (s < 0.5) {
-    q = (hq - 0.5) / (1.0 + 0.07 * (1.0 - smoothstep(0.0, 1.6, t))) + 0.5;
-    reveal = smoothstep(0.0, 1.3, t);
-  } else if (s < 1.5) {
-    reveal = smoothstep(0.0, 0.7, t);
-  } else if (s < 2.5) {
-    reveal = t > 1.0 ? 1.0 : step(0.42, hash(vec2(floor(t * 16.0), 7.0))) * (0.55 + 0.45 * smoothstep(0.3, 1.0, t));
-  } else if (s < 3.5) {
-    float b = 0.07 * (1.0 - smoothstep(0.0, 1.1, t));
-    if (b > 0.002) q = (floor(hq / b) + 0.5) * b;
-    float cell = hash(floor(hq / max(b, 0.002)) + 3.0);
-    reveal = t > 1.1 ? 1.0 : step(cell, smoothstep(0.0, 0.9, t) * 1.1);
-  } else {
-    float n = vnoise(hq * vec2(9.0, 6.0) + vec2(0.0, -t * 0.8)) * 0.7 + vnoise(hq * 23.0) * 0.3;
-    float k = smoothstep(0.0, 1.6, t) * 1.3 - 0.15;
-    reveal = smoothstep(n - 0.12, n + 0.12, k);
-    q.y -= 0.03 * (1.0 - smoothstep(0.0, 1.6, t));
-  }
-  if (q.x < 0.0 || q.x > 1.0 || q.y < 0.0 || q.y > 1.0) return col;
-  vec4 art = texture2D(uSealArt, q);
-  float a = art.a * clamp(reveal, 0.0, 1.0) * on;
-  col = mix(col, art.rgb, a);
-  if (s > 0.5 && s < 1.5) {
-    float x = hq.x + 0.35 * hq.y - (t - 0.2) * 1.2;
-    col += vec3(1.0) * exp(-x * x * 90.0) * a * 0.55;
-  }
-  if (s > 1.5 && s < 2.5) col += uSealTint * a * 0.3 * (1.0 - smoothstep(1.0, 2.2, t));
-  return col;
-}
 float vnoise2(vec2 p) {
   vec2 i = floor(p), f = fract(p);
   f = f * f * (3.0 - 2.0 * f);
@@ -435,7 +373,6 @@ void main() {
       col = mix(col, vec3(0.94, 0.93, 0.9), texture2D(uSig, sq).a * 0.62 * uSigOn);
     }
   }
-  if (uSealOn > 0.001) col = seal(col, vUv);
 
   // a dither of half a level (triangular, changing every frame): no bands in dark gradients once quantised to 8 bits
   col += (hash(gl_FragCoord.xy + fract(uTime * 7.3) * 91.0) + hash(gl_FragCoord.xy * 1.37 + 4.7 + fract(uTime * 3.1) * 57.0) - 1.0) / 255.0;
