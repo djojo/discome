@@ -5,7 +5,7 @@ import type * as THREE from "three";
  * The heads themselves (their names, their families) are listed in the library, scenes/art/heads.ts.
  */
 
-const KIND = { cobra: 0 };
+const KIND = { cobra: 0, panthere: 1, ours: 2, cerf: 3, elephant: 4 };
 
 export interface Recipe {
   /** A taller box (a crown, antlers): the top of the grid, above the usual 1. */
@@ -20,8 +20,9 @@ export function recipeUniforms() {
   };
 }
 
-function beast(kind: keyof typeof KIND): Recipe {
+function beast(kind: keyof typeof KIND, top?: number): Recipe {
   return {
+    top,
     apply(u) {
       u.uKind.value = KIND[kind];
     },
@@ -30,4 +31,9 @@ function beast(kind: keyof typeof KIND): Recipe {
 
 export const RECIPES: Record<string, Recipe> = {
   cobra: beast("cobra"),
+  panthere: beast("panthere"),
+  ours: beast("ours"),
+  // the antlers rise above the usual box
+  cerf: beast("cerf", 1.5),
+  elephant: beast("elephant"),
 };

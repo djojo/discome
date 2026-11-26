@@ -50,6 +50,10 @@ export const HEADS = [
   { id: "hibou", label: "Hibou", family: "animal", licence: "personnel", kind: "file" },
   { id: "belier", label: "Bélier", family: "animal", licence: "personnel", kind: "file" },
   { id: "cobra", label: "Cobra", family: "animal", licence: "code", kind: "code" },
+  { id: "panthere", label: "Panthère", family: "animal", licence: "code", kind: "code" },
+  { id: "ours", label: "Ours", family: "animal", licence: "code", kind: "code" },
+  { id: "cerf", label: "Cerf", family: "animal", licence: "code", kind: "code" },
+  { id: "elephant", label: "Éléphant", family: "animal", licence: "code", kind: "code" },
   { id: "moai", label: "Moai", family: "sculpture", licence: "personnel", kind: "file" },
   { id: "nefertiti", label: "Néfertiti", family: "sculpture", licence: "personnel", kind: "file" },
 ] as const satisfies readonly HeadInfo[];
