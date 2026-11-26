@@ -452,8 +452,9 @@ function bake(pos, voxel, cfg) {
         // the mesh distance is exact near the outer surface; the EDT takes over where it is not (filled cavities, seals)
         sdf[id] = solid[id] ? -Math.min(toOutside[id], Math.max(m, toOutside[id] - vox)) : Math.min(m, toInside[id]);
       }
-  // The model is cut flat at the bottom of the box: the shaders add the column below.
-  const cutY = box.min[1] + 1.5 * cell[1];
+  // The model is cut flat at the bottom of the box (the shaders add the column below), or higher (cfg.cut, in the
+  // frame of the head): under the neck, above a stand.
+  const cutY = Math.max(box.min[1] + 1.5 * cell[1], cfg.cut ?? -Infinity);
   for (let k = 0; k < nz; k++)
     for (let j = 0; j < ny; j++)
       for (let i = 0; i < nx; i++) {

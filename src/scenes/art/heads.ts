@@ -14,10 +14,10 @@ export const HEAD_FAMILIES = [
 export type HeadFamily = (typeof HEAD_FAMILIES)[number]["id"];
 
 /**
- * What may be done with a head: "code" (sculpted by us), "cc0" (public domain), "cc-by" (free, credit due),
- * "personnel" (a Printables bust: personal use, see public/heads/CREDITS.md).
+ * What may be done with a head: "code" (sculpted by us), "domaine-public" (a museum scan in the public domain),
+ * "personnel" (a Printables bust: personal use). See public/heads/CREDITS.md.
  */
-export type HeadLicence = "code" | "cc0" | "cc-by" | "personnel";
+export type HeadLicence = "code" | "domaine-public" | "personnel";
 
 /**
  * Where a head's field comes from: "sculpted" (a function of lib.glsl.ts, evaluated live), "file" (a grid baked by
@@ -35,13 +35,27 @@ interface HeadInfo {
 }
 
 /**
- * The head library: real sculpted busts (Printables, see public/heads/CREDITS.md) baked by scripts/bake-heads.mjs
+ * The head library: real sculpted busts (portraits of Rome and Greece scanned by the SMK, in the public domain;
+ * Printables busts: see public/heads/CREDITS.md) baked by scripts/bake-heads.mjs
  * into signed distance grids, so every head effect (shell, shards, contour lines, halftone, chrome…) works with
  * any of them; heads sculpted in code (sculpt/), cooked into the same grids by the oven; "humain" and "patron",
  * sculpted heads of lib.glsl.ts evaluated live.
  */
 export const HEADS = [
   { id: "humain", label: "Humain", family: "visage", licence: "code", kind: "sculpted" },
+  // the faces: portraits of Rome and Greece (casts of the SMK, Copenhagen)
+  { id: "romaine", label: "Romaine âgée", family: "visage", licence: "domaine-public", kind: "file" },
+  { id: "lysimache", label: "Lysimaché", family: "visage", licence: "domaine-public", kind: "file" },
+  { id: "dame", label: "Dame aux boucles", family: "visage", licence: "domaine-public", kind: "file" },
+  { id: "giulia", label: "Giulia", family: "visage", licence: "domaine-public", kind: "file" },
+  { id: "minatia", label: "Minatia Polla", family: "visage", licence: "domaine-public", kind: "file" },
+  { id: "hera", label: "Héra", family: "visage", licence: "domaine-public", kind: "file" },
+  { id: "memnon", label: "Memnon", family: "visage", licence: "domaine-public", kind: "file" },
+  { id: "antinous", label: "Antinoüs", family: "visage", licence: "domaine-public", kind: "file" },
+  { id: "marcaurele", label: "Marc Aurèle", family: "visage", licence: "domaine-public", kind: "file" },
+  { id: "socrate", label: "Socrate", family: "visage", licence: "domaine-public", kind: "file" },
+  { id: "seneque", label: "Pseudo-Sénèque", family: "visage", licence: "domaine-public", kind: "file" },
+  { id: "homere", label: "Homère", family: "visage", licence: "domaine-public", kind: "file" },
   { id: "patron", label: "Le Patron", family: "archetype", licence: "code", kind: "sculpted" },
   { id: "tigre", label: "Tigre", family: "animal", licence: "personnel", kind: "file" },
   { id: "loup", label: "Loup", family: "animal", licence: "personnel", kind: "file" },

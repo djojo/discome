@@ -117,6 +117,201 @@
       "source": "https://www.printables.com/model/3112-nefertiti",
       "top": 0.12,
       "scale": 0.85
+    },
+    "romaine": {
+      "label": "Romaine âgée",
+      "file": "smk/romaine.stl",
+      "rot": [
+        -90,
+        0,
+        0
+      ],
+      "chin": 0.44,
+      "source": "https://open.smk.dk/artwork/image/DEP453",
+      "licence": "Public Domain Mark 1.0",
+      "museum": "SMK – Statens Museum for Kunst, The Royal Cast Collection",
+      "inventory": "DEP453",
+      "title": "Portræt af ældre romersk kvinde",
+      "scale": 0.88
+    },
+    "lysimache": {
+      "label": "Lysimaché",
+      "file": "smk/lysimache.stl",
+      "rot": [
+        -90,
+        0,
+        0
+      ],
+      "chin": 0.62,
+      "source": "https://open.smk.dk/artwork/image/KAS2247",
+      "licence": "Public Domain Mark 1.0",
+      "museum": "SMK – Statens Museum for Kunst, The Royal Cast Collection",
+      "inventory": "KAS2247",
+      "title": "Ældre kvinde, Lysimache",
+      "scale": 0.85,
+      "cut": -0.7
+    },
+    "dame": {
+      "label": "Dame aux boucles",
+      "file": "smk/dame.stl",
+      "rot": [
+        -90,
+        0,
+        0
+      ],
+      "chin": 0.51,
+      "source": "https://open.smk.dk/artwork/image/KAS843",
+      "licence": "Public Domain Mark 1.0",
+      "museum": "SMK – Statens Museum for Kunst, The Royal Cast Collection",
+      "inventory": "KAS843",
+      "title": "Portræt af romersk dame med højt krøllet forhår og fletninge",
+      "scale": 0.82
+    },
+    "giulia": {
+      "label": "Giulia",
+      "file": "smk/giulia.stl",
+      "rot": [
+        -90,
+        0,
+        0
+      ],
+      "chin": 0.55,
+      "source": "https://open.smk.dk/artwork/image/KAS1122",
+      "licence": "Public Domain Mark 1.0",
+      "museum": "SMK – Statens Museum for Kunst, The Royal Cast Collection",
+      "inventory": "KAS1122",
+      "title": "Flavisk kvinde, Giulia giovane",
+      "scale": 0.82,
+      "cut": -0.56
+    },
+    "minatia": {
+      "label": "Minatia Polla",
+      "file": "smk/minatia.stl",
+      "rot": [
+        -90,
+        0,
+        0
+      ],
+      "chin": 0.49,
+      "source": "https://open.smk.dk/artwork/image/KAS1227",
+      "licence": "Public Domain Mark 1.0",
+      "museum": "SMK – Statens Museum for Kunst, The Royal Cast Collection",
+      "inventory": "KAS1227",
+      "title": "Portræt af ung pige, Minatia Polla",
+      "scale": 0.88
+    },
+    "hera": {
+      "label": "Héra",
+      "file": "smk/hera.stl",
+      "rot": [
+        -90,
+        0,
+        0
+      ],
+      "chin": 0.42,
+      "source": "https://open.smk.dk/artwork/image/KAS622",
+      "licence": "Public Domain Mark 1.0",
+      "museum": "SMK – Statens Museum for Kunst, The Royal Cast Collection",
+      "inventory": "KAS622",
+      "title": "Hoved fra statuen Hera Barberini",
+      "scale": 0.85
+    },
+    "memnon": {
+      "label": "Memnon",
+      "file": "smk/memnon.stl",
+      "rot": [
+        -90,
+        0,
+        0
+      ],
+      "chin": 0.55,
+      "source": "https://open.smk.dk/artwork/image/KAS969",
+      "licence": "Public Domain Mark 1.0",
+      "museum": "SMK – Statens Museum for Kunst, The Royal Cast Collection",
+      "inventory": "KAS969",
+      "title": "Memnon, elev hos Herodes Atticus",
+      "scale": 0.9,
+      "cut": -0.42
+    },
+    "antinous": {
+      "label": "Antinoüs",
+      "file": "smk/antinous.stl",
+      "rot": [
+        -90,
+        0,
+        0
+      ],
+      "chin": 0.38,
+      "source": "https://open.smk.dk/artwork/image/DEP454",
+      "licence": "Public Domain Mark 1.0",
+      "museum": "SMK – Statens Museum for Kunst, The Royal Cast Collection",
+      "inventory": "DEP454",
+      "title": "Portræt af Antinoos med vedbendkrans",
+      "scale": 0.82
+    },
+    "marcaurele": {
+      "label": "Marc Aurèle",
+      "file": "smk/marcaurele.stl",
+      "rot": [
+        -90,
+        0,
+        0
+      ],
+      "chin": 0.33,
+      "source": "https://open.smk.dk/artwork/image/KAS1090",
+      "licence": "Public Domain Mark 1.0",
+      "museum": "SMK – Statens Museum for Kunst, The Royal Cast Collection",
+      "inventory": "KAS1090",
+      "title": "Portræt af Marcus Aurelius som ung",
+      "scale": 0.82
+    },
+    "socrate": {
+      "label": "Socrate",
+      "file": "smk/socrate.stl",
+      "rot": [
+        -90,
+        0,
+        0
+      ],
+      "chin": 0.44,
+      "source": "https://open.smk.dk/artwork/image/KAS635",
+      "licence": "Public Domain Mark 1.0",
+      "museum": "SMK – Statens Museum for Kunst, The Royal Cast Collection",
+      "inventory": "KAS635",
+      "title": "Portræt af Sokrates",
+      "scale": 0.85
+    },
+    "seneque": {
+      "label": "Pseudo-Sénèque",
+      "file": "smk/seneque.stl",
+      "rot": [
+        0,
+        0,
+        0
+      ],
+      "chin": 0.46,
+      "source": "https://open.smk.dk/artwork/image/KAS94",
+      "licence": "Public Domain Mark 1.0",
+      "museum": "SMK – Statens Museum for Kunst, The Royal Cast Collection",
+      "inventory": "KAS94",
+      "title": "Pseudo-Seneca, portræt af Hesiod?",
+      "scale": 0.88
+    },
+    "homere": {
+      "label": "Homère",
+      "file": "smk/homere.stl",
+      "rot": [
+        -90,
+        0,
+        0
+      ],
+      "chin": 0.46,
+      "source": "https://open.smk.dk/artwork/image/KAS2237",
+      "licence": "Public Domain Mark 1.0",
+      "museum": "SMK – Statens Museum for Kunst, The Royal Cast Collection",
+      "inventory": "KAS2237",
+      "title": "Homer, græsk digter, Epimenides type",
+      "scale": 0.85
     }
   }
 }
