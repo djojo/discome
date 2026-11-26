@@ -130,7 +130,7 @@ float helmetD(vec3 q) {
   // the chin bar: the shell carried down and forward under the visor
   shell = smin(shell, sdEllipsoid(q - vec3(0., -.33, .26), vec3(.52, .36, .42)), .22);
   // the aerodynamic tail stretching back, the dorsal fin
-  shell = smin(shell, sdEllipsoid(q - vec3(0., .32, -.74), vec3(.34, .19, .48)), .16);
+  shell = smin(shell, sdEllipsoid(q - vec3(0., .36, -.7), vec3(.24, .13, .44)), .24);
   float fin = max(sdBox(q - vec3(0., .78, -.5), vec3(.02, .13, .38)), q.y - .84 + .3 * (q.z + .5));
   shell = smin(shell, fin, .035);
   // open at the bottom, a little higher at the back
@@ -332,7 +332,8 @@ vec3 helmetColor(vec3 p, vec3 rd, float t, float pa) {
   vec2 nxz = rot(uRotY) * nq.xz;
   vec3 n = normalize(vec3(nxz.x, nq.y, nxz.y));
   vec3 rr = reflect(rd, n);
-  vec3 env = background(p, rr) + strips(rr);
+  // (the strips fade at grazing angles: on the silhouette they would only sparkle)
+  vec3 env = background(p, rr) + strips(rr) * smoothstep(.04, .3, dot(n, -rd));
   float fw = t * pa;
   // a soft key from the front-left, a rim of the moment's colour from behind
   vec3 key = vec3(.8, .85, 1.) * pow(max(dot(rr, normalize(vec3(-.6, .5, .6))), 0.), 30.) * .6;
