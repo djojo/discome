@@ -63,6 +63,7 @@ import { grid } from "./art/grid";
 import { tube } from "./art/tube";
 import { city } from "./art/city";
 import { trails } from "./art/trails";
+import { bigtop } from "./art/bigtop";
 
 /**
  * The scene library. To add a scene: create a file exporting a SceneDef
@@ -128,6 +129,7 @@ export const SCENES: SceneDef[] = [
   tube,
   city,
   trails,
+  bigtop,
   // Classics, recoloured by the worlds' palettes
   halo,
   kaleido,

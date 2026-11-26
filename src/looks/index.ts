@@ -485,6 +485,8 @@ export const LOOKS: Look[] = [
       { id: "circuit-city", key: "extinction", label: "Extinction", weight: 2, role: "after", params: { palette: "piste", dark: true } },
       { id: "circuit-trails", weight: 2, role: "drop", params: { palette: "piste" } },
       { id: "circuit-trails", key: "pose", label: "Pose longue", weight: 2, role: "calm", params: { palette: "piste", top: true } },
+      { id: "circuit-bigtop", weight: 2, role: "drop", params: { palette: "foraine" } },
+      { id: "circuit-bigtop", key: "charge", label: "Charge", weight: 2, role: "build", params: { palette: "foraine", charge: true } },
     ],
     // no background: every scene draws its own night
     title: {
