@@ -2,23 +2,53 @@ import * as THREE from "three";
 import { titleShape } from "@/brand/shape";
 import type { ParamDef, ParamValues } from "../types";
 
+/** The families of the head library (the "Tête" setting lists them in this order). */
+export const HEAD_FAMILIES = [
+  { id: "animal", label: "Animaux" },
+  { id: "visage", label: "Visages" },
+  { id: "archetype", label: "Archétypes" },
+  { id: "masque", label: "Masques" },
+  { id: "sculpture", label: "Sculptures du monde" },
+] as const;
+export type HeadFamily = (typeof HEAD_FAMILIES)[number]["id"];
+
+/**
+ * What may be done with a head: "code" (sculpted by us), "cc0" (public domain), "cc-by" (free, credit due),
+ * "personnel" (a Printables bust: personal use, see public/heads/CREDITS.md).
+ */
+export type HeadLicence = "code" | "cc0" | "cc-by" | "personnel";
+
+/**
+ * Where a head's field comes from: "sculpted" (a function of lib.glsl.ts, evaluated live), "file" (a grid baked by
+ * scripts/bake-heads.mjs from a model, public/heads/<id>.sdf.gz).
+ */
+export type HeadKind = "sculpted" | "file";
+
+interface HeadInfo {
+  id: string;
+  label: string;
+  family: HeadFamily;
+  licence: HeadLicence;
+  kind: HeadKind;
+}
+
 /**
  * The head library: real sculpted busts (Printables, see public/heads/CREDITS.md) baked by scripts/bake-heads.mjs
  * into signed distance grids, so every head effect (shell, shards, contour lines, halftone, chrome…) works with
  * any of them. "humain" and "patron" are sculpted heads of lib.glsl.ts (no file).
  */
 export const HEADS = [
-  { id: "humain", label: "Humain" },
-  { id: "patron", label: "Le Patron" },
-  { id: "tigre", label: "Tigre" },
-  { id: "loup", label: "Loup" },
-  { id: "faucon", label: "Faucon" },
-  { id: "lion", label: "Lion" },
-  { id: "hibou", label: "Hibou" },
-  { id: "belier", label: "Bélier" },
-  { id: "moai", label: "Moai" },
-  { id: "nefertiti", label: "Néfertiti" },
-] as const;
+  { id: "humain", label: "Humain", family: "visage", licence: "code", kind: "sculpted" },
+  { id: "patron", label: "Le Patron", family: "archetype", licence: "code", kind: "sculpted" },
+  { id: "tigre", label: "Tigre", family: "animal", licence: "personnel", kind: "file" },
+  { id: "loup", label: "Loup", family: "animal", licence: "personnel", kind: "file" },
+  { id: "faucon", label: "Faucon", family: "animal", licence: "personnel", kind: "file" },
+  { id: "lion", label: "Lion", family: "animal", licence: "personnel", kind: "file" },
+  { id: "hibou", label: "Hibou", family: "animal", licence: "personnel", kind: "file" },
+  { id: "belier", label: "Bélier", family: "animal", licence: "personnel", kind: "file" },
+  { id: "moai", label: "Moai", family: "sculpture", licence: "personnel", kind: "file" },
+  { id: "nefertiti", label: "Néfertiti", family: "sculpture", licence: "personnel", kind: "file" },
+] as const satisfies readonly HeadInfo[];
 
 export type HeadId = (typeof HEADS)[number]["id"];
 
@@ -32,13 +62,18 @@ export const headParam = (def: HeadId = "humain"): ParamDef => ({
   type: "select",
   key: "head",
   label: "Tête",
-  options: [...HEADS.map((h) => ({ value: h.id, label: h.label })), { value: TITLE_HEAD, label: "Titre de la soirée" }],
+  options: [
+    ...HEAD_FAMILIES.flatMap((fam) =>
+      HEADS.filter((h) => h.family === fam.id).map((h) => ({ value: h.id, label: h.label, group: fam.label })),
+    ),
+    { value: TITLE_HEAD, label: "Titre de la soirée" },
+  ],
   default: def,
 });
 
-/** The heads sculpted in code (lib.glsl.ts): no file to load. */
-const SCULPTED = new Set(["humain", "patron"]);
-const isBaked = (id: unknown): id is HeadId => typeof id === "string" && !SCULPTED.has(id) && HEADS.some((h) => h.id === id);
+const headInfo = (id: unknown): HeadInfo | undefined => HEADS.find((h) => h.id === id);
+/** The heads whose field is a grid (a file to load): the others are sculpted live, or the title. */
+const isBaked = (id: unknown): id is HeadId => headInfo(id)?.kind === "file";
 
 export interface HeadGrid {
   tex: THREE.Data3DTexture;
@@ -99,6 +134,20 @@ export function loadHead(id: unknown): Promise<HeadGrid | null> {
 /** Warm the cache, e.g. with the heads of a world's plans, so a head never pops in late. */
 export function preloadHeads(ids: Iterable<unknown>) {
   for (const id of ids) void loadHead(id);
+}
+
+/**
+ * Let go of the loaded heads that are not in `keep` (the heads of the worlds still on): their texture leaves the
+ * graphics card. A scene that still shows one keeps it until it changes heads; asked for again, it loads again.
+ */
+export function releaseHeads(keep: Iterable<unknown>) {
+  const k = new Set(keep);
+  for (const [id, g] of loaded) {
+    if (k.has(id)) continue;
+    g.tex.dispose();
+    loaded.delete(id);
+    loading.delete(id);
+  }
 }
 
 /** The grid if it is ready; starts loading it otherwise. */

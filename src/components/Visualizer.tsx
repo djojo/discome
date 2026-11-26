@@ -10,6 +10,7 @@ import { ControlPanel, SOURCE_LABELS } from "./ControlPanel";
 import { YouTubePlayer } from "./YouTubePlayer";
 import { YOUTUBE_SET } from "@/lib/audio/youtube";
 import {
+  activeWorlds,
   allLooks,
   applyLook,
   enterWorld,
@@ -25,16 +26,31 @@ import {
 } from "./settings";
 import { NEUTRAL_FX, type FxSettings } from "@/engine/fx";
 import { TripEnvelope } from "@/engine/trip";
-import { directorPlans, findPlan, lookBackgrounds, lookPlans, planDefaults, sceneForKey, shownPlans, titlePlan } from "@/looks";
+import { directorPlans, findPlan, lookBackgrounds, lookPlans, planDefaults, sceneForKey, shownPlans, titlePlan, type Look } from "@/looks";
 import { brandOn, SIGNATURE_SIZES, type Brand } from "@/brand/brand";
 import { BrandSettings } from "./BrandSettings";
 import { setBrandContent, signatureCanvas, titleReady, titleShape } from "@/brand/shape";
-import { HEADS, preloadHeads } from "@/scenes/art/heads";
+import { preloadHeads, releaseHeads } from "@/scenes/art/heads";
 import { getPalette, hex, ink } from "@/scenes/palettes";
 import { preloadDancer } from "@/scenes/3d/humanoid/dancerAsset";
 import type { DirectorContext } from "@/engine/Director";
 
 const IDLE_MS = 3500;
+
+/**
+ * The library heads a world can show: its plans' heads (as set by the world, as tweaked, their variations) and those
+ * its scenes show by themselves (SceneMeta.heads).
+ */
+const lookHeads = (s: Settings, look: Look) =>
+  lookPlans(look).flatMap((p) => [
+    planDefaults(p).head,
+    s.params[p.key]?.head,
+    ...(p.shot.vary?.choices?.head ?? []),
+    ...(p.scene.heads ?? []),
+  ]);
+
+/** The heads of every world that is on. */
+const onHeads = (s: Settings) => [...new Set(activeWorlds(s).flatMap((id) => lookHeads(s, findLook(s, id))))];
 
 const SECTION_LABELS: Record<Section, string> = {
   calm: "Groove",
@@ -137,9 +153,14 @@ export default function Visualizer() {
     let raf = 0;
     let last = performance.now();
     let firstShow = true;
-    // Every head of the library loads in the background shortly after start: the director can then cut to
-    // any of them (or another world) without a head popping in late. ~25 Mo, read once.
-    const headsTimer = window.setTimeout(() => preloadHeads(HEADS.map((h) => h.id)), 4000);
+    // The heads of every world that is on load in the background shortly after start (the current world's at once,
+    // see lookContext): the director can then cut to any of them, or to another world, without a head popping in
+    // late. The heads of the worlds that are off stay on the server, and leave the graphics card when one goes off.
+    let headsWarm = false;
+    const headsTimer = window.setTimeout(() => {
+      headsWarm = true;
+      preloadHeads(onHeads(settingsRef.current));
+    }, 4000);
 
     // "Auto" quality: the screen's own density, and each scene at the highest resolution that stays fluid (learnt per
     // scene by the compositor); the density itself only drops when a scene can't go any lower.
@@ -240,10 +261,11 @@ export default function Visualizer() {
           transitions: look.transitions,
           freeVary: !!look.classic,
         };
-        // the world's heads load now, so none pops in late when its plan comes up
-        preloadHeads(
-          lookPlans(look).flatMap((p) => [planDefaults(p).head, s.params[p.key]?.head, ...(p.shot.vary?.choices?.head ?? [])]),
-        );
+        // the world's heads load now, so none pops in late when its plan comes up; those of the worlds now off go
+        preloadHeads(lookHeads(s, look));
+        const on = onHeads(s);
+        releaseHeads(on);
+        if (headsWarm) preloadHeads(on);
         bgShots = lookBackgrounds(look);
         bgInk = ink(getPalette(look.palettes[0]));
       }

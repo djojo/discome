@@ -165,6 +165,7 @@ const f3 = (x: number) => x.toFixed(3);
  */
 export const museum = defineShaderScene({
   id: "museum",
+  heads: ANIMALS,
   name: "Le Muséum",
   tag: "Visage",
   energy: "calm",

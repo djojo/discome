@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Bakes the head models of assets/heads-src (STL or 3MF, see assets/heads.config.json) into signed distance grids
- * the shaders can sample: public/heads/<id>.sdf.gz.
+ * Bakes the head models of assets/heads-src (STL, 3MF, OBJ, PLY, glTF/GLB: see assets/heads.config.json) into signed
+ * distance grids the shaders can sample: public/heads/<id>.sdf.gz.
  *
  *   node scripts/bake-heads.mjs                 every head
  *   node scripts/bake-heads.mjs tigre loup      some heads
@@ -71,9 +71,166 @@ function read3MF(buf, objectId) {
   return pos;
 }
 
+/** Wavefront OBJ: its vertices and faces (polygons as fans), "v/vt/vn" and negative (relative) indices. */
+function readOBJ(buf) {
+  const v = [];
+  const out = [];
+  for (const line of buf.toString("utf8").split("\n")) {
+    if (line.startsWith("v ")) {
+      const [, x, y, z] = line.trim().split(/\s+/);
+      v.push(+x, +y, +z);
+    } else if (line.startsWith("f ")) {
+      const ids = line
+        .trim()
+        .split(/\s+/)
+        .slice(1)
+        .map((t) => {
+          const i = parseInt(t, 10);
+          return i < 0 ? v.length / 3 + i : i - 1;
+        });
+      for (let k = 1; k + 1 < ids.length; k++)
+        for (const i of [ids[0], ids[k], ids[k + 1]]) out.push(v[i * 3], v[i * 3 + 1], v[i * 3 + 2]);
+    }
+  }
+  return new Float32Array(out);
+}
+
+/** PLY (ascii or binary): the x, y, z of its vertices and its faces (polygons as fans); other properties skipped. */
+function readPLY(buf) {
+  const end = buf.indexOf("end_header");
+  const header = buf.subarray(0, end).toString("latin1").split(/\r?\n/);
+  let body = end + "end_header".length;
+  while (buf[body] === 0x0d || buf[body] === 0x0a) {
+    body++;
+    if (buf[body - 1] === 0x0a) break;
+  }
+  const format = header.find((l) => l.startsWith("format")).split(/\s+/)[1];
+  const elements = [];
+  for (const l of header) {
+    const t = l.trim().split(/\s+/);
+    if (t[0] === "element") elements.push({ name: t[1], count: +t[2], props: [] });
+    else if (t[0] === "property") elements[elements.length - 1].props.push(t[1] === "list" ? { list: true, count: t[2], type: t[3], name: t[4] } : { type: t[1], name: t[2] });
+  }
+  const SIZE = { char: 1, uchar: 1, int8: 1, uint8: 1, short: 2, ushort: 2, int16: 2, uint16: 2, int: 4, uint: 4, int32: 4, uint32: 4, float: 4, float32: 4, double: 8, float64: 8 };
+  const le = format === "binary_little_endian";
+  let o = body;
+  const read = (type) => {
+    const n = SIZE[type];
+    let x;
+    if (type === "float" || type === "float32") x = le ? buf.readFloatLE(o) : buf.readFloatBE(o);
+    else if (type === "double" || type === "float64") x = le ? buf.readDoubleLE(o) : buf.readDoubleBE(o);
+    else if (n === 1) x = type.startsWith("u") ? buf.readUInt8(o) : buf.readInt8(o);
+    else if (n === 2) x = type.startsWith("u") ? (le ? buf.readUInt16LE(o) : buf.readUInt16BE(o)) : le ? buf.readInt16LE(o) : buf.readInt16BE(o);
+    else x = type.startsWith("u") ? (le ? buf.readUInt32LE(o) : buf.readUInt32BE(o)) : le ? buf.readInt32LE(o) : buf.readInt32BE(o);
+    o += n;
+    return x;
+  };
+  let tokens = null;
+  let ti = 0;
+  if (format === "ascii") tokens = buf.subarray(body).toString("latin1").trim().split(/\s+/);
+  const next = (type) => (tokens ? +tokens[ti++] : read(type));
+  const verts = [];
+  const out = [];
+  for (const el of elements) {
+    for (let e = 0; e < el.count; e++) {
+      const rec = {};
+      for (const pr of el.props) {
+        if (pr.list) {
+          const n = next(pr.count);
+          const ids = [];
+          for (let k = 0; k < n; k++) ids.push(next(pr.type));
+          rec[pr.name] = ids;
+        } else rec[pr.name] = next(pr.type);
+      }
+      if (el.name === "vertex") verts.push(rec.x, rec.y, rec.z);
+      else if (el.name === "face") {
+        const ids = rec.vertex_indices ?? rec.vertex_index;
+        for (let k = 1; k + 1 < ids.length; k++)
+          for (const i of [ids[0], ids[k], ids[k + 1]]) out.push(verts[i * 3], verts[i * 3 + 1], verts[i * 3 + 2]);
+      }
+    }
+  }
+  return new Float32Array(out);
+}
+
+/**
+ * glTF (.gltf with its buffers beside it, or .glb): the triangles of every mesh of its scene, placed by their nodes.
+ * Geometry only; a compressed file (Draco, meshopt) has to be decompressed first (gltf-transform).
+ */
+function readGLTF(buf, file) {
+  let json;
+  let bin = null;
+  if (buf.readUInt32LE(0) === 0x46546c67) {
+    let o = 12;
+    while (o < buf.length) {
+      const len = buf.readUInt32LE(o);
+      const type = buf.readUInt32LE(o + 4);
+      const chunk = buf.subarray(o + 8, o + 8 + len);
+      if (type === 0x4e4f534a) json = JSON.parse(chunk.toString("utf8"));
+      else if (type === 0x004e4942) bin = chunk;
+      o += 8 + len;
+    }
+  } else json = JSON.parse(buf.toString("utf8"));
+  const used = [...(json.extensionsUsed ?? [])].filter((e) => /draco|meshopt|quantization/i.test(e));
+  if (used.length) throw new Error(`${file}: ${used.join(", ")} — decompress it first (npx @gltf-transform/cli copy)`);
+  const buffers = (json.buffers ?? []).map((b) => {
+    if (!b.uri) return bin;
+    if (b.uri.startsWith("data:")) return Buffer.from(b.uri.split(",")[1], "base64");
+    return readFileSync(join(SRC, dirname(file), decodeURIComponent(b.uri)));
+  });
+  const accessor = (i) => {
+    const a = json.accessors[i];
+    const bv = json.bufferViews[a.bufferView];
+    const b = buffers[bv.buffer];
+    const n = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4 }[a.type];
+    const size = { 5120: 1, 5121: 1, 5122: 2, 5123: 2, 5125: 4, 5126: 4 }[a.componentType];
+    const stride = bv.byteStride ?? n * size;
+    const base = (bv.byteOffset ?? 0) + (a.byteOffset ?? 0);
+    const get = (o) =>
+      a.componentType === 5126 ? b.readFloatLE(o) : a.componentType === 5125 ? b.readUInt32LE(o) : a.componentType === 5123 ? b.readUInt16LE(o) : b.readUInt8(o);
+    const out = new Float64Array(a.count * n);
+    for (let e = 0; e < a.count; e++) for (let c = 0; c < n; c++) out[e * n + c] = get(base + e * stride + c * size);
+    return out;
+  };
+  const out = [];
+  const v = new THREE.Vector3();
+  const visit = (ni, parent) => {
+    const node = json.nodes[ni];
+    const m = new THREE.Matrix4();
+    if (node.matrix) m.fromArray(node.matrix);
+    else
+      m.compose(
+        new THREE.Vector3(...(node.translation ?? [0, 0, 0])),
+        new THREE.Quaternion(...(node.rotation ?? [0, 0, 0, 1])),
+        new THREE.Vector3(...(node.scale ?? [1, 1, 1])),
+      );
+    m.premultiply(parent);
+    if (node.mesh !== undefined) {
+      for (const prim of json.meshes[node.mesh].primitives) {
+        if ((prim.mode ?? 4) !== 4) continue;
+        const pos = accessor(prim.attributes.POSITION);
+        const idx = prim.indices !== undefined ? accessor(prim.indices) : Array.from({ length: pos.length / 3 }, (_, i) => i);
+        for (const i of idx) {
+          v.set(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]).applyMatrix4(m);
+          out.push(v.x, v.y, v.z);
+        }
+      }
+    }
+    for (const c of node.children ?? []) visit(c, m);
+  };
+  const scene = json.scenes?.[json.scene ?? 0];
+  for (const ni of scene ? scene.nodes : json.nodes.map((_, i) => i)) visit(ni, new THREE.Matrix4());
+  return new Float32Array(out);
+}
+
 function loadMesh(cfg) {
   const buf = readFileSync(join(SRC, cfg.file));
-  return cfg.file.toLowerCase().endsWith(".3mf") ? read3MF(buf, cfg.object) : readSTL(buf);
+  const ext = cfg.file.toLowerCase().split(".").pop();
+  if (ext === "3mf") return read3MF(buf, cfg.object);
+  if (ext === "obj") return readOBJ(buf);
+  if (ext === "ply") return readPLY(buf);
+  if (ext === "glb" || ext === "gltf") return readGLTF(buf, cfg.file);
+  return readSTL(buf);
 }
 
 /** Rotate, then scale and move so the head lands in the frame of the sculpted head. */

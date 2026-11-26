@@ -66,6 +66,7 @@ function shuffled<T>(list: T[], seed: number): T[] {
  */
 export const metamorphosis = defineShaderScene({
   id: "metamorphosis",
+  heads: [...new Set(Object.values(CYCLES).flat())],
   name: "Métamorphose",
   tag: "Visage",
   energy: "calm",

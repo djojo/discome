@@ -15,7 +15,14 @@ import type { AudioFrame } from "@/lib/audio/AudioEngine";
 export type ParamDef =
   | { type: "range"; key: string; label: string; min: number; max: number; step?: number; default: number }
   | { type: "toggle"; key: string; label: string; default: boolean }
-  | { type: "select"; key: string; label: string; options: { value: string; label: string }[]; default: string };
+  | {
+      type: "select";
+      key: string;
+      label: string;
+      /** `group`: options listed under a heading (consecutive options of the same group). */
+      options: { value: string; label: string; group?: string }[];
+      default: string;
+    };
 
 export type ParamValue = number | string | boolean;
 export type ParamValues = Record<string, ParamValue>;
@@ -59,6 +66,11 @@ interface SceneMeta {
    * write screen values themselves.
    */
   hdr?: boolean;
+  /**
+   * The library heads (scenes/art/heads.ts) the scene shows by itself, besides its "head" setting: they load with
+   * the worlds that hold the scene, so that none pops in late.
+   */
+  heads?: readonly string[];
   params: ParamDef[];
 }
 

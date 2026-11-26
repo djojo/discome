@@ -46,6 +46,8 @@ interface ShaderSceneOptions {
   mask?: boolean;
   /** Photographic scene: ends with `hdrOut(col)` (ART_LIB), the compositor grades it (see SceneMeta.hdr). */
   hdr?: boolean;
+  /** The library heads the scene shows by itself (see SceneMeta.heads). */
+  heads?: readonly string[];
   params: ParamDef[];
   /** Fragment shader body. Has access to the header uniforms above and `pal(t)`. */
   fragment: string;
@@ -84,6 +86,7 @@ export function defineShaderScene(opts: ShaderSceneOptions): SceneGLDef {
     renderScale: opts.renderScale,
     mask: opts.mask,
     hdr: opts.hdr,
+    heads: opts.heads,
     params: opts.params,
     create({ renderer, target }) {
       const scene = new THREE.Scene();

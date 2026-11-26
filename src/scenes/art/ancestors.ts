@@ -33,6 +33,7 @@ export const ancestors = defineShaderScene({
   hdr: true,
   renderScale: 0.65,
   flight: { cruise: 1.6 },
+  heads: ANCESTORS,
   description:
     "Notre esprit voyage dans l'espace, jugé par les ancêtres (esprits animaux, Moai, Néfertiti, un visage humain) en verre d'aurore boréale : alignés de part et d'autre de la route, au-dessus de nous, ils nous regardent tous et nous suivent des yeux. Au drop, l'aurore s'embrase et ils se resserrent autour de nous.",
   params: [paletteParam("peyote"), ...flightParams()],

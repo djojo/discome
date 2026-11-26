@@ -36,6 +36,7 @@ const ANIMALS = ["loup", "faucon", "belier", "hibou"];
  */
 export const spirit = defineShaderScene({
   id: "canyon-spirit",
+  heads: ANIMALS,
   name: "L'Esprit",
   energy: "calm",
   hdr: true,

@@ -8,6 +8,19 @@ interface Props {
   onChange: (value: ParamValue) => void;
 }
 
+type SelectOption = Extract<ParamDef, { type: "select" }>["options"][number];
+
+/** The options of a select, gathered into runs of the same group (no group: listed as they are). */
+function optionGroups(options: SelectOption[]) {
+  const out: { group?: string; options: SelectOption[] }[] = [];
+  for (const o of options) {
+    const last = out[out.length - 1];
+    if (last && last.group === o.group) last.options.push(o);
+    else out.push({ group: o.group, options: [o] });
+  }
+  return out;
+}
+
 /** Renders one scene setting from its declarative definition. */
 export function ParamControl({ def, value, onChange }: Props) {
   if (def.type === "range") {
@@ -48,11 +61,23 @@ export function ParamControl({ def, value, onChange }: Props) {
         <span>{def.label}</span>
       </span>
       <select value={v} onChange={(e) => onChange(e.target.value)}>
-        {def.options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
+        {optionGroups(def.options).map((g, i) =>
+          g.group ? (
+            <optgroup key={g.group} label={g.group}>
+              {g.options.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </optgroup>
+          ) : (
+            g.options.map((o) => (
+              <option key={`${i}:${o.value}`} value={o.value}>
+                {o.label}
+              </option>
+            ))
+          ),
+        )}
       </select>
     </label>
   );
