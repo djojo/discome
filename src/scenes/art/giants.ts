@@ -4,6 +4,7 @@ import { num } from "../utils";
 import { ART_LIB } from "./lib.glsl";
 import { CAMERA_GLSL, type Framing } from "./camera";
 import { MYCELIUM_GLSL } from "./mycelium.glsl";
+import { tripUniforms, updateTrip } from "./mycTrip";
 
 const smooth = (a: number, b: number, x: number) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
@@ -50,6 +51,7 @@ export const giants = defineShaderScene({
     { type: "range", key: "mist", label: "Brume", min: 0, max: 2, step: 0.05, default: 1 },
   ],
   uniforms: () => ({
+    ...tripUniforms(),
     uKick: { value: 9 },
     uBurst: { value: 99 },
     uHue: { value: 0 },
@@ -61,6 +63,7 @@ export const giants = defineShaderScene({
     uLast: { value: -99 },
   }),
   update(u, f, p, dt, ctx) {
+    updateTrip(u, f, dt);
     // Back on screen: no drop in progress, full size
     if (f.time - (u.uLast.value as number) > 1.5) {
       u.uBurst.value = 99;
@@ -143,9 +146,11 @@ float mushroom(vec3 q, vec4 a, vec4 b, out float part) {
   float tl = b.w;
   vec2 td = vec2(cos(b.y + 1.), sin(b.y + 1.));
   cq.y += dot(cq.xz, td) * tl;
-  float br = 1. + .015 * sin(uTime * .5 + a.x);
+  // (the trip: they breathe deeper, waves run out across the caps)
+  float br = 1. + (.015 + .05 * uTrip) * sin(uTime * .5 + a.x) + .03 * uTrip * uBreath;
   float R = a.w * br, H = b.x * br;
   float r = length(cq.xz);
+  cq.y -= uTrip * .06 * H * sin(r * 3.2 / a.w * 3.1416 - uTime * 1.6 + a.x) * smoothstep(0., .3 * R, r);
   float top = sdEllipsoid(cq, vec3(R, H, R));
   // the underside: a bowl rising toward the rim (a parasol), the rim thin
   float u = cq.y + .12 * H - .5 * H * (r * r) / (R * R);
@@ -281,14 +286,16 @@ vec2 march(vec3 ro, vec3 rd, float tmax, float pa) {
 /** The colour of a giant's gills at radius k (0 centre, 1 rim): along the palette, sliding; deepened (no pastel). */
 vec3 gillC(float k, float which) {
   vec3 c = pal(fract(.15 + k * .55 + uHue + which * .13));
-  return mix(c, c * c * 1.5, .65);
+  c = mix(c, c * c * 1.5, .65);
+  // the trip: waves of the enchanted colours rolling out along the gills, faster as it deepens
+  return mix(c, tripPal(k * .8 - uTime * (.03 + .12 * uTrip) + which * .17), .2 + .6 * uTrip);
 }
 
 void main() {
   vec2 fc = gl_FragCoord.xy;
   vec2 uv = (fc - .5 * uRes) / uRes.y;
   gMd = normalize(vec3(-.25 + .2 * (fract(uSeed * .53) - .5), .28, -1.));
-  vec3 moonC = mix(uInk, vec3(.85, .88, 1.), .5);
+  vec3 moonC = enchant(mix(uInk, vec3(.85, .88, 1.), .5));
   // Rétrécir: the eye sinks to the moss under it, and the lens closes in (the giants fill more and more of the frame:
   // seen from a smaller eye they loom)
   vec3 ro = uCamPos, ta = uCamTarget;
@@ -374,6 +381,10 @@ void main() {
       alb = uInk * (.12 + .12 * streak) * mix(vec3(1.), gillC(k, which), .35);
       trans = mix(.3, 1.2, k * k);
       emit += gillC(k, which) * .06 * k;
+      // a beetle's sheen, and living patterns flowing over the cap
+      emit += iridescence(dot(n, -rd), k * 2. + uTime * .08) * (.02 + .12 * uTrip) * (.5 + .5 * streak);
+      vec2 tf = tripFlow(vec2(ca * a.w, k * a.w) * 1.5, fw * 1.5);
+      emit += tripPal(tf.y + which * .2) * tf.x * (.2 + 1.8 * uTrip);
     } else if (part < 3.5) {
       // the gills: rays from the stem to the rim, glowing in the palette's colours, sliding
       vec4 a, b;
@@ -408,7 +419,7 @@ void main() {
   } else if (lost) {
     col = uBase * .5;
   } else {
-    col = mycSky(rd, gMd, moonC, pa) + moonC * 2.4 * mycMoon(rd, gMd, .05, pa);
+    col = mycSky(rd, gMd, moonC, pa) + moonC * 2.4 * mycMoon(rd, gMd, .05, pa) + aurora(rd);
   }
 
   // the mist: low, lit toward the moon
@@ -440,7 +451,7 @@ void main() {
   }
   // the snow of spores, out of focus near the lens; thick in the drop's clouds
   float foc = max(length(ta - ro), .5);
-  col += mycMotes(ro, rd, tHit, .6, .22 + .5 * puffs, .007, pa, .025, gillC(.5, 2.), uInk, .6, foc, .08) * (2.4 + 4. * puffs) * uSpores;
+  col += mycMotes(ro, rd, tHit, .6, .22 + .5 * puffs, .007, pa, .025, gillC(.5, 2.), mix(uInk, tripPal(.55), uTrip), .6, foc, .08) * (2.4 + 4. * puffs) * uSpores;
   gl_FragColor = vec4(hdrOut(col), 1.);
 }
 `,

@@ -4,6 +4,7 @@ import { num } from "../utils";
 import { ART_LIB } from "./lib.glsl";
 import { FLIGHT_GLSL, flightParams } from "./flight";
 import { MYCELIUM_GLSL } from "./mycelium.glsl";
+import { tripUniforms, updateTrip } from "./mycTrip";
 
 const smooth = (a: number, b: number, x: number) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
@@ -38,6 +39,7 @@ export const forest = defineShaderScene({
     { type: "range", key: "wisps", label: "Feux follets", min: 0, max: 2, step: 0.05, default: 1 },
   ],
   uniforms: () => ({
+    ...tripUniforms(),
     uKick: { value: 9 },
     uKickB: { value: 9 },
     uBurst: { value: 99 },
@@ -50,6 +52,7 @@ export const forest = defineShaderScene({
     uLast: { value: -99 },
   }),
   update(u, f, p, dt) {
+    updateTrip(u, f, dt);
     const bar = f.bpm > 0 ? 240 / f.bpm : 2;
     // Back on screen: no drop in progress
     if (f.time - (u.uLast.value as number) > 1.5) {
@@ -165,6 +168,8 @@ vec2 tree(vec3 q, vec2 k, bool fungi) {
   // the trunk flares into its roots at the foot, tapers to a point; long ridges in the bark
   float taper = 1. - .8 * smoothstep(0., top, y);
   float r = r0 * taper * (1. + .9 * fl) + .15 * fl * max(0., sin(ang * 5. + h.z * 6.)) + .012 * sin(ang * 13. + y * .7);
+  // the trip: the trunks breathe, a slow swell climbing the bark
+  r *= 1. + uTrip * (.05 * uBreath + .07 * sin(y * 1.1 - uTime * 1.3 + h.x * 6.));
   float d = (length(rp) - r) * .85;
   d = max(d, y - top);
   float mat = 1.;
@@ -406,7 +411,8 @@ void main() {
   vec2 uv = (fc - .5 * uRes) / uRes.y;
   gSeed = vec2(floor(fract(uSeed * .731) * 97.), floor(fract(uSeed * .377) * 61.));
   gMd = normalize(vec3(.28 + .25 * (fract(uSeed * .53) - .5), .2, -1.));
-  vec3 moonC = mix(uInk, vec3(.8, .88, 1.), .4);
+  // the enchanted night: the moon's silver turns toward the drifting colours
+  vec3 moonC = enchant(mix(uInk, vec3(.8, .88, 1.), .4));
 
   // the flight, at a walker's height along the path; up among the branches on the drop, skimming the mist in the breakdown
   float z = -uTravel;
@@ -435,7 +441,7 @@ void main() {
     float flick = .65 + .35 * sin(uTime * (5. + fi) + fi * 3.) * sin(uTime * 2.3 + fi * 7.);
     wi[i] = uWisps * smoothstep(3., 6., dz) * smoothstep(float(NW) * 6.3 + 3., float(NW) * 6.3 - 4., dz) * (flick + .9 * uHat * fract(fi * .618 + .3));
   }
-  vec3 wispC = mix(uTint, vec3(.85, 1., .95), .35);
+  vec3 wispC = mix(mix(uTint, vec3(.85, 1., .95), .35), tripPal(.2), .5 * uTrip);
   // the living light, deeper than the tint itself (pale tints would glow white)
   vec3 glowC = uTint * uTint * 1.3;
 
@@ -481,7 +487,9 @@ void main() {
       // the network between the trees, and the fine mycelium round their roots
       vec2 nw = network(p.xz, fw);
       float pulse = mycPulse(nw.y, uKick, 3.4, .8) + .6 * mycPulse(nw.y, uKickB, 3.4, .8);
-      emit += glowC * nw.x * (.12 + 3.5 * pulse + 2. * bloom * passed + 4. * wave);
+      // (the pulses change colour along their way as the trip deepens)
+      vec3 netC = mix(glowC, tripPal(nw.y * .08 + uTime * .03), .3 + .6 * uTrip);
+      emit += netC * nw.x * (.12 + 3.5 * pulse + 2. * bloom * passed + 4. * wave);
       float th = mycThreads(p.xz, fw) * smoothstep(2.2, .4, tr.z - tr.w);
       emit += glowC * th * (.25 + 2.5 * mycPulse(tr.z, uKick, 3., .6) + 2. * passed * uBloom);
       emit += glowC * wave * .2;
@@ -502,6 +510,9 @@ void main() {
         float th = mycThreads(bp * vec2(1.6, .45), fw * .9) * smoothstep(2.2, .2, p.y);
         float pulse = mycPulse(p.y, uKick, 2.2, .35) + .6 * mycPulse(p.y, uKickB, 2.2, .35);
         emit += glowC * th * (.3 + 4. * pulse + 2. * bloom * passed + 3. * wave);
+        // living patterns crawling over the bark, more and more of them; on the drop every trunk runs with colour
+        vec2 tf = tripFlow(bp * vec2(1., .6), fw);
+        emit += tripPal(tf.y) * tf.x * (.15 + 1.5 * uTrip) * (1. + 2. * passed * uBloom);
       }
     }
     // the moon (shadows on the ground: the trunks' long shadows reach toward us)
@@ -519,7 +530,7 @@ void main() {
     // deep among the trunks: their dark mass
     col = uBase * .3;
   } else {
-    col = mycSky(rd, gMd, moonC, pa) + moonC * 2.2 * mycMoon(rd, gMd, .045, pa);
+    col = mycSky(rd, gMd, moonC, pa) + moonC * 2.2 * mycMoon(rd, gMd, .045, pa) + aurora(rd);
   }
 
   // the mist: dim everywhere, bright toward the moon where its light falls through the trees in shafts
@@ -558,11 +569,13 @@ void main() {
     float r = max(.045, tc * pa * 1.2);
     float core = (.045 * .045) / (r * r) * exp(-dd * dd / (r * r));
     float halo = exp(-dd / (.3 + .02 * tc)) * .1;
-    col += wispC * wi[i] * (core * 5. + halo) * (1. - .5 * mycFog(ro, rd, tc, dens, .4));
+    // (each its own colour once the trip deepens)
+    vec3 wc = mix(wispC, tripPal(float(i) * .23 + uTime * .02), uTrip);
+    col += wc * wi[i] * (core * 5. + halo) * (1. - .5 * mycFog(ro, rd, tc, dens, .4));
   }
   // fireflies; on the drop the wisps burst into a swarm
   float swarm = uBurst < 8. ? exp(-uBurst * .45) : 0.;
-  col += mycMotes(ro, rd, tHit, 2.4, .05 + .5 * swarm, .02, pa, .02, wispC, uTint, .8) * (1. + 3. * swarm) * (.6 + .4 * uWisps);
+  col += mycMotes(ro, rd, tHit, 2.4, .05 + .5 * swarm, .02, pa, .02, wispC, mix(uTint, tripPal(.6), uTrip), .8) * (1. + 3. * swarm) * (.6 + .4 * uWisps);
   gl_FragColor = vec4(hdrOut(col), 1.);
 }
 `,
