@@ -93,6 +93,102 @@ const FRAMINGS: Framing[] = [
   { az: 1.6, el: 1.2, dist: 220, target: [0, 0, 0], focal: 1.6, tag: "top" },
 ];
 
+const TAU = Math.PI * 2;
+
+/**
+ * The figures the racers paint, one a phrase: each gives racer i of n its target (round the figure's centre) at the
+ * figure's clock t; len: metres of figure per unit of clock (the clock runs at the racers' speed over it), p: the
+ * build's progress. The racers pursue their targets, turning no tighter than they can: the curves stay their own.
+ */
+interface Figure {
+  len: (p: number) => number;
+  at: (i: number, n: number, t: number, p: number) => [number, number];
+}
+const FIGURES: Record<string, Figure> = {
+  // concentric rings in formation, each racer on its own, turning one way then the other
+  rings: {
+    len: () => 40,
+    at: (i, _n, t) => {
+      const R = 18 + 9 * i;
+      const a = ((i % 2 ? -1 : 1) * t * 40) / R + i * 2.4;
+      return [R * Math.cos(a), R * Math.sin(a)];
+    },
+  },
+  // one great circle, all of them evenly spaced on it
+  circle: {
+    len: () => 50,
+    at: (i, n, t) => {
+      const a = t + (TAU * i) / n;
+      return [50 * Math.cos(a), 50 * Math.sin(a)];
+    },
+  },
+  // spirals: each on a circle breathing in and out, out of step with the others
+  spiral: {
+    len: () => 38,
+    at: (i, n, t) => {
+      const a = t + (TAU * i) / n;
+      const R = 36 + 26 * Math.sin(t * 0.23 + i * 1.3);
+      return [R * Math.cos(a), R * Math.sin(a)];
+    },
+  },
+  // braids of three round great rings, the three weaving across one another
+  braid: {
+    len: () => 60,
+    at: (i, _n, t) => {
+      const g = Math.floor(i / 3);
+      const k = i % 3;
+      const R = 58 + 26 * g;
+      const s = ((g % 2 ? -1 : 1) * t * 60) / R + k * 0.015;
+      const w = 8 * Math.sin(s * 9 + (TAU * k) / 3);
+      return [(R + w) * Math.cos(s), (R + w) * Math.sin(s)];
+    },
+  },
+  // a great figure eight, all of them spread along it
+  eight: {
+    len: () => 50,
+    at: (i, n, t) => {
+      const a = t + (TAU * i) / n;
+      return [72 * Math.sin(a), 42 * Math.sin(2 * a)];
+    },
+  },
+  // the build: a spiral winding in, tighter and tighter
+  inward: {
+    len: (p) => 55 - 38 * p,
+    at: (i, n, t, p) => {
+      const a = t + (TAU * i) / n;
+      const R = 55 - 40 * p + 5 * Math.sin(t * 0.7 + i);
+      return [R * Math.cos(a), R * Math.sin(a)];
+    },
+  },
+  // the drop: a great rosette, five petals, all of them on it out of step
+  rosette: {
+    len: () => 52,
+    at: (i, n, t) => {
+      const a = t + (TAU * i) / n / 5;
+      const R = 50 + 22 * Math.cos(5 * a);
+      return [R * Math.cos(a), R * Math.sin(a)];
+    },
+  },
+};
+const CALM = ["rings", "circle", "spiral", "braid", "eight"];
+
+/**
+ * The chase cameras, round one racer (metres): behind, to the side (never in line with its own wall, which runs
+ * behind it), up; where they look, ahead and up; the lens.
+ */
+const CHASE = [
+  // behind and beside, low, its wall running past on one side
+  { back: 8, side: 3, up: 1, ahead: 16, lookUp: 0.7, focal: 1.15 },
+  // alongside
+  { back: 2, side: 6.5, up: 1.2, ahead: 4, lookUp: 0.3, focal: 1.3 },
+  // ahead, looking back at it and its wall
+  { back: -12, side: 2.5, up: 1.4, ahead: -6, lookUp: 0.5, focal: 1.3 },
+  // on the ground just behind and beside it
+  { back: 5, side: 2.6, up: 0.5, ahead: 22, lookUp: 1.1, focal: 1.05 },
+  // above its wall, looking down the way
+  { back: 10, side: 1.5, up: 4.5, ahead: 14, lookUp: 0, focal: 1.2 },
+];
+
 /** Linear light out (the compositor grades it); tone-mapped here only when the GPU has no float targets. */
 const OUT_GLSL = /* glsl */ `
 ${TONE_GLSL}
@@ -181,6 +277,7 @@ uniform float uTime;
 varying float vAge;
 varying float vV;
 varying float vO;
+varying vec3 vW;
 void main() {
   vAge = aAge;
   vV = aV;
@@ -191,7 +288,8 @@ void main() {
   float h = (.28 + .72 * rise) * (1.25 - .55 * smoothstep(.08, 1., aAge)) + .05 * sin(aOdo * .35 - uTime * 2.4) * rise;
   vec3 p = position;
   p.y *= h;
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.);
+  vW = (modelMatrix * vec4(p, 1.)).xyz;
+  gl_Position = projectionMatrix * viewMatrix * vec4(vW, 1.);
 }
 `;
 
@@ -206,18 +304,21 @@ uniform float uRefl;
 varying float vAge;
 varying float vV;
 varying float vO;
+varying vec3 vW;
 ${OUT_GLSL}
 /** The trail's colour along it: white-hot at the racer, its colour, a deep violet dissolving at the tail. */
 vec3 heat(vec3 col, float h) {
   vec3 deep = col.gbr * .3 + vec3(.22, .02, .42);
-  return mix(mix(vec3(1.), col, smoothstep(0., .06, h)), deep, smoothstep(.4, 1., h));
+  return mix(mix(vec3(1.), col, smoothstep(0., .015, h)), deep, smoothstep(.4, 1., h));
 }
 float hash(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * .1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
 void main() {
   // a wall of light: its top edge burning, its body a glow fading down; older, dimmer; the head white-hot; on every
   // kick a pulse runs down the wall from the racer
   float edge = smoothstep(.86, .97, vV) * (1. - smoothstep(.985, 1., vV) * .4);
-  float body = .04 + .17 * vV * vV;
+  // (a thin sheet of light: faint seen face on, brighter at a glance)
+  float face = abs(dot(normalize(cross(dFdx(vW), dFdy(vW))), normalize(vW - cameraPosition)));
+  float body = (.04 + .17 * vV * vV) * (.25 + .75 * (1. - face) * (1. - face));
   float fade = 1. - smoothstep(.55, 1., vAge);
   float head = exp(-vAge * 90.);
   float spark = step(.985, fract(sin(floor(vO * .4 + uTime * 9.) * 91.7) * 4371.3)) * uHat * 2.;
@@ -228,10 +329,10 @@ void main() {
   float current = lanes * smoothstep(0., .08, ph) * (1. - smoothstep(.08, .6, ph)) * (.6 + 1.6 * uKick);
   vec3 hc = heat(uColor, vAge);
   vec3 c = hc * (edge * (1.4 + 1.6 * uKick) + body * (1. + .6 * uKick) + spark + current * 1.2) * fade * pulse + mix(uColor, vec3(1.), .6) * head * 1.5;
-  // ageing, it breaks up block by block (the top first): each block flares as it goes, then is gone; afar, where a
-  // pixel spans the blocks, only their average
+  // ageing, it breaks up block by block under its burning crest (which only fades, so that seen from above the lines
+  // hold): each block flares as it goes, then is gone; afar, where a pixel spans the blocks, only their average
   float n = hash(floor(vec2(vO * .7, vV * 4.))) * .6 + hash(floor(vec2(vO * 2.1, vV * 12.)) + 17.) * .4;
-  float crumble = smoothstep(.38, 1., vAge) * (1.05 + .25 * vV);
+  float crumble = smoothstep(.45, 1., vAge) * (1.12 - 1.12 * smoothstep(.84, .88, vV));
   float alive = step(crumble, n);
   float flare = (1. - smoothstep(0., .06, n - crumble)) * alive * step(.01, crumble);
   float far = smoothstep(.5, 2., fwidth(vO) * 2.1);
@@ -313,7 +414,10 @@ void main() {
   vec3 hc = mix(uColor, deep, smoothstep(.4, 1., vAge));
   float fade = 1. - smoothstep(.55, 1., vAge);
   float across = exp(-vSide * vSide * 5.) + exp(-vSide * vSide * 60.) * .8;
-  gl_FragColor = vec4(outC(hc * across * fade * (.07 + .05 * uKick)), 1.);
+  // and a line burning on the glass at the wall's foot (seen from above, the wall itself is only its edge)
+  float fw = max(.068, fwidth(vSide) * 1.3);
+  float foot = exp(-vSide * vSide / (fw * fw)) * .068 / fw;
+  gl_FragColor = vec4(outC(hc * fade * (across * (.07 + .05 * uKick) + foot * (.5 + .3 * uKick))), 1.);
 }
 `;
 
@@ -439,7 +543,6 @@ interface Racer {
   x: number;
   z: number;
   heading: number;
-  phase: number;
   colour: THREE.Color;
   /** Distance since the last wall point. */
   since: number;
@@ -467,10 +570,14 @@ interface Racer {
  * scenes' craft of black glass and neon, leaning into their turns) that leave walls of light behind them, coiling
  * and crossing like a long exposure; the walls mirrored in the glass, their light spilt on it. The walls live: they
  * rise from the glass behind their racer, tallest close to it, currents of energy running along them; ageing they
- * settle, then break up block by block, each block flaring as it goes, shedding motes of light that rise and go out. They pulse with the kick and spark
- * with the hats; through the build the racers speed up and their loops tighten; on the drop they all break away in a
- * star. The walls stay: as the night drifts they grow longer and the plain fills up, the racers shut in by their own
- * light. « Pose longue »: straight down on the weave, growing slowly.
+ * settle, then break up block by block under their crest, each block flaring as it goes, shedding motes of light that
+ * rise and go out; a line burns on the glass at their foot. They pulse with the kick and spark with the hats.
+ * Light painting: the racers pursue choreographed figures, one a phrase (concentric rings, a great circle in
+ * formation, breathing spirals, braids of three, a great figure eight); through the build they speed up and wind in;
+ * on the drop they gather on a great rosette for four bars, then break away in a star. The camera: a phrase on the
+ * crane round the pack (now and then straight down), a phrase in the chase, low among the walls round one racer; the
+ * drop in the chase. The walls stay: as the night drifts they grow longer and the plain fills up. « Pose longue »:
+ * straight down on the painting as it builds.
  */
 export const trails: SceneGLDef = {
   id: "circuit-trails",
@@ -481,7 +588,7 @@ export const trails: SceneGLDef = {
   hdr: true,
   mask: true,
   description:
-    "Une plaine infinie de dalles de verre noir sous la pluie, la mégapole tout autour à l'horizon : des bolides de verre noir et de néon laissent derrière eux des murs de lumière qui s'enroulent et se croisent comme une photo en pose longue, reflétés dans le verre. Les murs montent du sol derrière eux, parcourus de courants, puis se défont bloc par bloc en lâchant une poussière lumineuse. Au kick les murs pulsent ; pendant la montée les bolides accélèrent et leurs boucles se resserrent ; au drop ils s'écartent tous en étoile. « Pose longue » : vu de haut, le tissage grandit lentement.",
+    "Une plaine infinie de dalles de verre noir sous la pluie, la mégapole tout autour à l'horizon : des bolides de verre noir et de néon laissent derrière eux des murs de lumière qui s'enroulent et se croisent comme une photo en pose longue, reflétés dans le verre. Les murs montent du sol derrière eux, parcourus de courants, puis se défont bloc par bloc en lâchant une poussière lumineuse. Les bolides peignent des figures, une par phrase : anneaux, grand cercle, spirales, tresses à trois, huit ; la montée les enroule en spirale ; au drop une immense rosace, puis l'étoile. Caméra : la grue, en alternance avec la poursuite au ras du sol. « Pose longue » : vu de haut, la peinture de lumière se construit.",
   params: [paletteParam("piste"), { type: "toggle", key: "top", label: "Pose longue (vu de haut)", default: false }],
   create({ renderer, viewport, target }) {
     const ldr = target.texture.type === THREE.UnsignedByteType;
@@ -629,7 +736,6 @@ export const trails: SceneGLDef = {
         x: 0,
         z: 0,
         heading: 0,
-        phase: 0,
         colour,
         since: 0,
         count: 0,
@@ -724,8 +830,28 @@ export const trails: SceneGLDef = {
     const look = new THREE.Vector3();
     let last = -99;
     let kick = 0;
-    let star = 99;
     let boost = 0;
+    // the choreography: the figure, its clock and its centre (drifting slowly, so the figures paint new ground)
+    let fig = "circle";
+    let figT = 0;
+    const figC = new THREE.Vector2();
+    let figDir = 0;
+    let dropT = 99;
+    let sincePhrase = 0;
+    // the camera: the crane (the Cadrage's framings) or the chase (round one racer)
+    let chase = false;
+    let chaseI = 0;
+    let chaseV = 0;
+    let snap = true;
+    const camPos = new THREE.Vector3();
+    const camLook = new THREE.Vector3();
+    const wantPos = new THREE.Vector3();
+    const wantLook = new THREE.Vector3();
+    const pickChase = (count: number) => {
+      chaseI = Math.floor(Math.random() * count);
+      chaseV = Math.floor(Math.random() * CHASE.length);
+      snap = true;
+    };
 
     const reset = (seed: number) => {
       racers.forEach((r, i) => {
@@ -733,7 +859,6 @@ export const trails: SceneGLDef = {
         r.x = Math.cos(a) * (20 + 30 * hashF(seed + i * 2.1));
         r.z = Math.sin(a) * (20 + 30 * hashF(seed + i * 2.1));
         r.heading = a + Math.PI / 2;
-        r.phase = hashF(seed + i * 3.7) * 100;
         r.count = 0;
         r.since = 0;
         r.bank = 0;
@@ -744,8 +869,14 @@ export const trails: SceneGLDef = {
       cad.reset(seed);
       dustT.fill(0);
       dustLife.fill(0);
-      star = 99;
       boost = 0;
+      fig = CALM[Math.floor(hashF(seed + 9) * CALM.length)];
+      figT = 0;
+      figC.set(0, 0);
+      figDir = hashF(seed + 4) * TAU;
+      dropT = 99;
+      chase = false;
+      snap = true;
     };
 
     /** Push a new wall point at the racer's position (the head point always follows it). */
@@ -806,15 +937,33 @@ export const trails: SceneGLDef = {
         const count = Math.min(RMAX, Math.round(5 + 3 * f.drift));
         const build = f.section === "build" ? f.buildProgress : 0;
         if (f.drop) {
-          star = 0;
+          dropT = 0;
           boost = 1;
         }
-        star += dt;
+        dropT += dt;
         boost *= Math.exp(-dt / (bar * 1.2));
         const speed = (top ? 13 : 17) * (1 + 1.2 * build + 1.4 * boost) * (f.section === "breakdown" ? 0.5 : 1);
+        sincePhrase += dt;
+        const phrase = (f.downbeat && f.phraseBar === 0) || (f.bpm <= 0 && sincePhrase > 16);
+        if (phrase) sincePhrase = 0;
 
-        // the pack: each racer steers its own curves, drawn back toward the middle; tighter through the build; on the
-        // drop they all break away from the centre in a star, straight, for two bars
+        // the choreography: a figure a phrase; the build winds them in; the drop gathers them on a great rosette for
+        // four bars, then they break away from the centre in a star, straight, for two bars
+        let next = fig;
+        if (dropT < bar * 4) next = "rosette";
+        else if (dropT < bar * 6) next = "star";
+        else if (f.section === "build") next = "inward";
+        else if (phrase || !CALM.includes(fig)) {
+          const pool = CALM.filter((x) => x !== fig);
+          next = pool[Math.floor(Math.random() * pool.length)];
+        }
+        const starts = next !== fig;
+        fig = next;
+        if (fig !== "star") figT += (dt * speed) / FIGURES[fig].len(build);
+        figDir += dt * 0.05;
+        figC.x += Math.cos(figDir) * 1.2 * dt;
+        figC.y += Math.sin(figDir) * 1.2 * dt;
+
         let cx = 0;
         let cz = 0;
         let n = 0;
@@ -834,26 +983,31 @@ export const trails: SceneGLDef = {
           const c = r.colour;
           c.setRGB(tint.x, tint.y, tint.z);
           if (i % 4 === 1) c.offsetHSL(0.5, 0, 0);
-          else if (i % 4 === 2) c.lerp(new THREE.Color(1, 1, 1), 0.65);
+          else if (i % 4 === 2) c.lerp(new THREE.Color(1, 1, 1), 0.4);
           else if (i % 4 === 3) c.offsetHSL(0.25, 0, 0);
           (r.mats[0].uniforms.uColor.value as THREE.Vector3).set(c.r, c.g, c.b);
           r.burn.value = 0.35 + 0.8 * boost + 0.6 * kick + 0.5 * build;
-          r.phase += dt;
-          let k = (Math.sin(r.phase * 0.35 + i) + 0.6 * Math.sin(r.phase * 0.83 + i * 2.3)) * 0.035 * (1 + 2.2 * build);
-          const dx = -r.x;
-          const dz = -r.z;
-          const d = Math.hypot(dx, dz);
-          k += wrap(Math.atan2(dz, dx) - r.heading) * 0.0009 * Math.max(0, d - 40);
-          if (star < bar * 2) {
-            if (star < dt * 1.5) r.heading = Math.atan2(r.z - cz, r.x - cx);
-            k = 0;
+          // pursuing its target on the figure: quicker when it is ahead, slower when behind, turning no tighter than
+          // a radius of six metres; the star: straight out from the centre
+          let v = speed;
+          let turn = 0;
+          if (fig === "star") {
+            if (starts) r.heading = Math.atan2(r.z - cz, r.x - cx);
+          } else {
+            const [tx, tz] = FIGURES[fig].at(i, count, figT, build);
+            const dx = figC.x + tx - r.x;
+            const dz = figC.y + tz - r.z;
+            const along = dx * Math.cos(r.heading) + dz * Math.sin(r.heading);
+            v = speed * Math.max(0.65, Math.min(1.7, 1 + 0.035 * along));
+            const wmax = v / 6;
+            turn = Math.max(-wmax, Math.min(wmax, wrap(Math.atan2(dz, dx) - r.heading) * 3));
           }
-          r.heading += k * speed * dt;
-          r.x += Math.cos(r.heading) * speed * dt;
-          r.z += Math.sin(r.heading) * speed * dt;
-          advance(r, speed * dt, nmax);
+          r.heading += turn * dt;
+          r.x += Math.cos(r.heading) * v * dt;
+          r.z += Math.sin(r.heading) * v * dt;
+          advance(r, v * dt, nmax);
           // the craft ahead of its wall (the wall leaves from its tail), hovering, leaning into its turn
-          r.bank = approach(r.bank, Math.max(-0.6, Math.min(0.6, k * speed * 0.3)), 5, dt);
+          r.bank = approach(r.bank, Math.max(-0.6, Math.min(0.6, turn * 0.3)), 5, dt);
           const fx = Math.cos(r.heading);
           const fz = Math.sin(r.heading);
           const ox = r.x + fx * 1.15 * CRAFT;
@@ -866,30 +1020,65 @@ export const trails: SceneGLDef = {
           r.pool.position.set(ox, 0.03, oz);
           r.pool.rotation.set(0, yaw, 0);
           // the crumbling part of its wall sheds its dust
-          const k0 = Math.ceil(0.42 * (nmax - 1));
+          const k0 = Math.ceil(0.48 * (nmax - 1));
           if (r.count > k0 + 1) {
             const rate = 90 * ((r.count - k0) / nmax) * (1 + 1.5 * boost);
             for (let n = Math.floor(rate * dt + Math.random()); n > 0; n--) shed(r, k0, nmax);
           }
         });
 
-        // the camera: a framing round the pack's centre (straight down in Pose longue)
+        // the camera: a phrase on the crane (a framing round the pack's centre, now and then straight down), a phrase
+        // in the chase (round one racer, low among the walls), in turn; the drop in the chase; the director's cuts
+        // switch racer and angle. Pose longue: straight down only.
+        if (top) chase = false;
+        else if (f.drop) {
+          chase = true;
+          pickChase(count);
+          chaseV = Math.random() < 0.6 ? 0 : 3;
+        } else if (phrase && dropT > bar * 6) {
+          chase = !chase;
+          if (chase) pickChase(count);
+        } else if (f.camCut && chase) pickChase(count);
         centre.set(approach(centre.x, cx, 0.5, dt), 0, approach(centre.z, cz, 0.5, dt));
-        cad.allow = (fr) => (top ? fr.tag === "top" : fr.tag !== "top");
+        cad.allow = (fr) => !top || fr.tag === "top";
         cad.update(f, dt);
-        camera.position.copy(cad.pos).add(centre);
-        look.copy(cad.target).add(centre);
+        let focal = cad.focal;
         camera.up.set(0, 1, 0);
-        if (camera.position.y > 150 && Math.abs(camera.position.x - look.x) + Math.abs(camera.position.z - look.z) < 20) camera.up.set(0, 0, -1);
+        if (chase) {
+          const r = racers[chaseI % count];
+          const cv = CHASE[chaseV];
+          const fx = Math.cos(r.heading);
+          const fz = Math.sin(r.heading);
+          const o = r.craft.position;
+          wantPos.set(o.x - fx * cv.back - fz * cv.side, cv.up, o.z - fz * cv.back + fx * cv.side);
+          wantLook.set(o.x + fx * cv.ahead, cv.lookUp, o.z + fz * cv.ahead);
+          if (snap) {
+            camPos.copy(wantPos);
+            camLook.copy(wantLook);
+          } else {
+            camPos.lerp(wantPos, 1 - Math.exp(-dt * 5));
+            camLook.lerp(wantLook, 1 - Math.exp(-dt * 8));
+          }
+          camera.position.copy(camPos);
+          look.copy(camLook);
+          // leaning a little with it
+          camera.up.set(-fz * r.bank * 0.25, 1, fx * r.bank * 0.25).normalize();
+          focal = cv.focal;
+        } else {
+          camera.position.copy(cad.pos).add(centre);
+          look.copy(cad.target).add(centre);
+          if (camera.position.y > 150 && Math.abs(camera.position.x - look.x) + Math.abs(camera.position.z - look.z) < 20) camera.up.set(0, 0, -1);
+        }
+        snap = false;
         camera.lookAt(look);
-        camera.fov = (2 * Math.atan(0.5 / cad.focal) * 180) / Math.PI;
+        camera.fov = (2 * Math.atan(0.5 / focal) * 180) / Math.PI;
         camera.updateProjectionMatrix();
-        pa.value = 1 / (cad.focal * target.height);
+        pa.value = 1 / (focal * target.height);
         (floorMat.uniforms.uCam.value as THREE.Vector3).copy(camera.position);
         sky.position.copy(camera.position);
 
         // the dust rises, slows, goes out
-        dustScale.value = target.height * cad.focal;
+        dustScale.value = target.height * focal;
         const drag = Math.exp(-dt * 0.6);
         for (let i = 0; i < DUST; i++) {
           if (dustT[i] <= 0) {
