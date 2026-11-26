@@ -193,8 +193,8 @@ float elephant(vec3 p) {
   d = smin(d, ear, .06);
   // the neck, short and massive
   d = smin(d, sdCapsule(p, vec3(0., .2, -.2), vec3(0., -1.6, -.3), .42), .2);
-  // the skin, finely wrinkled
-  return d + .0012 * sin(p.y * 90. + 6. * vnoise(p * 5.));
+  // the skin, finely wrinkled: broken creases, not stripes
+  return d + .0006 * sin(p.y * 70. + 14. * vnoise(p * 6.)) * vnoise(p * 9. + 3.);
 }
 
 // ---------------------------------------------------------------- masks
