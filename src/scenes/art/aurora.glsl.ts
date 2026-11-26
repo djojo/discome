@@ -18,8 +18,11 @@ float gAuroraCore = .04;
 const vec3 AURORA_GREEN = vec3(.12, 1., .45);
 const vec3 AURORA_VIOLET = vec3(.55, .25, 1.);
 
-/** One veil of the aurora, round the direction r (its folds along the azimuth, its curtains rising from its foot). */
-vec3 auroraVeil(vec3 r, float k) {
+/**
+ * One veil of the aurora, round the direction r (its folds along the azimuth, its curtains rising from its foot);
+ * rays: how marked its fine vertical rays are.
+ */
+vec3 auroraVeil(vec3 r, float k, float rays) {
   float az = atan(r.x, -r.z);
   float el = asin(clamp(r.y, -1., 1.));
   float base = .12 + .1 * sin(az * (1.5 + k) + k * 3. + uTime * .04);
@@ -27,8 +30,8 @@ vec3 auroraVeil(vec3 r, float k) {
   float speed = .12 * (1. + 2. * gAuroraCharge);
   float fold = .5 + .5 * sin(az * (14. + 6. * k) + fbm3(vec3(az * 3., uTime * speed, k)) * 7.);
   // its fine vertical rays, as in a real aurora
-  float rays = .55 + .45 * pow(.5 + .5 * sin(az * 90. + 4. * fbm3(vec3(az * 12., uTime * .2, k))), 3.);
-  float curtain = smoothstep(-.04, .03, above) * exp(-max(above, 0.) * 5.) * (.25 + .75 * pow(fold, 4.)) * rays;
+  float ray = 1. - rays + rays * pow(.5 + .5 * sin(az * 90. + 4. * fbm3(vec3(az * 12., uTime * .2, k))), 3.);
+  float curtain = smoothstep(-.04, .03, above) * exp(-max(above, 0.) * 5.) * (.25 + .75 * pow(fold, 4.)) * ray;
   // the kick: a wave of light climbing the curtains
   float wave = exp(-pow((above - gAuroraKick * .5) * 9., 2.)) * exp(-gAuroraKick * 1.2);
   vec3 c = mix(AURORA_GREEN, AURORA_VIOLET, smoothstep(0., .3, above + .08 * k));
@@ -45,21 +48,25 @@ vec3 auroraStars(vec3 rd) {
   return c;
 }
 
-/** Space all round, the aurora's veils on every side (no ground, no horizon), stars between them. */
+/**
+ * Space all round: the aurora's veils on every side (no ground, no horizon), soft ribbons that do not cross in a
+ * plaid, the ones under us fainter; stars between them.
+ */
 vec3 auroraSpace(vec3 rd) {
   vec3 c = auroraStars(rd);
-  for (int k = 0; k < 4; k++) {
+  for (int k = 0; k < 3; k++) {
     float fk = float(k);
     vec3 r = rd;
-    r.xy *= rot(fk * 1.57 + .3);
-    c += auroraVeil(r, fk) * (.32 - .05 * fk);
+    r.xy *= rot(fk * 2.1 + .3);
+    r.xz *= rot(fk * 1.3);
+    c += auroraVeil(r, fk, .2) * (fk < .5 ? .34 : fk < 1.5 ? .2 : .12);
   }
   return c;
 }
 
 /** The aurora rising over a horizon (for a scene with a ground and its own sky): its light alone, to add. */
 vec3 auroraOverHorizon(vec3 rd) {
-  return auroraVeil(rd, 0.) * smoothstep(-.02, .12, rd.y);
+  return auroraVeil(rd, 0., .45) * smoothstep(-.02, .12, rd.y);
 }
 
 /** The colour of the aurora glass at a point of the form (h: its frame, y up, about -1..1). */
