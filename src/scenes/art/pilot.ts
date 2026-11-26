@@ -25,16 +25,23 @@ const FRAMINGS: Framing[] = [
   { az: 0.15, el: 0.04, dist: 2.5, target: [0, 0.1, 0.25], focal: 2.3, weight: 2 },
   // wide: the background round the head
   { az: -0.25, el: 0.06, dist: 7.2, target: [0, -0.15, 0], focal: 1.8, weight: 2 },
+  // the ride (the drop): onboard cameras fixed in front of the rider, a little low, the world rushing past
+  { az: 0, el: -0.07, dist: 4.3, target: [0, -0.3, 0], focal: 1.95, weight: 3, tag: "ride" },
+  { az: 0.4, el: -0.04, dist: 4.1, target: [0, -0.25, 0], focal: 1.95, weight: 2, tag: "ride" },
+  { az: -0.32, el: -0.14, dist: 4.4, target: [0, -0.2, 0], focal: 1.9, weight: 2, tag: "ride" },
+  { az: 0.12, el: -0.04, dist: 2.9, target: [0, 0.02, 0.1], focal: 2, weight: 1, tag: "ride" },
 ];
 
 /**
- * Le Pilote: a racer's head in a futuristic racing helmet of our own design, turning slowly on itself before a
- * background of neon. Black lacquered shell mirroring the lights, an aerodynamic tail and a small dorsal fin, scoops
- * on the cheeks, a chin bar, a livery line of light in the colour of the moment; a smoked visor that mirrors the
- * background, behind which the pilot's eyes are glimpsed, lit by the glow of the race display. Backgrounds: a ring of
- * neon, a wall of neon tubes, the race behind, speed lines. The background carries the rhythm; the helmet turns at
- * its own pace (about a turn a minute). On the drop (and in « Face à face », cast on drops) it turns to face us, the
- * visor ablaze, its livery lit, for the hold; then it turns again.
+ * Le Pilote: a rider in a full-face racing helmet of our own design, turning slowly on itself before a background of
+ * neon. Black lacquer mirroring the lights, a white blade on each flank edged with the moment's colour, a carbon
+ * spoiler and scoops, an iridium visor on chrome pivots behind which the eyes are glimpsed; racing leathers.
+ * Backgrounds: a ring of neon, a wall of neon tubes, the race behind, speed lines. The background carries the rhythm;
+ * the helmet turns at its own pace (about a turn a minute). On the drop (and in « Face à face », cast on drops) the
+ * ride: onboard cameras fixed in front of the rider, who faces the way and tucks in; the speed builds over a bar and
+ * holds through the drop: the background fades, the road, its track lights and the city's lights rush past toward
+ * the vanishing point behind the rider, streaking, mirrored in the lacquer and the visor; the camera shakes, the lens
+ * opens, the image blurs with speed. Then the speed falls away and the helmet turns again.
  */
 export const pilot = defineShaderScene({
   id: "circuit-pilot",
@@ -44,7 +51,7 @@ export const pilot = defineShaderScene({
   mask: true,
   camera: { framings: FRAMINGS, glideBars: 3 },
   description:
-    "Une tête de pilote dans un casque de course futuriste qui tourne lentement sur elle-même devant des néons : coque laquée noire qui reflète la lumière, queue aérodynamique et aileron, liseré de lumière, visière fumée derrière laquelle on devine le regard. Fonds : anneau de néon, mur de tubes, la course derrière, lignes de vitesse. Au drop il se tourne vers nous, la visière s'embrase.",
+    "Un pilote en casque de moto intégral qui tourne lentement sur lui-même devant des néons : laque noire, lame blanche sur les flancs, becquet et écopes en carbone, écran iridium sur pivots chromés, cuir de course. Fonds : anneau de néon, mur de tubes, la course derrière, lignes de vitesse. Au drop, caméra embarquée : face au pilote couché sur sa machine, la route, ses feux et la ville filent vers le point de fuite derrière lui.",
   params: [
     paletteParam("piste"),
     {
@@ -69,36 +76,48 @@ export const pilot = defineShaderScene({
     uSeq: { value: 0 },
     uRun: { value: 0 },
     uTuck: { value: 0 },
-    // CPU side: how long it holds its gaze on us (seconds left)
-    uFace: { value: 0 },
+    uRush: { value: 0 },
+    uDist: { value: 0 },
+    uBuffet: { value: 0 },
+    // CPU side: seconds into the ride, when last on screen
+    uRideT: { value: 1e4 },
+    uSeen: { value: -1e9 },
   }),
+  motion: (u) => 0.45 * (u.uRush.value as number),
   update(u, f, p, dt, ctx) {
     const bar = f.bpm > 0 ? (60 / f.bpm) * 4 : 2;
     u.uBg.value = p.bg === "tubes" ? 1 : p.bg === "race" ? 2 : p.bg === "speed" ? 3 : 0;
     const build = f.section === "build" ? f.buildProgress : 0;
     u.uCharge.value = approach(u.uCharge.value as number, build, 3, dt);
-    if (f.drop) {
+    // the ride: on the drop (or arriving on screen in one), the onboard camera, the rider tucked in, the world rushing
+    // past; the speed builds over a bar, holds through the drop (four bars at least, sixteen at most), falls away
+    const fresh = f.time - (u.uSeen.value as number) > 1.5;
+    u.uSeen.value = f.time;
+    if (f.drop || (fresh && f.section === "drop")) {
       u.uBlaze.value = 1;
-      u.uFace.value = bar * 6;
+      u.uRideT.value = 0;
+      if ((u.uRush.value as number) < 0.05) u.uDist.value = 0;
+      ctx.camera?.request("ride");
     }
+    const rideT = (u.uRideT.value as number) + dt;
+    u.uRideT.value = rideT;
+    const riding = rideT < bar * 4 || (f.section === "drop" && rideT < bar * 16);
+    const rush = approach(u.uRush.value as number, riding ? 1 : 0, (riding ? 3 : 2) / bar, dt);
+    u.uRush.value = rush;
+    u.uTuck.value = rush;
+    u.uDist.value = (u.uDist.value as number) + dt * rush * 90;
+    u.uBuffet.value = rush * 0.012 * (Math.sin(f.time * 31) + 0.5 * Math.sin(f.time * 47 + 1));
+    if (ctx.camera) ctx.camera.allow = (fr) => (fr.tag === "ride") === riding;
     u.uBlaze.value = (u.uBlaze.value as number) * Math.exp(-dt / (bar * 2.5));
     u.uKick.value = f.beat ? 0 : (u.uKick.value as number) + dt;
     // the tubes' sequence, one step a kick (and quicker through the build); the race and the lines run on
     if (f.beat) u.uSeq.value = (u.uSeq.value as number) + 1;
     u.uSeq.value = (u.uSeq.value as number) + dt * (0.5 + 3 * build);
     u.uRun.value = (u.uRun.value as number) + dt * (1 + 2.5 * build + 1.5 * (u.uBlaze.value as number));
-    // the head: turning at its own pace; on the drop it turns to face the camera within a bar, holds, turns again
-    let face = (u.uFace.value as number) - dt;
-    u.uFace.value = face;
+    // the head: turning at its own pace; on the ride it faces the way it goes (toward the cameras), then turns again
     const rot = u.uRotY.value as number;
-    const cam = ctx.camera;
-    if (face > 0 && cam) {
-      const want = Math.atan2(cam.pos.x - cam.target.x, cam.pos.z - cam.target.z);
-      u.uRotY.value = rot + toward(rot, want) * (1 - Math.exp(-dt * (3.5 / bar)));
-    } else {
-      face = 0;
-      u.uRotY.value = rot + dt * ((Math.PI * 2) / 60);
-    }
+    if (riding) u.uRotY.value = rot + toward(rot, 0) * (1 - Math.exp(-dt * (3.5 / bar)));
+    else u.uRotY.value = rot + dt * ((Math.PI * 2) / 60);
   },
   fragment: /* glsl */ `
 uniform float uRotY;    // the head's turn
@@ -109,13 +128,16 @@ uniform float uKick;    // seconds since the kick
 uniform float uSeq;     // the tubes' sequence
 uniform float uRun;     // the race's and the lines' clock
 uniform float uTuck;    // the rider tucked in (the drop)
+uniform float uRush;    // the ride's speed: 0 the portrait, 1 full speed
+uniform float uDist;    // how far the ride has gone (the world rushing past, along -z)
+uniform float uBuffet;  // the wind shaking the head
 ${ART_LIB}
 ${CAMERA_GLSL}
 ${CIRCUIT_GLSL}
 float gMat;   // 0 the painted shell, 1 the visor, 2 carbon, 3 the suit, 4 rubber trim, 5 the visor's pivots
 
 /** A world point in the head's frame (sdHead's: y up, facing +z), turned with it. */
-vec3 toHead(vec3 p) { p.xz = rot(-uRotY) * p.xz; return p; }
+vec3 toHead(vec3 p) { p.xz = rot(-uRotY - uBuffet) * p.xz; return p; }
 /** The helmet's frame: the head's, tucked forward on the drop (as on the bike), pivoting at the neck. */
 vec3 tuck(vec3 q) {
   q.y += .1 * uTuck;
@@ -156,32 +178,28 @@ float helmetD(vec3 q) {
   float shell = shellD(q);
   // a shallow channel down the crown, between two crisp ridges
   shell = smax(shell, -(sdBox(q - vec3(0., .95, -.15), vec3(.075, .1, .75)) - .015), .02);
-  // the chin bar, a piece of its own jutting forward under the visor
-  vec3 cq = q - vec3(0., -.38, .4);
-  cq.yz = rot(-.25) * cq.yz;
-  float chin = sdBox(cq, vec3(.36, .17, .2)) - .13;
-  shell = smin(shell, chin, .1);
-  // the flared lip at the nape
-  shell = smin(shell, sdEllipsoid(q - vec3(0., -.42, -.56), vec3(.46, .06, .14)), .1);
+  // the chin bar: the shell carried down and forward under the visor, rounded, its front a soft V seen from above
+  vec3 cq = q - vec3(0., -.35, .3);
+  cq.z += .24 * abs(cq.x);
+  float chin = sdEllipsoid(cq, vec3(.5, .3, .44));
+  shell = smin(shell, chin, .14);
   // open at the bottom (lower in front)
   float bottom = -(q.y + .58 + .1 * q.z);
   shell = max(shell, bottom);
   // the eye port cut through
   shell = max(shell, -max(portD(q) - .005, -q.z));
-  // the chin's air intake: three slots across its front
-  vec3 sq = q - vec3(0., -.42, .62);
-  float slots = max(sdBox(sq, vec3(.17, .055, .06)), -(abs(fract(sq.y / .035 + .5) - .5) * .035 - .008));
-  shell = max(shell, -slots + .0);
+  // the chin's air intake: three slots cut into its front, flush
+  float slots = max(max(abs(q.x) - .13 - .3 * (q.y + .43), abs(q.y + .43) - .06), abs(fract((q.y + .43) / .04 + .5) - .5) * .04 - .009);
+  shell = max(shell, -max(slots, .64 - q.z));
   float d = shell;
   gMat = 0.;
-  // carbon: the rear spoiler with its end plates, two scoops on top, the intake's frame
+  // carbon: the rear spoiler with its end plates, two scoops on top
   vec3 wq = q - vec3(0., .52, -.7);
   wq.yz = rot(.45) * wq.yz;
   float wing = sdBox(wq, vec3(.3, .028, .13)) - .015;
   float plates = sdBox(vec3(a.x - .3, wq.y - .04, wq.z), vec3(.012, .07, .13)) - .006;
   float scoops = sdEllipsoid(a - vec3(.17, .8, .25), vec3(.065, .045, .14));
   float carbon = min(min(wing, plates), scoops);
-  carbon = min(carbon, max(sdBox(q - vec3(0., -.42, .6), vec3(.21, .09, .06)) - .02, -slots));
   if (carbon < d) { d = carbon; gMat = 2.; }
   // the rubber trim round the bottom opening
   float rim = max(abs(shellD(q) + .005) - .03, abs(q.y + .58 + .1 * q.z) - .035);
@@ -345,12 +363,103 @@ vec3 strips(vec3 rd) {
   return c + vec3(.7, .75, .85) * top * .5;
 }
 
+// ---------------------------------------------------------------- the ride: the world rushing past, along -z
+float gPa;   // a pixel's angle (wider for the reflections)
+
+/**
+ * A line of lights along the way (parallel to z, at the lateral point c), each light S after the last and streaked
+ * over L by the speed, its head bright, its tail fading: its light on the ray. Far down the line, where a pixel
+ * spans several lights, their average.
+ */
+float streak(vec3 ro, vec3 rd, vec2 c, float S, float L, float off, float w) {
+  vec2 o = ro.xy - c;
+  float t = -dot(o, rd.xy) / max(dot(rd.xy, rd.xy), 1e-6);
+  if (t < 0.) return 0.;
+  float d = length(o + rd.xy * t);
+  float ww = max(w, t * gPa * 1.3);
+  float k = w / ww;
+  float glow = (exp(-d * d / (ww * ww)) + exp(-d * d / (16. * ww * ww)) * .12) * k;
+  float u = mod(ro.z + rd.z * t + uDist - off, S);
+  float fz = t * t * gPa / max(length(o), .05);
+  float dash = mix(smoothstep(L, 0., u), .5 * L / S, smoothstep(.2 * S, .8 * S, fz));
+  return glow * dash * exp(-t * .012);
+}
+
+/** The road below: dark asphalt, its lane lines rushing, the track lights shining in it. */
+vec3 rushRoad(vec3 ro, vec3 rd) {
+  const float Y = -1.9;
+  if (rd.y > -1e-3) return vec3(0.);
+  float t = (Y - ro.y) / rd.y;
+  if (t < 0.) return vec3(0.);
+  vec2 h = ro.xz + rd.xz * t;
+  float fx = t * gPa * 1.5;
+  float fz = t * t * gPa / max(ro.y - Y, .1);
+  float far = smoothstep(1., 4., fz);
+  vec3 c = vec3(.004, .004, .006);
+  float dash = mix(step(mod(h.y + uDist, 7.), 3.5), .5, far);
+  c += vec3(.5) * neon(abs(abs(h.x) - .95), .03, fx) * dash * .5;
+  c += vec3(.5) * neon(abs(abs(h.x) - 2.4), .04, fx) * .35;
+  // the track lights' reflections, long in the asphalt
+  float row = exp(-pow(abs(h.x) - 1.75, 2.) / .015);
+  float lit = mix(smoothstep(3.6, 0., mod(h.y + uDist - sign(h.x) * 1.3, 4.)), .45, max(far, .5));
+  c += mix(uTint, vec3(1.), .35) * row * lit * .45;
+  return c * exp(-t * .02);
+}
+
+/** The ride: the road, its two rows of track lights close by, the city's lights in layers round the way. */
+vec3 rushScene(vec3 ro, vec3 rd) {
+  vec3 c = rushRoad(ro, rd);
+  float L = .3 + 7. * uRush;
+  for (int s = 0; s < 2; s++) {
+    float sx = s == 0 ? -1. : 1.;
+    c += mix(uTint, vec3(1.), .35) * streak(ro, rd, vec2(1.75 * sx, -1.45), 4., min(L, 3.4), sx * 1.3, .035) * 1.8;
+  }
+  // the wind, then the city (neon, windows) on cylinders round the way, nearer ones streaking faster across the frame
+  float rr = max(dot(rd.xy, rd.xy), 1e-6);
+  for (int l = 0; l < 4; l++) {
+    float fl = float(l);
+    float R = l == 0 ? 2.5 : l == 1 ? 3.6 : l == 2 ? 6.2 : 11.;
+    float N = l == 0 ? 40. : l == 1 ? 26. : l == 2 ? 38. : 56.;
+    float b = dot(ro.xy, rd.xy), cc = dot(ro.xy, ro.xy) - R * R;
+    float disc = b * b - rr * cc;
+    if (disc < 0.) continue;
+    vec2 h = ro.xy + rd.xy * ((-b + sqrt(disc)) / rr);
+    float k = floor(atan(h.y, h.x) / 6.2831853 * N);
+    float h1 = hash12(vec2(k, fl * 7.1 + .3));
+    if (h1 < .3) continue;
+    float a = (k + .5 + (hash12(vec2(k, fl * 3.3 + 1.7)) - .5) * .5) / N * 6.2831853;
+    vec2 lc = R * vec2(cos(a), sin(a));
+    if (lc.y < -1.6) continue;
+    float h2 = hash12(vec2(k, fl * 5.9 + 4.1));
+    if (l == 0) {
+      // the wind: faint white threads close by
+      c += vec3(.8, .85, 1.) * streak(ro, rd, lc, 3. + 4. * h2, min(6., L * 1.2), h1 * 23., .008) * .5;
+      continue;
+    }
+    float S = (6. + 8. * h2) * (1. + .5 * fl);
+    float len = h1 > .85 ? S * .85 : min(S * .85, L * (.6 + .8 * h2));
+    vec3 col = h2 < .35 ? uTint : h2 < .6 ? vec3(1.) : h2 < .8 ? vec3(1., .5, .2) : vec3(1., .25, .65);
+    float w = l == 1 ? .03 : l == 2 ? .045 : .07;
+    c += col * streak(ro, rd, lc, S, len, h1 * 37., w) * (l == 1 ? 1.6 : l == 2 ? 1. : .6);
+  }
+  // the glow of the city where the way runs to
+  c += mix(uTint, vec3(1., .55, .3), .5) * pow(max(-rd.z, 0.), 30.) * .25;
+  return c;
+}
+
 vec3 background(vec3 ro, vec3 rd) {
   vec3 c = mix(vec3(.004, .005, .012), vec3(.0, .0, .003), smoothstep(-.3, .6, rd.y));
-  if (uBg < .5) c += bgRing(ro, rd);
-  else if (uBg < 1.5) c += bgTubes(ro, rd);
-  else if (uBg < 2.5) c += bgRace(ro, rd);
-  else c += bgSpeed(ro, rd);
+  // the chosen background fades under the speed
+  float keep = 1. - uRush;
+  if (keep > .01) {
+    vec3 b;
+    if (uBg < .5) b = bgRing(ro, rd);
+    else if (uBg < 1.5) b = bgTubes(ro, rd);
+    else if (uBg < 2.5) b = bgRace(ro, rd);
+    else b = bgSpeed(ro, rd);
+    c += b * keep;
+  }
+  if (uRush > .01) c += rushScene(ro, rd) * smoothstep(0., .4, uRush);
   return c;
 }
 
@@ -401,13 +510,18 @@ float carbonWeave(vec3 q, float fw) {
 vec3 helmetColor(vec3 p, vec3 rd, float t, float pa) {
   sceneD(p);
   float m = gMat;
+  vec3 qi = tuck(toHead(p));
+  // the intake's insert, flush in the chin: carbon
+  float intake = step(abs(qi.x), .17 + .35 * (qi.y + .43)) * step(abs(qi.y + .43), .085) * step(.5, qi.z);
+  if (m < .5 && intake > .5) m = 2.;
   vec3 n = nrm(p, max(.0015, t * pa));
   vec3 qs = toHead(p);
   vec3 q = tuck(qs);
   vec3 qd = tuckDir(toHead(rd));
   vec3 rr = reflect(rd, n);
-  // (the strips fade at grazing angles: on the silhouette they would only sparkle)
-  vec3 env = background(p, rr) + strips(rr) * smoothstep(.04, .3, dot(n, -rd));
+  // (the strips fade at grazing angles: on the silhouette they would only sparkle; and on the ride, on the road)
+  gPa = pa * 3.;
+  vec3 env = background(p, rr) + strips(rr) * smoothstep(.04, .3, dot(n, -rd)) * (1. - .75 * uRush);
   float fw = t * pa;
   vec3 key = vec3(.8, .85, 1.) * pow(max(dot(rr, normalize(vec3(-.6, .5, .6))), 0.), 30.) * .6;
   vec3 rim = uTint * pow(1. - max(dot(n, -rd), 0.), 3.) * .22 * (1. + uCharge + uBlaze);
@@ -416,12 +530,15 @@ vec3 helmetColor(vec3 p, vec3 rd, float t, float pa) {
   vec3 lineC = mix(uTint, vec3(1.), .15);
   vec3 c;
   if (m < .5) {
-    // the race livery: a black dome, a white panel sweeping back along the flanks from the chin, a band of the
-    // moment's colour between them with a white pinstripe, chevrons on the crown, the channel painted
-    float yb = -.12 + .36 * clamp(-q.z, -.6, .9);
-    float white = smoothstep(.006, -.006, q.y - yb);
-    float band = 1. - smoothstep(.02, .03, abs(q.y - yb - .045));
-    float pin = 1. - smoothstep(.004, .008, abs(q.y - yb - .085));
+    // the race livery: black lacquer, the chin black; on each flank a white blade sweeping up and back from the cheek
+    // to the nape, edged with a band of the moment's colour and a white pinstripe; chevrons on the crown, the channel
+    float yb = .02 - .42 * q.z;
+    float front = .34 - .25 * (q.y + .3);
+    float ahead = smoothstep(.006, -.006, q.z - front);
+    float tall = mix(.07, .32, clamp((q.z + .8) / 1.1, 0., 1.));
+    float white = smoothstep(.006, -.006, q.y - yb) * smoothstep(-.006, .006, q.y - yb + tall) * ahead;
+    float band = (1. - smoothstep(.02, .03, abs(q.y - yb - .045))) * smoothstep(.006, -.006, q.z - front - .04);
+    float pin = (1. - smoothstep(.004, .008, abs(q.y - yb - .085))) * smoothstep(.006, -.006, q.z - front - .07);
     float chevron = step(.55, q.y) * step(.05, q.z) * step(q.z, .5) * step(.5, fract((q.z + 1.1 * abs(q.x)) * 5.)) * step(abs(q.x), .4);
     float channel = step(abs(q.x), .07) * step(.5, q.y);
     vec3 alb = mix(vec3(.012), vec3(.62, .63, .66), max(white, pin));
@@ -471,12 +588,16 @@ vec3 helmetColor(vec3 p, vec3 rd, float t, float pa) {
 void main() {
   vec2 fc = gl_FragCoord.xy;
   vec2 uv = (fc - .5 * uRes) / uRes.y;
+  // on the ride: the camera shaken by the speed, the lens opening wider
+  uv += uRush * .0025 * vec2(sin(uTime * 63.) + .6 * sin(uTime * 101. + 2.), sin(uTime * 57. + 1.) + .6 * sin(uTime * 93.));
+  float foc = uFocal * (1. - .18 * uRush);
   vec3 ro = uCamPos;
   gF = normalize(uCamTarget - ro);
   gR = normalize(cross(gF, vec3(0., 1., 0.)));
   gU = cross(gR, gF);
-  vec3 rd = normalize(uv.x * gR + uv.y * gU + uFocal * gF);
-  float pa = 1. / (uRes.y * uFocal);
+  vec3 rd = normalize(uv.x * gR + uv.y * gU + foc * gF);
+  float pa = 1. / (uRes.y * foc);
+  gPa = pa;
   vec3 col = background(ro, rd);
   // the bust: march within its bounding sphere
   vec3 bc = vec3(0., -.35, 0.);
