@@ -181,7 +181,7 @@ vec3 env(vec3 r, float chartK) {
   if (uTitle > .5) {
     vec3 sb = normalize(uCamPos - uCamTarget + vec3(0., .8, 0.));
     float k = dot(r, sb);
-    c += mix(uInk, vec3(1.), .5) * 1.5 * smoothstep(.55, .9, k) * (.75 + .25 * smoothstep(-.2, .5, r.y));
+    c += mix(uInk, vec3(1.), .5) * 1.8 * smoothstep(.3, .8, k) * (.75 + .25 * smoothstep(-.2, .5, r.y));
     c += uTint * .9 * smoothstep(.15, .3, k) * (1. - smoothstep(.3, .45, k));
   }
   c += chart(r) * chartK;
@@ -214,8 +214,10 @@ void main() {
     // the chart glows in the bath; on the mask it would only draw a line round every contour
     float onMask = smoothstep(.02, .08, p.y - liquidH(p.xz));
     col = env(reflect(rd, n), 1. - .75 * onMask) * mix(uInk * .85, vec3(1.), fre);
-    // under the title the bath stays a dark mirror, so the chrome letters stand out against it
+    // under the title the bath stays a dark mirror, so the chrome letters stand out against it; the letters get a
+    // satin sheen from the front, so that they read from every angle whatever the chrome mirrors
     col *= 1. - .75 * uTitle * (1. - onMask);
+    col += mix(uInk, vec3(1.), .6) * .35 * uTitle * onMask * clamp(dot(n, -rd), 0., 1.);
     col *= .55 + .45 * calcAO(p, n);
     col = mix(col, bg, smoothstep(4., 12., tt));
   }

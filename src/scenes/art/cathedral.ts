@@ -231,7 +231,7 @@ void main() {
     // Stretched arches gather much more light: compensate so the warp stays made of streaks, not a white-out
     acc += atten * uInk * bright(id, camId) * (.0025 / (.0012 + d * d * 5.)) * stepL * 9. / (1. + gWarp * 4.);
     // the letters of light: their glow in the haze (their crisp core is drawn in the sign's plane, below)
-    if (signB > 0.) acc += atten * mix(uInk, vec3(1.), .3) * signB * (.0007 / (.0008 + ds * ds * 6.) + .03 / (1. + ds * 18.) * uHaze) * stepL * 7.;
+    if (signB > 0.) acc += atten * mix(uInk, vec3(1.), .3) * min(signB, 2.) * (.0005 / (.0008 + ds * ds * 6.) + .03 / (1. + ds * 18.) * uHaze) * stepL * 7.;
     t += stepL;
     if (t > 26.) break;
   }
@@ -269,7 +269,7 @@ void main() {
       acc += mix(uInk, vec3(1.), .2) * signB * (.07 * exp(-dl * 7.) + .03 * exp(-dl * 2.)) * (.6 + .4 * uHaze);
       // the letters themselves, crisp: white heat in the world's colour, edged a pixel wide
       float fw = ts / (uRes.y * flightFocal(1.6));
-      acc += mix(uInk, vec3(1.), .55) * min(signB, 2.5) * .75 * (1. - smoothstep(-fw, fw, d2));
+      acc += mix(uInk, vec3(1.), .55) * min(signB, 2.) * .55 * (1. - smoothstep(-fw, fw, d2));
     }
   }
   vec3 col = acc;

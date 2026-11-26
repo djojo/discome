@@ -18,7 +18,7 @@ const FRAMINGS: Framing[] = [
   { az: 0, el: 0.04, dist: 5.2, target: [0, 3.05, 0], focal: 1.7, weight: 3, tag: "title" },
   { az: 0.2, el: 0.1, dist: 5.5, target: [0, 3.05, 0], focal: 1.7, weight: 2, tag: "title" },
   { az: -0.2, el: -0.06, dist: 5, target: [0, 3.15, 0], focal: 1.7, weight: 2, tag: "title" },
-  { az: 0.1, el: 0.03, dist: 9.5, target: [0, 2.4, 0], focal: 1.7, weight: 2, tag: "title-open" },
+  { az: 0.1, el: 0.03, dist: 7, target: [0, 2.7, 0], focal: 1.7, weight: 2, tag: "title-open" },
 ];
 
 /** The animal spirits (heads of the library), in the order they come. */
