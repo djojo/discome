@@ -287,6 +287,37 @@ export class Racers {
     return out.set(c * lx + sn * ly, -sn * lx + c * ly, 0).normalize();
   }
 
+  /**
+   * Place racer i off the banked track, on level ground beside it (the pits), its line `xAt(s)` across the track's
+   * centre and `y` above its height; `onTrack(s)` 0..1 eases it into the track's own banked frame as it joins it.
+   */
+  placeLevel(i: number, s: number, s0: number, xAt: (s: number) => number, y: number, onTrack: (s: number) => number, colour: number, trail: number, from = -Infinity) {
+    const at = (q: number, xx: number, yy: number, out: THREE.Vector3) => {
+      const k = onTrack(q);
+      const lx = trackX(q) + xx;
+      const ly = trackY(q) + yy;
+      trackPoint(q, s0, xx, yy, null, out);
+      return out.set(lx + (out.x - lx) * k, ly + (out.y - ly) * k, -(q - s0));
+    };
+    const x = xAt(s);
+    at(s, x, HOVER + y, this.tmp);
+    this.pos[i].set(this.tmp.x, this.tmp.y, this.tmp.z, colour);
+    this.track[i].set(s - s0, x, colour);
+    const f = trackFrame(s, s0, this.frame);
+    const yaw = Math.atan(xAt(s + 0.5) - xAt(s - 0.5));
+    this.fwd[i].copy(f.fwd).multiplyScalar(Math.cos(yaw)).addScaledVector(f.right, Math.sin(yaw)).normalize();
+    this.up[i].set(0, 1, 0).lerp(f.up, onTrack(s)).normalize();
+    this.right[i].crossVectors(this.fwd[i], this.up[i]).normalize();
+    this.up[i].crossVectors(this.right[i], this.fwd[i]).normalize();
+    const tail = Math.max(0, Math.min(trail, s - 1.05 - from));
+    for (let k = 0; k < TRAIL_PTS; k++) {
+      const ts = s - 1.05 - (tail * k) / (TRAIL_PTS - 1);
+      const tx = xAt(ts);
+      at(ts, tx - 0.46, HOVER + y + 0.12, this.trailL[i * TRAIL_PTS + k]);
+      at(ts, tx + 0.46, HOVER + y + 0.12, this.trailR[i * TRAIL_PTS + k]);
+    }
+  }
+
   /** The racers' uniforms. */
   uniforms() {
     return {

@@ -24,6 +24,14 @@ uniform vec3 uGantry;    // x: 0 the lap lights, 1 the start lights; y: how many
 #ifdef CLEAR_ZONE
 uniform vec2 uClear;     // no towers between these s (a stadium stands there)
 #endif
+#ifdef PITS
+uniform vec2 uPits;      // the pits: the garages' middle (s), their half-length
+/** The pit lane's centre across the track: beside it along the garages, joining it before and after. */
+float pitLaneX(float s) {
+  float k = 1. - smoothstep(uPits.y, uPits.y + 140., abs(s - uPits.x));
+  return mix(TRACK_W + 1.2, TRACK_W + 6.5, k);
+}
+#endif
 #ifdef TUBE
 uniform vec3 uTube;     // the tube: from s, to s, its radius
 #endif
@@ -76,10 +84,31 @@ float trackD(vec3 p) {
   float rail = max(abs(abs(q.x) - TRACK_W + .12) - .12, abs(q.y - .09) - .09);
   float d = min(deck, rail);
   float m = deck < rail ? (q.y > -.02 && abs(q.x) < TRACK_W - .2 ? 0. : 2.) : 1.;
+  bool hoops = true;
+#ifdef PITS
+  // the pits, on level ground beside the banked track: the pit lane, the wall, the garages
+  float dps = q.z - uPits.x;
+  if (abs(dps) < uPits.y + 170.) {
+    hoops = abs(dps) > uPits.y + 80.;
+    vec3 lv = vec3(p.x - trackX(q.z), p.y - trackY0(q.z), q.z);
+    float xp = pitLaneX(q.z);
+    float inG = step(abs(dps), uPits.y);
+    float deckP = max(max(max(xp - 3.5 - lv.x, lv.x - mix(xp + 3.5, TRACK_W + 22.5, inG)), abs(lv.y + .3) - .3), abs(dps) - uPits.y - 160.);
+    float wall = max(max(abs(lv.x - TRACK_W - 1.25) - .35, abs(lv.y + .1) - 1.5), abs(dps) - uPits.y - 70.);
+    float gz = mod(dps + 7., 14.) - 7.;
+    float back = max(max(abs(lv.x - TRACK_W - 22.25) - .25, abs(lv.y - 3.4) - 3.4), abs(dps) - uPits.y);
+    float side = max(max(max(abs(abs(gz) - 7.) - .25, abs(lv.x - TRACK_W - 16.25) - 5.75), abs(lv.y - 3.4) - 3.4), abs(dps) - uPits.y - .25);
+    float roof = max(max(abs(lv.y - 7.) - .3, abs(lv.x - TRACK_W - 15.75) - 6.75), abs(dps) - uPits.y - .25);
+    float g = min(min(back, side), roof);
+    if (deckP < d) { d = deckP; m = 12.; }
+    if (wall < d) { d = wall; m = 13.; }
+    if (g < d) { d = g; m = 14.; }
+  }
+#endif
   // hoops of light arching over the track
   float ds = mod(q.z + 50., 100.) - 50.;
   float hoop = max(length(vec2(length(vec2(q.x, q.y + .3)) - 6.6, ds)) - .06, -(q.y + .3));
-  if (hoop < d) { d = hoop; m = 3.; }
+  if (hoops && hoop < d) { d = hoop; m = 3.; }
   // the gantry, once a lap: two pillars and a beam carrying its lights
   float dg = mod(q.z + LAP * .5, LAP) - LAP * .5;
   if (abs(dg) < 12.) {
