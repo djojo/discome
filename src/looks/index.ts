@@ -68,15 +68,24 @@ export interface Look {
    * has its own rule for it.
    */
   title?: Shot;
+  /**
+   * How the seal (the night's logo as it is, over everything) comes in, in this world's style: a fade from a little
+   * larger (the default), a sheen sweeping across it, a neon flickering on, pixels gathering, smoke dissolving.
+   */
+  seal?: SealStyle;
   /** Legacy look, outside the art-directed rotation. */
   classic?: boolean;
   custom?: boolean;
 }
 
+export const SEAL_STYLES = ["fade", "sheen", "neon", "pixels", "smoke"] as const;
+export type SealStyle = (typeof SEAL_STYLES)[number];
+
 export const LOOKS: Look[] = [
   {
     id: "porcelaine",
     name: "Porcelaine",
+    seal: "fade",
     description: "Le seul monde blanc : porcelaine émaillée dans un studio blanc, une fente vermillon, l'or du kintsugi. Calme et sculptural.",
     swatch: ["#121110", "#ECE7DF", "#E5482D"],
     palettes: ["porcelain", "bone"],
@@ -104,6 +113,7 @@ export const LOOKS: Look[] = [
   {
     id: "signal",
     name: "Signal",
+    seal: "neon",
     description: "Noir et blanc purs, données, lignes d'un pixel. Coupes sèches.",
     swatch: ["#000000", "#FFFFFF", "#9A9A9A"],
     palettes: ["mono"],
@@ -137,6 +147,7 @@ export const LOOKS: Look[] = [
   {
     id: "mercure",
     name: "Mercure",
+    seal: "sheen",
     description: "Métal liquide dans un studio : billes, ondes, volutes, coulées. Une couleur de métal mène le monde et change à chaque drop.",
     swatch: ["#07080B", "#C9CDD3", "#2F5BFF"],
     palettes: ["mercury", "cobalt"],
@@ -170,6 +181,7 @@ export const LOOKS: Look[] = [
   {
     id: "cathedrale",
     name: "Cathédrale",
+    seal: "sheen",
     description: "Architecture de lumière d'une seule couleur, brume, sol miroir. Le drop allume tout.",
     swatch: ["#050404", "#FF2B1C", "#FFE9E0"],
     palettes: ["signalRed", "whiteLight"],
@@ -205,6 +217,7 @@ export const LOOKS: Look[] = [
   {
     id: "monolithe",
     name: "Monolithe",
+    seal: "fade",
     description: "Béton brut, un seul soleil, ombres dures, poussière. Lent et monumental.",
     swatch: ["#1B1D22", "#8E8A83", "#F2C48D"],
     palettes: ["concrete", "sodium"],
@@ -272,6 +285,7 @@ export const LOOKS: Look[] = [
   {
     id: "canyon",
     name: "Canyon",
+    seal: "smoke",
     description: "La nuit chamanique du désert : le cactus sacré, les esprits animaux, les visions, les canyons aux pétroglyphes ; tout est dessiné en fils de couleur.",
     swatch: ["#060A20", "#3FD9C8", "#FF8A1F"],
     palettes: ["peyote", "desert", "huichol"],
@@ -298,6 +312,7 @@ export const LOOKS: Look[] = [
   {
     id: "arcanes",
     name: "Arcanes",
+    seal: "pixels",
     description: "Mages sans visage en robes de lignes et d'étoiles, prismes, orbes et portails arc-en-ciel, sous un HUD de jeu ésotérique.",
     swatch: ["#04030C", "#5B7CFF", "#FFD34E"],
     palettes: ["cosmos", "mars", "mousse"],
@@ -337,6 +352,7 @@ export const LOOKS: Look[] = [
   {
     id: "chair",
     name: "Chair",
+    seal: "sheen",
     description: "Formes vivantes à symétrie rayonnante, chair translucide et nacre, qui se transforment lentement. Intime et dérangeant.",
     swatch: ["#140808", "#E8DCD2", "#8E1420"],
     palettes: ["flesh", "cobalt"],
@@ -371,6 +387,7 @@ export const LOOKS: Look[] = [
   {
     id: "bestiaire",
     name: "Bestiaire",
+    seal: "fade",
     description: "Bustes de musée qui se métamorphosent : tigre, loup, faucon, lion. Marbre, obsidienne et or.",
     swatch: ["#0B0806", "#EFE6D6", "#F0A93B"],
     palettes: ["fauve", "bone", "sodium"],
@@ -426,6 +443,7 @@ export const LOOKS: Look[] = [
   {
     id: "mycelium",
     name: "Mycélium",
+    seal: "smoke",
     description: "La nuit sous la lune, en volume : forêt hantée, grotte aux vers luisants, champignons géants, terrier sans fond, labyrinthe sans sortie. Le mycélium relie tout et chaque kick y court comme un signal.",
     swatch: ["#020705", "#B9CCDB", "#7DFFB4"],
     palettes: ["boismort", "luciole", "spores"],
@@ -471,6 +489,7 @@ export const LOOKS: Look[] = [
   {
     id: "circuit",
     name: "Circuit",
+    seal: "neon",
     description: "La course du futur, sans fin : une piste de verre noir au-dessus d'une mégapole, une meute de bolides aux traînées de lumière, la foule des gradins, les stands, et la même course à travers les âges du jeu vidéo.",
     swatch: ["#020309", "#3FE8FF", "#FF7A1F"],
     palettes: ["piste", "phosphore"],
@@ -517,6 +536,7 @@ export const LOOKS: Look[] = [
   {
     id: "classique",
     name: "Classique",
+    seal: "fade",
     description: "Les premières scènes et leurs couleurs vives, hors rotation des mondes.",
     swatch: ["#ff3cac", "#a855f7", "#22d3ee"],
     palettes: ["acid", "neon", "sunset", "ocean", "ice", "fire", "chrome", "vhs"],

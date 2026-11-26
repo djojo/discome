@@ -347,3 +347,69 @@ export async function signatureCanvas(b: Brand, font: unknown): Promise<HTMLCanv
   ctx.fillText(text, 4 + m.actualBoundingBoxLeft, 4 + m.actualBoundingBoxAscent);
   return c;
 }
+
+/**
+ * The seal: the night's logo as it is (in its colours, shaped by its silhouette; white for a logo saved before its
+ * colours were kept) or its title written in the world's typeface (white), shown crisp over everything; and its halo,
+ * the shape blurred and widened, on a canvas half as large again each way (the ground that keeps it readable).
+ * Null with nothing to show, or in the default mode (each world's own name).
+ */
+export interface Seal {
+  art: HTMLCanvasElement;
+  halo: HTMLCanvasElement;
+  /** A dark logo: its halo is light. */
+  dark: boolean;
+}
+
+const loaded = async (src: string) => {
+  const img = new Image();
+  img.src = src;
+  await img.decode();
+  return img;
+};
+
+export async function sealCanvas(b: Brand, font: unknown): Promise<Seal | null> {
+  if (b.mode !== "logo" && b.mode !== "title") return null;
+  if (!brandOn(b)) return null;
+  let art: HTMLCanvasElement;
+  if (b.mode === "logo") {
+    const shape = await loaded(b.logo!);
+    const { c, ctx } = canvas2d(shape.width, shape.height);
+    if (b.logoArt) {
+      ctx.drawImage(await loaded(b.logoArt), 0, 0, c.width, c.height);
+      ctx.globalCompositeOperation = "destination-in";
+    }
+    ctx.drawImage(shape, 0, 0);
+    art = c;
+  } else {
+    const m = await textMask(b.title, b.subtitle, titleFont(font));
+    if (!m) return null;
+    const x0 = Math.floor((m.w - m.cw) / 2);
+    const y0 = Math.floor((m.h - m.ch) / 2);
+    const { c, ctx } = canvas2d(Math.ceil(m.cw) + 4, Math.ceil(m.ch) + 4);
+    const img = ctx.createImageData(c.width, c.height);
+    for (let y = 0; y < c.height; y++) {
+      for (let x = 0; x < c.width; x++) {
+        const sx = x + x0 - 2;
+        const sy = y + y0 - 2;
+        const o = (y * c.width + x) * 4;
+        img.data[o] = img.data[o + 1] = img.data[o + 2] = 255;
+        img.data[o + 3] = sx >= 0 && sy >= 0 && sx < m.w && sy < m.h ? Math.round(m.a[sy * m.w + sx] * 255) : 0;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    art = c;
+  }
+  // the halo: the shape small, widened (drawn round a circle), blurred, in a frame half as large again
+  const k = 256 / Math.max(art.width, art.height);
+  const hw = Math.round(art.width * k * 1.5);
+  const hh = Math.round(art.height * k * 1.5);
+  const { c: halo, ctx: hc } = canvas2d(hw, hh);
+  hc.filter = "blur(30px)";
+  const r = 8;
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    hc.drawImage(art, (hw - art.width * k) / 2 + Math.cos(a) * r, (hh - art.height * k) / 2 + Math.sin(a) * r, art.width * k, art.height * k);
+  }
+  return { art, halo, dark: b.mode === "logo" && b.logoTone === "dark" };
+}

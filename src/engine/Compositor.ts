@@ -162,6 +162,12 @@ export class Compositor {
   private readonly quadCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   private readonly material: THREE.ShaderMaterial;
   private readonly uniforms;
+  /** The seal: the night's logo (or title) as it is, crisp, over everything (null: none). */
+  private sealArt: THREE.CanvasTexture | null = null;
+  private sealHalo: THREE.CanvasTexture | null = null;
+  private sealAspect = 1;
+  /** In: coming in or held; out: going; off. */
+  private sealState: "in" | "out" | "off" = "off";
   /** The night's signature (its title or logo, white on transparent), drawn small in a corner. */
   private signature: THREE.CanvasTexture | null = null;
   private signatureAspect = 1;
@@ -241,6 +247,14 @@ export class Compositor {
       uSig: { value: this.black as THREE.Texture },
       uSigOn: { value: 0 },
       uSigRect: { value: new THREE.Vector4(0, 0, 1, 1) },
+      uSealArt: { value: this.black as THREE.Texture },
+      uSealHalo: { value: this.black as THREE.Texture },
+      uSealOn: { value: 0 },
+      uSealT: { value: 0 },
+      uSealStyle: { value: 0 },
+      uSealRect: { value: new THREE.Vector4(0, 0, 1, 1) },
+      uSealDark: { value: 0 },
+      uSealTint: { value: new THREE.Vector3(1, 1, 1) },
     };
     this.material = new THREE.ShaderMaterial({
       uniforms: this.uniforms,
@@ -524,8 +538,32 @@ export class Compositor {
   private applyFx(post: PostFx, frame: AudioFrame, dt: number) {
     const u = this.uniforms;
     const fx = post.fx ?? NEUTRAL_FX;
-    // The night's signature fades in and out (hidden while the title itself is on screen)
-    const sigTarget = this.signature && this.signatureShown ? 1 : 0;
+    // The seal comes in (its entrance is the shader's, timed by uSealT), holds, goes in a fade
+    if (this.sealState === "in") {
+      u.uSealT.value += dt;
+      u.uSealOn.value += (1 - u.uSealOn.value) * (1 - Math.exp(-dt * 8));
+    } else if (this.sealState === "out") {
+      u.uSealOn.value *= Math.exp(-dt * 3);
+      if (u.uSealOn.value < 0.002) {
+        u.uSealOn.value = 0;
+        this.sealState = "off";
+      }
+    }
+    if (this.sealArt) {
+      // centred, about half the height, at most two thirds of the width
+      const res = this.uniforms.uRes.value;
+      let h = 0.5;
+      let w = (h * this.sealAspect * res.y) / res.x;
+      if (w > 0.66) {
+        h *= 0.66 / w;
+        w = 0.66;
+      }
+      u.uSealRect.value.set(0.5 - w / 2, 0.5 - h / 2, w, h);
+      const tint = frame.tint;
+      if (tint) u.uSealTint.value.set(tint[0], tint[1], tint[2]);
+    }
+    // The night's signature fades in and out (hidden while the title itself, or the seal, is on screen)
+    const sigTarget = this.signature && this.signatureShown && this.sealState === "off" ? 1 : 0;
     u.uSigOn.value += (sigTarget - u.uSigOn.value) * (1 - Math.exp(-dt * 1.5));
     if (this.signature) {
       const h = 0.045;
@@ -589,6 +627,40 @@ export class Compositor {
     u.uStrobeMode.value = fx.strobe === "invert" && !post.safeFlash ? 2 : 1;
   }
 
+  /** The seal's content: the logo (or title) as it is, its halo, whether it is dark (null: none). */
+  setSeal(seal: { art: HTMLCanvasElement; halo: HTMLCanvasElement; dark: boolean } | null) {
+    this.sealArt?.dispose();
+    this.sealHalo?.dispose();
+    this.sealArt = seal ? new THREE.CanvasTexture(seal.art) : null;
+    this.sealHalo = seal ? new THREE.CanvasTexture(seal.halo) : null;
+    this.sealAspect = seal ? seal.art.width / seal.art.height : 1;
+    this.uniforms.uSealArt.value = this.sealArt ?? this.black;
+    this.uniforms.uSealHalo.value = this.sealHalo ?? this.black;
+    this.uniforms.uSealDark.value = seal?.dark ? 1 : 0;
+    if (!seal) {
+      this.sealState = "off";
+      this.uniforms.uSealOn.value = 0;
+    }
+  }
+
+  /** The seal comes in, in a world's style (0 fade, 1 sheen, 2 neon, 3 pixels, 4 smoke). */
+  showSeal(style: number) {
+    if (!this.sealArt || this.sealState === "in") return;
+    this.sealState = "in";
+    this.uniforms.uSealT.value = 0;
+    this.uniforms.uSealStyle.value = style;
+  }
+
+  /** The seal goes, in a fade. */
+  hideSeal() {
+    if (this.sealState === "in") this.sealState = "out";
+  }
+
+  /** The seal is on screen (coming in or held). */
+  get sealShown() {
+    return this.sealState === "in";
+  }
+
   /** The night's signature: a canvas with its title or logo in the alpha (null: none). */
   setSignature(canvas: HTMLCanvasElement | null) {
     this.signature?.dispose();
@@ -600,6 +672,8 @@ export class Compositor {
 
   dispose() {
     this.signature?.dispose();
+    this.sealArt?.dispose();
+    this.sealHalo?.dispose();
     for (const s of this.slots()) this.destroySlot(s);
     this.pool = [];
     this.current = this.next = this.layer = this.bg = this.bgNext = null;
