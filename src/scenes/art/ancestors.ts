@@ -16,15 +16,15 @@ const smooth = (x: number) => {
 };
 
 /**
- * Les Ancêtres: a voyage through space among the heads of the ancestors, the animal spirits (wolf, falcon, ram, owl)
- * and faces of old (a Moai, Nefertiti, a human face), all of aurora glass like the spirit of the fire: translucent, lit
- * from within, curtains of light rising through them, their necks dissolving into a veil. They float in a loose
- * tunnel round the way, from a little to very large, some brushing past, others lost in the distance, turning slowly
- * and looking aside. All round, the aurora's veils on every side (no ground, no horizon), stars, a faint band of the
- * galaxy. The shared flight carries us: slow in the groove, quicker through the build, a surge on the drop. On the kick
- * a wave of light runs up the veils and through the heads; through the build they light up from within; on the drop
- * the aurora blazes and the ancestors all turn their heads to us for a moment; in the breakdown a slow drift, the
- * heads paler.
+ * Les Ancêtres: our spirit travels through space and is judged by the ancestors, the animal spirits (wolf, falcon,
+ * ram, owl) and faces of old (a Moai, Nefertiti, a human face), all of aurora glass like the spirit of the fire:
+ * translucent, lit from within, curtains of light rising through them, their necks dissolving into a veil. They stand
+ * in a line on either side of the way, above us, every one of them looking at us: their heads follow us as we pass,
+ * looking down on us; now and then a great elder hangs high over the way. All round, the aurora's veils on every side
+ * (no ground, no horizon), stars, a faint band of the galaxy. The shared flight carries us: slow in the groove,
+ * quicker through the build, a surge on the drop. On the kick a wave of light runs up the veils and through the heads;
+ * through the build they light up from within; on the drop the aurora blazes and the ancestors close in round us for
+ * two bars; in the breakdown a slow drift, the heads paler.
  */
 export const ancestors = defineShaderScene({
   id: "canyon-ancestors",
@@ -34,15 +34,15 @@ export const ancestors = defineShaderScene({
   renderScale: 0.65,
   flight: { cruise: 1.6 },
   description:
-    "Un voyage dans l'espace au milieu des têtes des ancêtres (esprits animaux, Moai, Néfertiti, un visage humain) en verre d'aurore boréale, translucides et lumineuses de l'intérieur, sous des voiles d'aurore tout autour. Au drop, l'aurore s'embrase et les ancêtres tournent la tête vers nous.",
+    "Notre esprit voyage dans l'espace, jugé par les ancêtres (esprits animaux, Moai, Néfertiti, un visage humain) en verre d'aurore boréale : alignés de part et d'autre de la route, au-dessus de nous, ils nous regardent tous et nous suivent des yeux. Au drop, l'aurore s'embrase et ils se resserrent autour de nous.",
   params: [paletteParam("peyote"), ...flightParams()],
   uniforms: () => ({
     ...Object.assign({}, ...SLOTS.map((s) => headUniforms(s))),
     uKickT: { value: 9 },
     uCharge: { value: 0 },
     uBlaze: { value: 0 },
-    // the drop: the ancestors turn to us (0..1); the breakdown: paler
-    uTurn: { value: 0 },
+    // the drop: the ancestors close in round us (0..1); the breakdown: paler
+    uGather: { value: 0 },
     uPale: { value: 0 },
     // CPU side only: seconds since the drop
     uDropT: { value: 99 },
@@ -54,9 +54,9 @@ export const ancestors = defineShaderScene({
     const charge = f.section === "build" ? f.buildProgress : 0;
     u.uCharge.value = (u.uCharge.value as number) + (charge - (u.uCharge.value as number)) * (1 - Math.exp(-dt * 2));
     u.uBlaze.value = f.drop ? 1 : (u.uBlaze.value as number) * Math.exp(-dt / (bar * 1.5));
-    // they turn to us within half a bar of the drop, hold two bars, turn away again over two
+    // they close in round us within half a bar of the drop, hold two bars, draw back over two
     const t = (u.uDropT.value = f.drop ? 0 : (u.uDropT.value as number) + dt);
-    u.uTurn.value = t < bar * 2.5 ? smooth(t / (bar * 0.5)) : 1 - smooth((t - bar * 2.5) / (bar * 2));
+    u.uGather.value = t < bar * 2.5 ? smooth(t / (bar * 0.5)) : 1 - smooth((t - bar * 2.5) / (bar * 2));
     const pale = f.section === "breakdown" ? 1 : 0;
     u.uPale.value = (u.uPale.value as number) + (pale - (u.uPale.value as number)) * (1 - Math.exp(-dt * 0.6));
   },
@@ -64,7 +64,7 @@ export const ancestors = defineShaderScene({
 uniform float uKickT;
 uniform float uCharge;
 uniform float uBlaze;
-uniform float uTurn;
+uniform float uGather;
 uniform float uPale;
 ${SLOTS.slice(1)
   .map(
@@ -80,14 +80,16 @@ ${HEAD_GLSL}
 ${FLIGHT_GLSL}
 ${AURORA_GLSL}
 
-// ---- the ancestor being drawn: its centre, scale, turn, slot
+// ---- the ancestor being drawn: its centre, scale, turn (yaw, then pitch: its gaze), slot
 vec3 gC;
 float gS;
 float gYaw;
+float gPitch;
 float gSlot;
 vec3 ancHead(vec3 p) {
   vec3 h = (p - gC) / gS;
   h.xz *= rot(gYaw);
+  h.yz *= rot(gPitch);
   return h;
 }
 float slotD(vec3 h) {
@@ -126,23 +128,33 @@ void main() {
   float dim = 1. - .45 * uPale;
   vec3 col = auroraSpace(rd) * dim;
   // the ancestors, from the farthest to the nearest (and the cell just behind us): each lets what lies behind show
-  // through it
+  // through it. In a line on either side of the way, above us; now and then a great elder high over the way.
   float c0 = floor(-ro.z / CELL);
+  float gather = 1. - .35 * uGather;
   for (int k = 9; k >= -1; k--) {
     float ci = c0 + float(k);
-    for (int side = 0; side < 2; side++) {
+    for (int side = 0; side < 3; side++) {
       float fs = float(side);
       float sx = fs < .5 ? -1. : 1.;
       float h1 = hash12(vec2(ci, fs + 1.)), h2 = hash12(vec2(ci, fs + 5.)), h3 = hash12(vec2(ci, fs + 9.));
       float h4 = hash12(vec2(ci, fs + 13.)), h5 = hash12(vec2(ci, fs + 17.));
-      if (h3 < .2) continue;
-      gS = 1.1 + 1.4 * h1 * h1;
-      gC = vec3(sx * (2.4 + 3.4 * h2), -2.6 + 5.2 * h4 + .3 * sin(uTime * .3 + ci), -(ci * CELL + 3.5 * fs + 2. * h5));
+      if (fs < 1.5) {
+        if (h3 < .12) continue;
+        gS = 1.3 + 1.2 * h1;
+        gC = vec3(sx * (3.1 + 2.2 * h2) * gather, (.5 + 2.6 * h4) * gather + .25 * sin(uTime * .3 + ci), -(ci * CELL + 4. * fs + 1.5 * h5));
+      } else {
+        // the elder over the way
+        if (h3 < .78) continue;
+        gS = 3. + 1.2 * h1;
+        gC = vec3((h2 - .5) * 3., (5.5 + 2. * h4) * gather, -(ci * CELL + 2. + 3. * h5));
+      }
       gSlot = floor(hash12(vec2(ci * 1.7, fs + 3.1)) * 6.999);
-      // looking aside, turning slowly; on the drop, to us
-      float aside = sx * (.35 + .5 * h3) + .25 * sin(uTime * .15 + ci * 1.3);
-      float toUs = atan(gC.x - ro.x, ro.z - gC.z);
-      gYaw = mix(aside, toUs, uTurn);
+      // every one of them looks at us: the head follows us as we pass, bowed toward us; a slight sway of its own
+      // (ancHead turns by multiplying on the right, h.xz *= rot(a): its face points to (sin yaw, cos yaw) on xz, and
+      // up by sin pitch)
+      vec3 dv = ro - gC;
+      gYaw = atan(dv.x, dv.z) + .08 * sin(uTime * .4 + ci * 2.1 + fs);
+      gPitch = clamp(asin(dv.y / max(length(dv), 1e-3)), -.6, .6) + .04 * sin(uTime * .33 + ci);
       vec3 oc = ro - gC;
       float R = 1.7 * gS;
       float b = dot(oc, rd), hh = b * b - dot(oc, oc) + R * R;
