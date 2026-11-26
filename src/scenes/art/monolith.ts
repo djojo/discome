@@ -59,6 +59,8 @@ export const monolith = defineShaderScene({
     uRise: { value: 1 },
     uDust: { value: 1 },
     uMonument: { value: 0 },
+    // the title plan: the flight rises over the roofs to face the inscription (0..1)
+    uTitleView: { value: 0 },
     uSlabScreen: { value: 0 },
     uCinema: { value: 0 },
     ...headUniforms(),
@@ -87,6 +89,9 @@ export const monolith = defineShaderScene({
     u.uCinema.value = p.letterbox === true ? 1 : 0;
     // the colossal head once it is loaded (or the night's title once drawn), the slab until then
     u.uMonument.value = p.monument === "head" && setHead(u, p.head ?? "moai", "", p) ? 1 : 0;
+    const titled = (u.uMonument.value as number) > 0.5 && (u.uHeadOn.value as number) > 1.5;
+    const tv = u.uTitleView.value as number;
+    u.uTitleView.value = tv + ((titled ? 1 : 0) - tv) * (1 - Math.exp(-dt * 0.8));
   },
   fragment: /* glsl */ `
 uniform float uSunAz;
@@ -98,6 +103,7 @@ uniform float uCascade;  // night drop: how far down the avenue the lamps are ba
 uniform float uBarPos;
 uniform float uRise;
 uniform float uDust;
+uniform float uTitleView;  // the title plan: up over the roofs, facing the inscription
 uniform float uCinema;
 uniform float uSlabScreen;
 uniform float uMonument;  // 0: the black slab, 1: a colossal head
@@ -318,18 +324,24 @@ float ao(vec3 p, vec3 n) {
 }
 
 const float COL_S = 12.;
-/** Scale of the colossus (the title is smaller: it must fit between the towers that frame the avenue). */
+/** Scale of the colossus, and of the night's title. */
 float gColS = COL_S;
+/** The title's inscription: its scale, its distance ahead, the height of its middle (above the roofs). */
+const float TITLE_S = 11.;
+const float TITLE_D = 32.;
+const float TITLE_Y = 11.5;
 /**
  * The colossus: a giant head buried up to the lips at the end of the avenue, always on the horizon. The night's
- * title hangs there instead, a concrete inscription above the far roofs, in the gap the avenue leaves in the sky.
+ * title hangs there instead, a great concrete inscription above the roofs, which the flight rises to face.
  */
 float colossus(vec3 ro, vec3 rd, out vec3 c) {
   bool title = uHeadOn > 1.5;
-  gColS = title ? 5.6 : COL_S;
+  gColS = title ? TITLE_S : COL_S;
   // (the Patron stands higher: his moustache must show above the roofs' haze)
   bool patron = uHeadOn > .2 && uHeadOn < .5;
-  c = vec3(0., title ? 8.6 - (uHeadMin.y + .11) * gColS : COL_S * (patron ? .58 : .3), ro.z - 42.);
+  c = title
+    ? vec3(0., TITLE_Y - (uHeadMin.y + uHeadSize.y * .5) * TITLE_S, ro.z - TITLE_D)
+    : vec3(0., COL_S * (patron ? .58 : .3), ro.z - 42.);
   vec3 oc = ro - c;
   float R = gColS * (title ? length(uHeadSize.xy) * .5 + .1 : 1.2);
   float b = dot(oc, rd), h = b * b - dot(oc, oc) + R * R;
@@ -456,9 +468,14 @@ void main() {
   float level = max(W, 0.);
   // (the avenue is 5.2 wide: stay clear of the facades)
   vec3 ro = vec3(clamp(uSway * 1.6 + .5 * weave, -1.9, 1.9), max(alt, .2) + level, -uTravel);
+  // the title plan: up over the roofs, level with the inscription, facing it
+  float tv = smoothstep(0., 1., uTitleView);
+  ro.y = mix(ro.y, TITLE_Y - .5 + .3 * swell, tv);
+  ro.x *= 1. - .7 * tv;
   gRo = ro;
   float pitch = mix(.55, -2.4, smoothstep(.5, 1.5, uDive)) + .35 * smoothstep(0., 1., -uDive) + .12 * swell;
   vec3 ta = ro + vec3(.25 * sin(uTime * .1) + uSway * .7 + .45 * cos(uTravel * .11), pitch, -4.);
+  ta = mix(ta, vec3(0., TITLE_Y, ro.z - TITLE_D), tv);
   uv *= rot(-.07 * cos(uTravel * .11));
   float focal = flightFocal(1.35);
   vec3 rd = lookAt(ro, ta) * normalize(vec3(uv, focal));
@@ -501,7 +518,8 @@ void main() {
       float rim = pow(1. - clamp(dot(n, -rd), 0., 1.), 3.) * (.5 + 1.2 * uDrop) * smoothstep(.3, .95, dot(rd, gSun));
       col = alb * (dif * gSunC * 2.6 * (1. + uDrop) + uBase * 1.2 * (.5 + .5 * n.y)) + gSunC * (rim * 1.4 + pow(1. - clamp(dot(n, -rd), 0., 1.), 3.) * dif * .5);
       col *= 1. - .6 * uNight;
-      col = mix(col, fogColor(rd), .3);
+      // (the title, against the sun: a dark inscription edged with light, the haze kept off it so it stands out)
+      col = mix(col, fogColor(rd), uHeadOn > 1.5 ? .08 : .3);
     } else {
       // Near black, with a thin sunlit edge on the side facing the sun
       vec3 q = ro + rd * tm;

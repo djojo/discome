@@ -57,9 +57,12 @@ vec3 racerCol(float k) {
 }
 
 #ifdef TITLE_SIGN
-/** The title sign above the gantry's beam: its half-size and centre height (from the title's proportions). */
+/**
+ * The title sign above the gantry's beam: its half-size and its scale (from the title's proportions): as wide as the
+ * gantry for a long title, up to nine metres tall for a logo, a billboard over the grid.
+ */
 vec3 signBox() {
-  float k = min(2. * (TRACK_W + 1.15) * .9 / uHeadSize.x, 3.6 / uHeadSize.y);
+  float k = min(2. * (TRACK_W + 1.15) * .9 / uHeadSize.x, 9. / uHeadSize.y);
   return vec3(TRACK_W + 1.15, uHeadSize.y * k * .5 + .45, k);
 }
 #endif
@@ -430,8 +433,8 @@ vec3 signColor(vec3 q, vec3 n, vec3 rd, float fw) {
   // switching on: a flicker, then steady
   float on = smoothstep(.3, 1.6, uTitleT) * (uTitleT < 1.6 ? step(.35, fract(sin(floor(uTitleT * 14.) * 43.7) * 917.3)) : 1.);
   float inside = 1. - smoothstep(-fw, fw, d2);
-  vec3 lc = mix(uTint, vec3(1.), .55);
-  c += lc * on * (inside * 1.4 + neon(abs(d2 + .02), .03, fw) * 1.2);
+  vec3 lc = mix(uTint, vec3(1.), .4);
+  c += lc * on * (inside * .8 + neon(abs(d2 + .02), .03, fw) * .9);
   // the frame
   vec2 e = sb.xy - abs(lp);
   c += uTint * neon(min(e.x, e.y), .03, fw) * .9;

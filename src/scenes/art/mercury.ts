@@ -19,6 +19,8 @@ const FRAMINGS: Framing[] = [
   { az: -0.28, el: 0.06, dist: 4.2, target: [0, -0.08, 0], focal: 2.1, weight: 2, tag: "title" },
   { az: 0.08, el: 0.32, dist: 4.7, target: [0, -0.15, 0], focal: 2.1, weight: 1, tag: "title" },
 ];
+/** The title framings' own heights (a tall title, a logo, raises them: see update). */
+const TITLE_Y = FRAMINGS.filter((fr) => fr.tag === "title").map((fr) => [fr, fr.target[1]] as const);
 
 /**
  * A chrome mask rising from a bath of liquid metal, in a product-photo studio: a luminous ceiling and two strip
@@ -51,6 +53,11 @@ export const mercury = defineShaderScene({
     const title = p.head === TITLE_HEAD;
     setHead(u, p.head, "", p);
     u.uTitle.value = title ? 1 : 0;
+    // a tall title (a logo) stands taller out of the bath: the framings look up to its middle, so that it fits whole
+    if (title) {
+      const mid = -0.55 + (u.uHeadSize.value as THREE.Vector3).y / 2;
+      for (const [fr, y] of TITLE_Y) fr.target[1] = Math.max(y, mid + (y + 0.08));
+    }
     if (ctx.camera) ctx.camera.allow = title ? (fr) => fr.tag === "title" : (fr) => fr.tag !== "title";
     // The swell follows the track: a mirror in the breakdown, rising through the build, strongest on the drop
     const sw = num(p.swell, 1) * (f.section === "breakdown" ? 0.2 : f.section === "build" ? 0.5 + 0.7 * f.buildProgress : f.section === "drop" ? 1.5 : 0.8);

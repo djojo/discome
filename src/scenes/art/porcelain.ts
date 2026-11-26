@@ -405,8 +405,9 @@ void main() {
   vec3 ro = uCamPos;
   vec3 rd = lookAt(ro, uCamTarget) * normalize(vec3(uv, uFocal));
 
-  // the white studio, and the head's soft shadow on its floor
-  vec3 col = studioW(rd);
+  // the white studio, and the head's soft shadow on its floor; for the night's title the studio dims to a pale grey
+  // seamless behind it, so that its white porcelain stands out
+  vec3 col = studioW(rd) * (1. - .45 * uTitle * (1. - .35 * smoothstep(.2, .9, length(uv))));
   if (rd.y < -1e-3) {
     vec3 fq = ro + rd * ((FLOORW - ro.y) / rd.y);
     col *= 1. - .32 * exp(-dot(fq.xz, fq.xz) * 3.2) - .1 * exp(-dot(fq.xz, fq.xz) * .6);

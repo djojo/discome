@@ -15,9 +15,9 @@ const FRAMINGS: Framing[] = [
   // close on the face of smoke (the whole head in the frame)
   { az: 0.2, el: 0.06, dist: 5.2, target: [0, 3.55, 0], focal: 1.8, weight: 2 },
   // The night's title above the fire: from the front, the flames at the foot of the frame
-  { az: 0, el: 0.04, dist: 6.6, target: [0, 3.1, 0], focal: 1.7, weight: 3, tag: "title" },
-  { az: 0.22, el: 0.1, dist: 7, target: [0, 3.1, 0], focal: 1.7, weight: 2, tag: "title" },
-  { az: -0.22, el: -0.08, dist: 6, target: [0, 3.2, 0], focal: 1.7, weight: 2, tag: "title" },
+  { az: 0, el: 0.04, dist: 5.2, target: [0, 3.05, 0], focal: 1.7, weight: 3, tag: "title" },
+  { az: 0.2, el: 0.1, dist: 5.5, target: [0, 3.05, 0], focal: 1.7, weight: 2, tag: "title" },
+  { az: -0.2, el: -0.06, dist: 5, target: [0, 3.15, 0], focal: 1.7, weight: 2, tag: "title" },
   { az: 0.1, el: 0.03, dist: 9.5, target: [0, 2.4, 0], focal: 1.7, weight: 2, tag: "title-open" },
 ];
 
@@ -140,13 +140,13 @@ vec3 toHead(vec3 p) {
 
 float spiritD(vec3 p) {
   vec3 h = toHead(p);
-  float b = sdBox(h - vec3(0., .02, 0.), vec3(.85 + .36 * uTitle, 1., .92));
+  float b = sdBox(h - vec3(0., .02 - .2 * uTitle, 0.), vec3(.85 + .36 * uTitle, 1. + .2 * uTitle, .92));
   if (b > .2) return b * HS;
   float m = smoothstep(0., 1., uMorph);
   float d = headD(h);
   if (m > .001) d = mix(d, headSlot(uHeadTexB, uHeadOnB, uHeadMinB, uHeadSizeB, uHeadReliefB, h), m);
-  // it dissolves into smoke below the neck
-  d = max(d, -.55 - h.y);
+  // it dissolves into smoke below the neck (the title, lower: all of it stands)
+  d = max(d, -.55 - .45 * uTitle - h.y);
   return d * HS;
 }
 
@@ -274,7 +274,7 @@ void main() {
     // (their average once finer than a pixel)
     float g = h.y * 26. + .8 * fbm3(h * 2. + vec3(0., -uTime * .3, 0.)) - uTime * .25;
     float thread = mix(1. - smoothstep(.3, .42, abs(fract(g) - .5)), .72, smoothstep(.3, .8, fwidth(g)));
-    thread = mix(thread, 1., .5 * uTitle);   // the title's letters stay legible
+    thread = mix(thread, 1., .75 * uTitle);   // the title's letters stay legible
     vec3 yc = yarn(fract(floor(g) * .19 + uTime * .02));
     vec3 c = yc * thread * lit * 1.3;
     // the contour: a bright thread where the form turns away, so the animal reads
@@ -284,7 +284,7 @@ void main() {
     // stars glinting in the smoke
     c += vec3(1.) * starSpeck(h * 1.6) * .6;
     // it fades into its smoke below the neck, and comes undone while it changes
-    float fade = smoothstep(-.6, -.25, h.y) * (1. - .65 * sin(3.1416 * smoothstep(0., 1., uMorph)));
+    float fade = smoothstep(-.6 - .45 * uTitle, -.25 - .45 * uTitle, h.y) * (1. - .65 * sin(3.1416 * smoothstep(0., 1., uMorph)));
     col = mix(col, c, .92 * fade);
     solid = max(solid, .92 * fade);
     tEnd = ts;

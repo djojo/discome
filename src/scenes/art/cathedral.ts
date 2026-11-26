@@ -153,7 +153,7 @@ float frameD(vec3 p, out float id) {
 
 /** The title's sign at the end of the nave, always the same distance ahead: distance to its letters (filled). */
 const float TD = 9.;
-const float TSc = 1.5;
+const float TSc = 2.3;
 float gSignZ;
 float signD(vec3 p) {
   vec3 q = vec3(p.x, p.y - .55, p.z - gSignZ) / TSc;
@@ -230,8 +230,8 @@ void main() {
     float stepL = max(min(d, ds) * .6, .02);
     // Stretched arches gather much more light: compensate so the warp stays made of streaks, not a white-out
     acc += atten * uInk * bright(id, camId) * (.0025 / (.0012 + d * d * 5.)) * stepL * 9. / (1. + gWarp * 4.);
-    // the letters of light: a core of white heat in the world's colour, a halo in the haze
-    if (signB > 0.) acc += atten * mix(uInk, vec3(1.), .3) * signB * (.0016 / (.0008 + ds * ds * 6.) + .03 / (1. + ds * 18.) * uHaze) * stepL * 7.;
+    // the letters of light: their glow in the haze (their crisp core is drawn in the sign's plane, below)
+    if (signB > 0.) acc += atten * mix(uInk, vec3(1.), .3) * signB * (.0007 / (.0008 + ds * ds * 6.) + .03 / (1. + ds * 18.) * uHaze) * stepL * 7.;
     t += stepL;
     if (t > 26.) break;
   }
@@ -264,8 +264,12 @@ void main() {
     float ts = (gSignZ - ro0.z) / rd0.z;
     if (ts > 0. && (tf < 0. || ts < tf)) {
       vec3 ps = ro0 + rd0 * ts;
-      float dl = max(titleD2(vec2(ps.x, ps.y - .55) / TSc), 0.);
+      float d2 = titleD2(vec2(ps.x, ps.y - .55) / TSc) * TSc;
+      float dl = max(d2 / TSc, 0.);
       acc += mix(uInk, vec3(1.), .2) * signB * (.07 * exp(-dl * 7.) + .03 * exp(-dl * 2.)) * (.6 + .4 * uHaze);
+      // the letters themselves, crisp: white heat in the world's colour, edged a pixel wide
+      float fw = ts / (uRes.y * flightFocal(1.6));
+      acc += mix(uInk, vec3(1.), .55) * min(signB, 2.5) * .75 * (1. - smoothstep(-fw, fw, d2));
     }
   }
   vec3 col = acc;

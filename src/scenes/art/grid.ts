@@ -39,10 +39,10 @@ const FRAMINGS: Framing[] = [
   { az: -Math.PI / 2 + 0.3, el: 0.18, dist: 20, target: [0, 0.6, 4], focal: 1.7 },
   // high above: the whole grid, the gantry, the city
   { az: 0.6, el: 0.75, dist: 60, target: [0, 0, -10], focal: 1.6 },
-  // the title plan: looking up at the gantry and its sign, the racers below
-  { az: 0, el: -0.24, dist: 30, target: [0, 9.6, -24], focal: 1.75, tag: "title", weight: 2 },
-  { az: 0.32, el: -0.18, dist: 25, target: [0, 9.4, -24], focal: 1.7, tag: "title" },
-  { az: -0.28, el: -0.2, dist: 27, target: [0, 9.4, -24], focal: 1.75, tag: "title" },
+  // the title plan: facing the sign over the gantry, close enough that it fills the frame, the beam below
+  { az: 0, el: -0.12, dist: 21, target: [0, 12.8, -24], focal: 1.6, tag: "title", weight: 2 },
+  { az: 0.26, el: -0.08, dist: 20, target: [0, 12.8, -24], focal: 1.6, tag: "title" },
+  { az: -0.24, el: -0.1, dist: 21, target: [0, 12.8, -24], focal: 1.6, tag: "title" },
 ];
 
 interface GridRacer {
