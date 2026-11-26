@@ -54,6 +54,8 @@ export const HEADS = [
   { id: "ours", label: "Ours", family: "animal", licence: "code", kind: "code" },
   { id: "cerf", label: "Cerf", family: "animal", licence: "code", kind: "code" },
   { id: "elephant", label: "Éléphant", family: "animal", licence: "code", kind: "code" },
+  { id: "tragedie", label: "Masque tragique", family: "masque", licence: "code", kind: "code" },
+  { id: "comedie", label: "Masque comique", family: "masque", licence: "code", kind: "code" },
   { id: "moai", label: "Moai", family: "sculpture", licence: "personnel", kind: "file" },
   { id: "nefertiti", label: "Néfertiti", family: "sculpture", licence: "personnel", kind: "file" },
 ] as const satisfies readonly HeadInfo[];
@@ -133,7 +135,8 @@ async function fetchGrid(id: string): Promise<HeadGrid | null> {
 
 /** A head sculpted in code, cooked into its grid by the oven (sculpt/oven.ts). */
 async function cookGrid(id: string): Promise<HeadGrid | null> {
-  const grid = await cook(id);
+  // (a headdress waits for the bust it is laid on)
+  const grid = await cook(id, loadHead);
   if (grid) loaded.set(id, grid);
   return grid;
 }

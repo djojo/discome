@@ -23,6 +23,8 @@ const LAYERS_PER_STEP = 12;
 
 interface Job {
   id: string;
+  /** The bust a headdress is laid on (cast.ts: worn), its grid; null: a head of its own. */
+  base: HeadGrid | null;
   min: THREE.Vector3;
   size: THREE.Vector3;
   n: [number, number, number];
@@ -54,6 +56,8 @@ let material: THREE.ShaderMaterial | null = null;
 let scene: THREE.Scene | null = null;
 let camera: THREE.Camera | null = null;
 let state: "idle" | "compiling" | "ready" | "failed" = "idle";
+/** Bound in place of a bust when there is none (a sampler must always have a texture). */
+let noBase: THREE.Data3DTexture | null = null;
 const queue: Job[] = [];
 
 /** Hand the oven the renderer (the compositor's): the heads asked for so far start cooking. */
@@ -77,6 +81,10 @@ function start(r: THREE.WebGLRenderer) {
       uCell: { value: new THREE.Vector3() },
       uLayer: { value: 0 },
       uCut: { value: -10 },
+      uBaseOn: { value: 0 },
+      uBaseTex: { value: null },
+      uBaseMin: { value: new THREE.Vector3() },
+      uBaseSize: { value: new THREE.Vector3(1, 1, 1) },
       ...recipeUniforms(),
     },
     vertexShader: "void main() { gl_Position = vec4(position.xy, 0., 1.); }",
@@ -84,6 +92,11 @@ function start(r: THREE.WebGLRenderer) {
     depthTest: false,
     depthWrite: false,
   });
+  noBase = new THREE.Data3DTexture(new Uint16Array([THREE.DataUtils.toHalfFloat(1)]), 1, 1, 1);
+  noBase.format = THREE.RedFormat;
+  noBase.type = THREE.HalfFloatType;
+  noBase.needsUpdate = true;
+  material.uniforms.uBaseTex.value = noBase;
   scene = new THREE.Scene();
   const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material);
   quad.frustumCulled = false;
@@ -98,10 +111,15 @@ function start(r: THREE.WebGLRenderer) {
     });
 }
 
-/** Cook a head sculpted in code (an id of cast.ts): its grid, once written. */
-export function cook(id: string): Promise<HeadGrid | null> {
+/**
+ * Cook a head sculpted in code (an id of cast.ts): its grid, once written. A headdress laid on a bust (recipe.base)
+ * waits for that bust's grid, asked of loadBase.
+ */
+export async function cook(id: string, loadBase: (id: string) => Promise<HeadGrid | null>): Promise<HeadGrid | null> {
   const recipe = RECIPES[id];
-  if (!recipe) return Promise.resolve(null);
+  if (!recipe) return null;
+  const base = recipe.base ? await loadBase(recipe.base) : null;
+  if (recipe.base && !base) return null;
   return new Promise((resolve) => {
     const min = BOX_MIN.clone();
     const max = BOX_MAX.clone();
@@ -109,7 +127,7 @@ export function cook(id: string): Promise<HeadGrid | null> {
     if (recipe.top) max.y = recipe.top;
     const size = max.clone().sub(min);
     const n = [size.x, size.y, size.z].map((s) => 2 * Math.round(s / VOXEL / 2)) as [number, number, number];
-    queue.push({ id, min, size, n, layer: 0, rt: null, resolve });
+    queue.push({ id, base, min, size, n, layer: 0, rt: null, resolve });
   });
 }
 
@@ -142,6 +160,12 @@ export function ovenStep() {
   (u.uMin.value as THREE.Vector3).copy(job.min);
   (u.uCell.value as THREE.Vector3).copy(cell);
   u.uCut.value = job.min.y + 1.5 * cell.y;
+  u.uBaseOn.value = job.base ? 1 : 0;
+  u.uBaseTex.value = job.base?.tex ?? noBase;
+  if (job.base) {
+    (u.uBaseMin.value as THREE.Vector3).copy(job.base.min);
+    (u.uBaseSize.value as THREE.Vector3).copy(job.base.size);
+  }
   RECIPES[job.id].apply(u);
   const prev = r.getRenderTarget();
   const prevFace = r.getActiveCubeFace();
