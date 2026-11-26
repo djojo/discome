@@ -50,7 +50,7 @@ export const race = defineShaderScene({
   energy: "intense",
   hdr: true,
   mask: true,
-  renderScale: 0.7,
+  renderScale: 0.64,
   flight: { cruise: CRUISE, pump: 0.3 },
   description:
     "Une piste anti-gravité de verre noir suspendue très haut au-dessus d'une mégapole de nuit : virages relevés, bosses, tire-bouchons, anneaux de lumière. On roule au ras de la piste dans une meute de bolides aux traînées lumineuses ; au kick une vague de lumière file devant, au drop la piste se dérobe et la meute vole au-dessus du vide. Le même tour revient sans fin, une lumière de plus au portique à chaque passage.",

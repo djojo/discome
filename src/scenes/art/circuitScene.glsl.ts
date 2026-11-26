@@ -190,27 +190,34 @@ vec3 nrmTrack(vec3 p, float e) {
   return normalize(k.xyy * trackD(p + k.xyy * e) + k.yyx * trackD(p + k.yyx * e) + k.yxy * trackD(p + k.yxy * e) + k.xxx * trackD(p + k.xxx * e));
 }
 
-/** A segment of light (a to b) seen by the ray, up to tmax: its glow. w: its core's radius; fade0/1 at its ends. */
-float segLight(vec3 ro, vec3 rd, vec3 a, vec3 b, float w, float tmax, float pa, float fade0, float fade1) {
+/** The closest approach of a ray to a segment (a to b): x the distance, y the ray's t there, z where along the segment. */
+vec3 segHit(vec3 ro, vec3 rd, vec3 a, vec3 b) {
   vec3 ba = b - a, wo = ro - a;
-  float bb = dot(ba, ba);
-  if (bb < 1e-6) return 0.;
-  float bd = dot(ba, rd), dw = dot(rd, wo), ew = dot(ba, wo);
-  float den = max(bb - bd * bd, 1e-6);
-  float h = clamp((ew - bd * dw) / den, 0., 1.);
+  float bb = max(dot(ba, ba), 1e-6), bd = dot(ba, rd), dw = dot(rd, wo), ew = dot(ba, wo);
+  float h = clamp((ew - bd * dw) / max(bb - bd * bd, 1e-6), 0., 1.);
   float t = max(dot(a + ba * h - ro, rd), 0.);
-  if (t > tmax) return 0.;
-  vec3 diff = ro + rd * t - a - ba * h;
-  float d = length(diff);
-  float r = max(w, t * pa * .9);
-  float core = (w / r) * exp(-d * d / (r * r));
-  return (core * 1.8 + .1 * halo(d, r * 4.)) * mix(fade0, fade1, h);
+  return vec3(length(ro + rd * t - a - ba * h), t, h);
 }
 
-/** Every trail of the pack seen by a ray (reflections: dimmer and wider). */
+/** A trail's colour along it (h: 0 at the engines, 1 at its tail): white-hot, the racer's colour, a deep violet. */
+vec3 heatCol(vec3 col, vec3 deep, float h) {
+  return mix(mix(vec3(1.), col, smoothstep(0., .14, h)), deep, smoothstep(.45, 1., h));
+}
+
+/**
+ * Every trail of the pack seen by a ray: a ribbon of light stretched between the two pods' lines (its edges burning,
+ * a veil between them), white-hot at the engines through the racer's colour to a violet that dissolves at the tail,
+ * a chromatic fringe on its edges; on every kick a pulse runs down it from the racer; embers shed from it drift away
+ * and fall. Reflections (wide > 1): only its two lines, wider and dimmer.
+ */
 vec3 trailsLight(vec3 ro, vec3 rd, float tmax, float pa, float wide) {
   vec3 acc = vec3(0.);
   float w = (.025 + .022 * uSpeed) * wide;
+  bool full = wide < 1.2;
+  // the kick's pulse (the scenes reset uWave on every kick): where it has run to along the trails
+  float kickT = -log(max(uWave.y, 1e-4)) / 1.3;
+  float pulseH = kickT * 1.9;
+  float pulseA = exp(-kickT * 1.1);
   for (int i = 0; i < PACK_MAX; i++) {
     if (uRacerP[i].w < 0.) continue;
     // the whole trail in a sphere (its chord, and room for its curve and its glow): skip it if the ray passes far
@@ -219,20 +226,82 @@ vec3 trailsLight(vec3 ro, vec3 rd, float tmax, float pa, float wide) {
     if (hl < .05) continue;
     vec3 oc = (ta + tb) * .5 - ro;
     float tc = dot(oc, rd);
-    float rad = hl + 4.;
+    float rad = hl + 5.;
     if (tc < -rad || tc - rad > tmax) continue;
     float reach = rad + max(tc, 0.) * pa * 12.;
     if (dot(oc, oc) - tc * tc > reach * reach) continue;
     vec3 col = racerCol(uRacerP[i].w);
-    float sum = 0.;
+    vec3 deep = col.gbr * .3 + vec3(.22, .02, .42);
     for (int k = 0; k < TRAIL_PTS - 1; k++) {
       int j = i * TRAIL_PTS + k;
-      float f0 = 1. - float(k) / float(TRAIL_PTS - 1), f1 = 1. - float(k + 1) / float(TRAIL_PTS - 1);
-      f0 *= f0; f1 *= f1;
-      sum += segLight(ro, rd, uTrailL[j], uTrailL[j + 1], w, tmax, pa, f0, f1);
-      sum += segLight(ro, rd, uTrailR[j], uTrailR[j + 1], w, tmax, pa, f0, f1);
+      vec3 a0 = uTrailL[j], a1 = uTrailL[j + 1], b0 = uTrailR[j], b1 = uTrailR[j + 1];
+      float h0 = float(k) / float(TRAIL_PTS - 1), h1 = float(k + 1) / float(TRAIL_PTS - 1);
+      // this stretch in a sphere (with room for its glow): skip it if the ray passes far
+      vec3 so = (a0 + a1 + b0 + b1) * .25 - ro;
+      float stc = dot(so, rd);
+      float sr = .5 * length(a1 - a0) + 1. + 8. * max(w, max(stc, 0.) * pa);
+      if (stc < -sr || stc - sr > tmax || dot(so, so) - stc * stc > sr * sr) continue;
+      // its two burning edges, with a chromatic fringe
+      for (int e = 0; e < 2; e++) {
+        vec3 sh = e == 0 ? segHit(ro, rd, a0, a1) : segHit(ro, rd, b0, b1);
+        if (sh.y > tmax) continue;
+        float h = mix(h0, h1, sh.z);
+        float r = max(w, sh.y * pa * .9);
+        float q = sh.x * sh.x / (r * r);
+        float core = exp(-q) * (w / r);
+        float fade = (1. - h) * (1. - h * .6);
+        float pulse = 1. + 3. * exp(-(h - pulseH) * (h - pulseH) * 200.) * pulseA;
+        vec3 hc = heatCol(col, deep, h);
+        if (full) {
+          float fringe = exp(-q * .3) * (w / r) - core;
+          acc += (hc * (core * 1.7 + .07 * halo(sh.x, r * 4.)) + vec3(.25, .35, 1.) * fringe * .45) * fade * pulse;
+        } else acc += hc * (core * 1.6 + .08 * halo(sh.x, r * 4.)) * fade;
+      }
+      if (!full) continue;
+      // the veil between them: where the ray crosses the ribbon's plane
+      vec3 c0 = (a0 + b0) * .5, c1 = (a1 + b1) * .5;
+      vec3 n = cross(c1 - c0, (b0 - a0) + (b1 - a1));
+      float dn = dot(rd, n);
+      if (abs(dn) < 1e-6) continue;
+      float tp = dot(c0 - ro, n) / dn;
+      if (tp < 0. || tp > tmax) continue;
+      vec3 x = ro + rd * tp;
+      vec3 cd = c1 - c0;
+      float u = dot(x - c0, cd) / max(dot(cd, cd), 1e-6);
+      if (u < 0. || u > 1.) continue;
+      vec3 ew = mix(b0 - a0, b1 - a1, u);
+      float ee = max(dot(ew, ew), 1e-6);
+      float v = dot(x - mix(c0, c1, u), ew) / ee * 2.;
+      if (abs(v) > 1.) continue;
+      float h = mix(h0, h1, u);
+      float v2 = v * v;
+      float veil = .32 + .7 * v2 * v2 * abs(v);
+      float pulse = 1. + 4. * exp(-(h - pulseH) * (h - pulseH) * 200.) * pulseA;
+      // (thinner than a pixel from afar: it fades rather than sparkles)
+      float far = 1. - smoothstep(.15, .6, tp * pa * inversesqrt(ee));
+      acc += heatCol(col, deep, h) * veil * (1. - h) * (1. - h * .5) * pulse * far * 1.3;
     }
-    acc += col * sum;
+    // embers shed from the trail (racers close by): they drift away from it, fall and die
+    if (full && tc < 70.) {
+      for (int k = 0; k < 4; k++) {
+        float fk = float(k) + float(i) * 7.;
+        float cyc = uTime * .9 + hash12(vec2(fk, 3.1));
+        float age = fract(cyc);
+        float id = floor(cyc);
+        float hb = .05 + .75 * hash12(vec2(fk, id));
+        float seg = hb * float(TRAIL_PTS - 1);
+        int j = i * TRAIL_PTS + int(seg);
+        vec3 c = mix(uTrailL[j] + uTrailR[j], uTrailL[j + 1] + uTrailR[j + 1], fract(seg)) * .5;
+        vec3 side = (uTrailR[j] - uTrailL[j]) * (hash12(vec2(fk, id + 9.)) < .5 ? -1.1 : 1.1);
+        vec3 sp = c + side * (.3 + 1.6 * age) + uRacerU[i] * (.5 * age - 1.4 * age * age);
+        vec3 so = sp - ro;
+        float st = dot(so, rd);
+        if (st < 0. || st > tmax) continue;
+        float d = length(so - rd * st);
+        float r = max(.03, st * pa);
+        acc += mix(vec3(1., .85, .6), heatCol(col, deep, hb), .5) * (.03 / r) * exp(-d * d / (r * r)) * (1. - age) * (.7 + 1.8 * uHat) * 1.6;
+      }
+    }
   }
   return acc * (.9 + .5 * uBurn);
 }

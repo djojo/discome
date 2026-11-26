@@ -80,7 +80,7 @@ export const tube = defineShaderScene({
   energy: "medium",
   hdr: true,
   mask: true,
-  renderScale: 0.65,
+  renderScale: 0.6,
   flight: { cruise: CRUISE, pump: 0.3 },
   description:
     "La piste plonge dans un tube de verre : la meute roule sur sa paroi tout autour, et la ville tourne derrière le verre. Des anneaux de lumière ceinturent le tube et s'allument en vague au kick ; pendant la montée le tube se resserre ; au drop on jaillit de sa bouche dans le ciel ouvert, et on s'élève au-dessus de la course tendue en traînées sur la ville.",

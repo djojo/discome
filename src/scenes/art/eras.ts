@@ -43,7 +43,7 @@ export const eras = defineShaderScene({
   energy: "medium",
   hdr: true,
   mask: true,
-  renderScale: 0.7,
+  renderScale: 0.64,
   flight: { cruise: CRUISE, pump: 0.3 },
   // the speed blur only in the full render (it would smear the pixels and the phosphor lines)
   motion: (u) => u.uMotion.value as number,

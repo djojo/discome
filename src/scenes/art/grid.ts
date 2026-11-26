@@ -97,7 +97,7 @@ export const grid = defineShaderScene({
   energy: "medium",
   hdr: true,
   mask: true,
-  renderScale: 0.7,
+  renderScale: 0.64,
   description:
     "La ligne de départ sur la piste suspendue : une douzaine de bolides en quinconce, moteurs au ralenti, sous le portique et ses cinq feux. Pendant la montée un feu s'allume à chaque cinquième, les moteurs montent en régime ; au drop les feux s'éteignent, la meute part et on la suit dans les premières courbes. À chaque retour, de nouveau le départ.",
   params: [

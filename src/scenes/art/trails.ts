@@ -63,6 +63,7 @@ const RIBBON_FRAG = /* glsl */ `
 precision highp float;
 uniform vec3 uColor;
 uniform float uKick;
+uniform float uKickT;
 uniform float uHat;
 uniform float uTime;
 uniform float uRefl;
@@ -70,14 +71,22 @@ varying float vAge;
 varying float vV;
 varying float vS;
 ${OUT_GLSL}
+/** The trail's colour along it: white-hot at the racer, its colour, a deep violet dissolving at the tail. */
+vec3 heat(vec3 col, float h) {
+  vec3 deep = col.gbr * .3 + vec3(.22, .02, .42);
+  return mix(mix(vec3(1.), col, smoothstep(0., .06, h)), deep, smoothstep(.4, 1., h));
+}
 void main() {
-  // a wall of light: its top edge burning, its body a glow fading down; older, dimmer; the head white-hot
+  // a wall of light: its top edge burning, its body a glow fading down; older, dimmer; the head white-hot; on every
+  // kick a pulse runs down the wall from the racer
   float edge = smoothstep(.86, .97, vV) * (1. - smoothstep(.985, 1., vV) * .4);
   float body = .1 + .32 * vV * vV;
   float fade = 1. - smoothstep(.55, 1., vAge);
   float head = exp(-vAge * 90.);
   float spark = step(.985, fract(sin(floor(vS * 3. + uTime * 9.) * 91.7) * 4371.3)) * uHat * 2.;
-  vec3 c = uColor * (edge * (1.8 + 1.6 * uKick) + body * (1. + .6 * uKick) + spark) * fade + mix(uColor, vec3(1.), .6) * head * 3.;
+  float pulse = 1. + 3. * exp(-pow((vAge - uKickT * .6) / .03, 2.)) * exp(-uKickT * 1.2);
+  vec3 hc = heat(uColor, vAge);
+  vec3 c = hc * (edge * (1.8 + 1.6 * uKick) + body * (1. + .6 * uKick) + spark) * fade * pulse + mix(uColor, vec3(1.), .6) * head * 3.;
   // the reflection in the black glass: dimmer, fading with depth
   c *= uRefl > 0. ? uRefl * (.35 + .65 * vV) : 1.;
   gl_FragColor = vec4(outC(c), 1.);
@@ -172,7 +181,7 @@ export const trails: SceneGLDef = {
     scene.background = new THREE.Color(0, 0, 0);
     const camera = new THREE.PerspectiveCamera(40, viewport.width / viewport.height, 0.1, 6000);
     const tint = new THREE.Vector3(0.25, 0.9, 1);
-    const shared = { uKick: { value: 0 }, uHat: { value: 0 }, uTime: { value: 0 } };
+    const shared = { uKick: { value: 0 }, uKickT: { value: 9 }, uHat: { value: 0 }, uTime: { value: 0 } };
 
     // the sky, the glass floor
     const skyGeo = new THREE.SphereGeometry(5000, 32, 16);
@@ -338,6 +347,7 @@ export const trails: SceneGLDef = {
         shared.uTime.value = f.time;
         kick = f.beat ? 1 : kick * Math.exp(-dt * 6);
         shared.uKick.value = kick;
+        shared.uKickT.value = f.beat ? 0 : shared.uKickT.value + dt;
         shared.uHat.value = f.onsetPulse;
         skyMat.uniforms.uDrift.value = f.drift;
         // the walls grow longer as the night drifts: the plain fills up
