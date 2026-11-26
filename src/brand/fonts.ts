@@ -5,6 +5,7 @@ import {
   Fraunces,
   IM_Fell_English,
   JetBrains_Mono,
+  Orbitron,
   Pirata_One,
   Playfair_Display,
   Press_Start_2P,
@@ -25,6 +26,7 @@ const pressStart = Press_Start_2P({ weight: "400", subsets: ["latin", "latin-ext
 const pirata = Pirata_One({ weight: "400", subsets: ["latin", "latin-ext"], preload: false });
 const fraunces = Fraunces({ weight: "800", subsets: ["latin", "latin-ext"], preload: false });
 const fell = IM_Fell_English({ weight: "400", subsets: ["latin"], preload: false });
+const orbitron = Orbitron({ weight: "900", subsets: ["latin"], preload: false });
 
 export interface TitleFont {
   /** CSS font-family, as next/font named it. */
@@ -59,6 +61,8 @@ export const TITLE_FONTS = {
   soft: { family: fraunces.style.fontFamily, weight: "800", second: 0.5 },
   /** Mycélium: the type of the old printed books, the first editions of the tales. */
   tale: { family: fell.style.fontFamily, weight: "400", spacing: 0.01, second: 0.5 },
+  /** Circuit: wide, geometric capitals, the lettering of a race of the future. */
+  race: { family: orbitron.style.fontFamily, weight: "900", upper: true, spacing: 0.08, second: 0.42 },
 } satisfies Record<string, TitleFont>;
 
 export type TitleFontId = keyof typeof TITLE_FONTS;

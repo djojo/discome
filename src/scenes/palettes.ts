@@ -55,6 +55,12 @@ export const PALETTES: Record<string, Palette> = {
   luciole: P("Luciole", "#01030A", ["#7FE6FF", "#2F5F92", "#FFD9A0"]),
   // the gills of the giant mushrooms: lilac, violet, pink, amber
   spores: P("Spores", "#07030D", ["#E7D6FF", "#A86BFF", "#FF5FC2", "#FFC46B"]),
+  // Circuit: black glass drawn in light, cyan first, white hot
+  piste: P("Piste", "#020309", ["#3FE8FF", "#2A5BFF", "#FFFFFF"]),
+  // the fairground's bulbs: amber, red, warm white on a blue night
+  foraine: P("Foraine", "#040614", ["#FFB347", "#FF3B2E", "#FFF1D6"]),
+  // the old screens: phosphor green and amber
+  phosphore: P("Phosphore", "#010402", ["#5CFF8A", "#1E7A3C", "#FFB000"]),
   // ---- legacy, vivid (kept for the "Classique" world)
   acid: P("Acide", "#000000", ["#B6FF00", "#FF00E1", "#00F0FF"], "vivid"),
   neon: P("Néon", "#05000A", ["#FF2A6D", "#D300C5", "#05D9E8"], "vivid"),
