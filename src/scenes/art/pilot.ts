@@ -68,6 +68,7 @@ export const pilot = defineShaderScene({
     uKick: { value: 9 },
     uSeq: { value: 0 },
     uRun: { value: 0 },
+    uTuck: { value: 0 },
     // CPU side: how long it holds its gaze on us (seconds left)
     uFace: { value: 0 },
   }),
@@ -107,53 +108,119 @@ uniform float uBlaze;   // the drop
 uniform float uKick;    // seconds since the kick
 uniform float uSeq;     // the tubes' sequence
 uniform float uRun;     // the race's and the lines' clock
+uniform float uTuck;    // the rider tucked in (the drop)
 ${ART_LIB}
 ${CAMERA_GLSL}
 ${CIRCUIT_GLSL}
-float gMat;   // 0 the shell, 1 the visor, 2 scoops and chin, 3 the suit (collar, shoulders)
+float gMat;   // 0 the painted shell, 1 the visor, 2 carbon, 3 the suit, 4 rubber trim, 5 the visor's pivots
 
 /** A world point in the head's frame (sdHead's: y up, facing +z), turned with it. */
 vec3 toHead(vec3 p) { p.xz = rot(-uRotY) * p.xz; return p; }
-
-/** The visor's window on the shell (negative inside it): a band with rounded corners wrapping round the front. */
-float visorWin(vec3 q) {
-  float phi = atan(q.x, q.z);
-  vec2 d = abs(vec2(phi * .62, q.y - .12)) - vec2(.6, .15);
-  return length(max(d + .07, 0.)) + min(max(d.x, d.y) + .07, 0.) - .07;
+/** The helmet's frame: the head's, tucked forward on the drop (as on the bike), pivoting at the neck. */
+vec3 tuck(vec3 q) {
+  q.y += .1 * uTuck;
+  vec2 yz = q.yz - vec2(-.62, 0.);
+  yz = rot(.22 * uTuck) * yz;
+  return vec3(q.x, yz + vec2(-.62, 0.));
 }
 
-float shellD(vec3 q) { return sdEllipsoid(q - vec3(0., .18, -.07), vec3(.64, .72, .84)); }
+/** A superellipsoid (sides fuller than an ellipsoid's): an approximate distance. */
+float sdSuper(vec3 p, vec3 r, float n) {
+  vec3 a = abs(p / r);
+  float k = pow(pow(a.x, n) + pow(a.y, n) + pow(a.z, n), 1. / n);
+  return (k - 1.) * min(r.x, min(r.y, r.z)) * .85;
+}
 
-/** The helmet and the bust, in the head's frame. */
+/** The shell: the dome of a full-face helmet. */
+float shellD(vec3 q) { return sdSuper(q - vec3(0., .2, -.05), vec3(.63, .7, .8), 2.35); }
+
+/** The eye port, by angle round the front and height: low edge rising toward the sides (negative inside). */
+float portD(vec3 q) {
+  float phi = atan(q.x, q.z);
+  float lo = -.05 + .07 * phi * phi, hi = .3 - .035 * phi * phi;
+  return max(max(lo - q.y, q.y - hi), (abs(phi) - 1.2) * .7);
+}
+
+/** The visor: a thin curved shield over the port, wider than it, from one pivot to the other. */
+float visorD(vec3 q) {
+  float phi = atan(q.x, q.z);
+  float lo = -.1 + .07 * phi * phi, hi = .36 - .035 * phi * phi;
+  float region = max(max(lo - q.y, q.y - hi), (abs(phi) - 1.48) * .7);
+  float sh = abs(sdSuper(q - vec3(0., .2, -.05), vec3(.655, .725, .825), 2.35)) - .011;
+  return max(sh, region);
+}
+
+/** The helmet (paint, carbon, rubber, pivots, visor), in the helmet's frame. */
 float helmetD(vec3 q) {
+  vec3 a = vec3(abs(q.x), q.y, q.z);
   float shell = shellD(q);
-  // the chin bar: the shell carried down and forward under the visor
-  shell = smin(shell, sdEllipsoid(q - vec3(0., -.33, .26), vec3(.52, .36, .42)), .22);
-  // the aerodynamic tail stretching back, the dorsal fin
-  shell = smin(shell, sdEllipsoid(q - vec3(0., .36, -.7), vec3(.24, .13, .44)), .24);
-  float fin = max(sdBox(q - vec3(0., .78, -.5), vec3(.02, .13, .38)), q.y - .84 + .3 * (q.z + .5));
-  shell = smin(shell, fin, .035);
-  // open at the bottom, a little higher at the back
-  shell = max(shell, -(q.y + .62 + .12 * q.z));
-  // the visor's window cut in the shell, the visor in it (a bubble standing a little proud)
-  float win = visorWin(q);
-  float cut = max(shell, -(win - .015));
-  float visor = max(abs(sdEllipsoid(q - vec3(0., .18, -.07), vec3(.65, .73, .85))) - .01, win);
-  // the suit: the neck in its balaclava, a collar, shoulders lost in the dark
-  float neck = sdCapsule(q, vec3(0., -.42, -.08), vec3(0., -1.15, -.12), .21);
-  float collar = length(vec2(length(q.xz - vec2(0., -.08)) - .29, q.y + .82)) - .08;
-  float shoulders = sdEllipsoid(q - vec3(0., -1.38, -.08), vec3(1.05, .38, .5));
-  float suit = smin(smin(neck, collar, .06), shoulders, .2);
-  float d = cut;
+  // a shallow channel down the crown, between two crisp ridges
+  shell = smax(shell, -(sdBox(q - vec3(0., .95, -.15), vec3(.075, .1, .75)) - .015), .02);
+  // the chin bar, a piece of its own jutting forward under the visor
+  vec3 cq = q - vec3(0., -.38, .4);
+  cq.yz = rot(-.25) * cq.yz;
+  float chin = sdBox(cq, vec3(.36, .17, .2)) - .13;
+  shell = smin(shell, chin, .1);
+  // the flared lip at the nape
+  shell = smin(shell, sdEllipsoid(q - vec3(0., -.42, -.56), vec3(.46, .06, .14)), .1);
+  // open at the bottom (lower in front)
+  float bottom = -(q.y + .58 + .1 * q.z);
+  shell = max(shell, bottom);
+  // the eye port cut through
+  shell = max(shell, -max(portD(q) - .005, -q.z));
+  // the chin's air intake: three slots across its front
+  vec3 sq = q - vec3(0., -.42, .62);
+  float slots = max(sdBox(sq, vec3(.17, .055, .06)), -(abs(fract(sq.y / .035 + .5) - .5) * .035 - .008));
+  shell = max(shell, -slots + .0);
+  float d = shell;
   gMat = 0.;
-  if (visor < d) { d = visor; gMat = 1.; }
-  if (suit < d) { d = suit; gMat = 3.; }
+  // carbon: the rear spoiler with its end plates, two scoops on top, the intake's frame
+  vec3 wq = q - vec3(0., .52, -.7);
+  wq.yz = rot(.45) * wq.yz;
+  float wing = sdBox(wq, vec3(.3, .028, .13)) - .015;
+  float plates = sdBox(vec3(a.x - .3, wq.y - .04, wq.z), vec3(.012, .07, .13)) - .006;
+  float scoops = sdEllipsoid(a - vec3(.17, .8, .25), vec3(.065, .045, .14));
+  float carbon = min(min(wing, plates), scoops);
+  carbon = min(carbon, max(sdBox(q - vec3(0., -.42, .6), vec3(.21, .09, .06)) - .02, -slots));
+  if (carbon < d) { d = carbon; gMat = 2.; }
+  // the rubber trim round the bottom opening
+  float rim = max(abs(shellD(q) + .005) - .03, abs(q.y + .58 + .1 * q.z) - .035);
+  if (rim < d) { d = rim; gMat = 4.; }
+  // the visor and its round pivot plates
+  float vis = visorD(q);
+  if (vis < d) { d = vis; gMat = 1.; }
+  vec3 pq = vec3(a.x - .66, q.y - .1, q.z + .02);
+  float pivot = max(length(pq.yz) - .1, abs(pq.x) - .022) - .006;
+  if (pivot < d) { d = pivot; gMat = 5.; }
   return d;
 }
 
-vec3 nrm(vec3 q, float e) {
+/** The rider: the neck in its balaclava, the collar, the shoulders of a racing leather with their armour, the hump. */
+float suitD(vec3 q) {
+  vec3 a = vec3(abs(q.x), q.y, q.z);
+  float neck = sdCapsule(q, vec3(0., -.42, -.06), vec3(0., -1.1, -.1), .2);
+  float collar = length(vec2(length(q.xz - vec2(0., -.06)) - .27, q.y + .8)) - .075;
+  float body = sdEllipsoid(q - vec3(0., -1.42, -.08), vec3(1., .42, .5));
+  float armour = sdEllipsoid(a - vec3(.78, -1.12, -.05), vec3(.26, .16, .3));
+  float hump = sdEllipsoid(q - vec3(0., -.82, -.42), vec3(.27, .36, .2));
+  float d = smin(smin(neck, collar, .06), body, .2);
+  d = smin(d, armour, .08);
+  return smin(d, hump, .14);
+}
+
+float sceneD(vec3 p) {
+  vec3 q = toHead(p);
+  float h = helmetD(tuck(q));
+  float m = gMat;
+  float s = suitD(q);
+  if (s < h) { gMat = 3.; return s; }
+  gMat = m;
+  return h;
+}
+
+vec3 nrm(vec3 p, float e) {
   const vec2 k = vec2(1, -1);
-  return normalize(k.xyy * helmetD(q + k.xyy * e) + k.yyx * helmetD(q + k.yyx * e) + k.yxy * helmetD(q + k.yxy * e) + k.xxx * helmetD(q + k.xxx * e));
+  return normalize(k.xyy * sceneD(p + k.xyy * e) + k.yyx * sceneD(p + k.yyx * e) + k.yxy * sceneD(p + k.yxy * e) + k.xxx * sceneD(p + k.xxx * e));
 }
 
 // ---------------------------------------------------------------- the background, on a plane behind the head
@@ -322,59 +389,81 @@ vec3 throughVisor(vec3 qo, vec3 qd) {
   return c;
 }
 
+vec3 tuckDir(vec3 d) { return vec3(d.x, rot(.22 * uTuck) * d.yz); }
+
+/** Woven carbon: a fine twill, its average once finer than a pixel. */
+float carbonWeave(vec3 q, float fw) {
+  vec2 uv = vec2(q.x + q.z * .7, q.y + q.z * .3) * 45.;
+  float tw = abs(step(.5, fract(uv.x)) - step(.5, fract(uv.y + floor(uv.x) * .5)));
+  return mix(tw, .5, smoothstep(.004, .015, fw));
+}
+
 vec3 helmetColor(vec3 p, vec3 rd, float t, float pa) {
-  vec3 q = toHead(p);
-  vec3 qd = toHead(rd);
-  helmetD(q);
+  sceneD(p);
   float m = gMat;
-  vec3 nq = nrm(q, max(.002, t * pa));
-  // back to the world, for the reflections
-  vec2 nxz = rot(uRotY) * nq.xz;
-  vec3 n = normalize(vec3(nxz.x, nq.y, nxz.y));
+  vec3 n = nrm(p, max(.0015, t * pa));
+  vec3 qs = toHead(p);
+  vec3 q = tuck(qs);
+  vec3 qd = tuckDir(toHead(rd));
   vec3 rr = reflect(rd, n);
   // (the strips fade at grazing angles: on the silhouette they would only sparkle)
   vec3 env = background(p, rr) + strips(rr) * smoothstep(.04, .3, dot(n, -rd));
   float fw = t * pa;
-  // a soft key from the front-left, a rim of the moment's colour from behind
   vec3 key = vec3(.8, .85, 1.) * pow(max(dot(rr, normalize(vec3(-.6, .5, .6))), 0.), 30.) * .6;
-  vec3 rim = uTint * pow(1. - max(dot(n, -rd), 0.), 3.) * .25 * (1. + uCharge + uBlaze);
+  vec3 rim = uTint * pow(1. - max(dot(n, -rd), 0.), 3.) * .22 * (1. + uCharge + uBlaze);
+  float dif = max(dot(n, normalize(gR * .95 - gF * .45)), 0.) + max(dot(n, normalize(-gR * .95 - gF * .3)), 0.) * .7 + max(n.y, 0.) * .4;
+  float lit = .6 + 1.5 * uCharge + 4. * uBlaze;
+  vec3 lineC = mix(uTint, vec3(1.), .15);
   vec3 c;
-  if (m < .5 || m > 1.5 && m < 2.5) {
-    // graphite lacquer: deep, glossy, mirroring the neon; the studio's strips lighting it softly
+  if (m < .5) {
+    // the race livery: a black dome, a white panel sweeping back along the flanks from the chin, a band of the
+    // moment's colour between them with a white pinstripe, chevrons on the crown, the channel painted
+    float yb = -.12 + .36 * clamp(-q.z, -.6, .9);
+    float white = smoothstep(.006, -.006, q.y - yb);
+    float band = 1. - smoothstep(.02, .03, abs(q.y - yb - .045));
+    float pin = 1. - smoothstep(.004, .008, abs(q.y - yb - .085));
+    float chevron = step(.55, q.y) * step(.05, q.z) * step(q.z, .5) * step(.5, fract((q.z + 1.1 * abs(q.x)) * 5.)) * step(abs(q.x), .4);
+    float channel = step(abs(q.x), .07) * step(.5, q.y);
+    vec3 alb = mix(vec3(.012), vec3(.62, .63, .66), max(white, pin));
+    alb = mix(alb, uTint * .55, max(band, max(chevron, channel) * .8));
     float f = fres(n, rd, .05);
-    float dif = max(dot(n, normalize(gR * .95 - gF * .45)), 0.) + max(dot(n, normalize(-gR * .95 - gF * .3)), 0.) * .7 + max(n.y, 0.) * .4;
-    c = vec3(.012, .013, .016) + vec3(.02, .022, .028) * dif + (env + key) * f * 1.4 + rim;
-    // the livery: a line of light down the crown, a sweep along the flanks, the visor's rim
-    float crown = neon(abs(abs(q.x) - .07), .018, fw) * step(.25, q.y + .4 * max(-q.z, 0.)) * step(-1.1, q.z);
-    float sweep = neon(abs(q.y - (.0 - .26 * q.z)), .02, fw) * step(.33, abs(q.x)) * step(q.z, .32);
-    // a broad white panel along the crown, between the two lines
-    c += vec3(.5, .52, .56) * step(abs(q.x), .07) * step(.3, q.y + .4 * max(-q.z, 0.)) * step(-1.1, q.z) * (.04 + env.g * .3);
-    float rimV = neon(abs(visorWin(q) + .012), .016, fw) * step(.1, q.z);
-    float liv = (crown + sweep) * (.8 + 1.6 * uCharge + 4. * uBlaze);
-    // the visor's rim: chrome catching the strips, a thread of light
-    c += (env * .8 + vec3(.15)) * rimV * 1.2 + uTint * rimV * (.4 + 1.5 * uBlaze);
-    c += mix(uTint, vec3(1.), .2) * liv;
-    if (m > 1.5) {
-      // the scoops: a single slit of light
-      c *= .8;
-      c += uTint * neon(abs(q.y + .3 - .1 * (q.z - .1)), .008, fw) * step(.42, abs(q.x)) * (.8 + 2. * uBlaze);
-    }
-    // a panel of the moment's colour along the flank, under the sweep
-    float flank = step(.33, abs(q.x)) * step(q.y, -.03 - .26 * q.z) * step(-.2 - .26 * q.z, q.y) * step(-.75, q.z) * step(q.z, .3);
-    c += uTint * flank * (.05 + .25 * f + .3 * uBlaze);
+    c = alb * (.05 + .3 * dif) + (env + key) * f * 1.4 + rim;
+    // lines of light: round the eye port, along the two ridges, in the band
+    float port = neon(abs(portD(q) + .012), .01, fw) * step(.05, q.z);
+    float ridges = neon(abs(abs(q.x) - .085), .01, fw) * step(.55, q.y);
+    c += lineC * ((port + ridges) * lit + band * .25 * lit);
   } else if (m < 1.5) {
-    // the smoked visor: a mirror of the background, the face glimpsed through it, the display's glow
-    float f = fres(n, rd, .16);
+    // the iridium visor: a thin film turning gold, violet, blue with the angle, mirroring the background; on the
+    // drop, lit from within, the eyes behind it
+    float cosv = clamp(dot(n, -rd), 0., 1.);
+    vec3 film = .5 + .5 * cos(6.2831853 * (vec3(0., .33, .67) + (1. - cosv) * 1.15 + q.y * .9 + .12));
+    float f = fres(n, rd, .35);
     vec3 inside = throughVisor(q + qd * .01, qd);
-    c = inside * (1. - f) * .9 + (env + key * 2.) * f * 1.5 + uTint * .02 * (1. + 4. * uBlaze);
-    // a gradient tint across the smoked glass, darker at its top
-    c *= mix(vec3(1.), vec3(.6, .7, 1.), smoothstep(-.05, .28, q.y));
-    // the display's light rising inside the visor on the drop
-    c += mix(uTint, vec3(1.), .3) * uBlaze * smoothstep(.1, -.08, q.y) * .6;
+    c = vec3(.006) + (env * 1.3 + key * 2.) * mix(film, vec3(1.), .2) * f + film * .02 + inside * (.15 + .9 * uBlaze);
+    c += mix(uTint, vec3(1.), .3) * uBlaze * smoothstep(.1, -.08, q.y) * .4;
+  } else if (m < 2.5) {
+    // carbon: the twill under a clear coat
+    float w = carbonWeave(q, fw);
+    float f = fres(n, rd, .06);
+    c = vec3(.018 + .03 * w) * (.4 + .6 * dif) + (env + key) * f * 1.1 + rim * .6;
+    c += lineC * neon(abs(abs(q.x) - .3), .006, fw) * step(.4, q.y) * lit * .6;
+  } else if (m < 3.5) {
+    // the racing leather: black, white on the shoulders' armour, a stripe of the moment's colour, the collar piped
+    vec3 a = vec3(abs(qs.x), qs.y, qs.z);
+    float arm = 1. - smoothstep(.0, .06, length((a - vec3(.78, -1.12, -.05)) / vec3(.27, .17, .31)) - 1.);
+    float stripe = 1. - smoothstep(.015, .03, abs(a.x - .55 + .25 * (qs.y + 1.1)));
+    vec3 alb = mix(vec3(.01), vec3(.5, .5, .52), arm);
+    alb = mix(alb, uTint * .5, stripe * step(qs.y, -.95));
+    c = alb * (.05 + .25 * dif) + env * fres(n, rd, .04) * .6 + rim * .5;
+    c += lineC * neon(abs(qs.y + .8), .012, fw) * step(length(qs.xz), .42) * (.5 + uBlaze);
+  } else if (m < 4.5) {
+    // rubber
+    c = vec3(.01) * (.5 + .5 * dif) + env * fres(n, rd, .03) * .25;
   } else {
-    // the suit: matte, a piping of light round the collar
-    c = vec3(.012, .012, .015) + env * fres(n, rd, .03) * .4 + rim * .6;
-    c += uTint * neon(abs(q.y + .82), .015, fw) * step(length(q.xz), .45) * (.6 + uBlaze);
+    // the visor's pivots: chrome, a ring of light
+    vec3 a = vec3(abs(q.x), q.y, q.z);
+    float r = length(vec2(a.y - .1, a.z + .02));
+    c = vec3(.03) + (env + key) * .9 + lineC * neon(abs(r - .072), .008, fw) * lit;
   }
   return c;
 }
@@ -396,14 +485,13 @@ void main() {
   float hdisc = b * b - cc;
   if (hdisc > 0.) {
     float t = max(-b - sqrt(hdisc), .01), t1 = -b + sqrt(hdisc);
-    for (int i = 0; i < 110; i++) {
-      vec3 q = toHead(ro + rd * t);
-      float d = helmetD(q);
-      if (d < .0008 * t) {
+    for (int i = 0; i < 130; i++) {
+      float d = sceneD(ro + rd * t);
+      if (d < .0006 * t) {
         col = helmetColor(ro + rd * t, rd, t, pa);
         break;
       }
-      t += d * .9;
+      t += d * .85;
       if (t > t1) break;
     }
   }
