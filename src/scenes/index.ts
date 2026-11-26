@@ -65,6 +65,7 @@ import { city } from "./art/city";
 import { trails } from "./art/trails";
 import { bigtop } from "./art/bigtop";
 import { ferris } from "./art/ferris";
+import { eras } from "./art/eras";
 
 /**
  * The scene library. To add a scene: create a file exporting a SceneDef
@@ -132,6 +133,7 @@ export const SCENES: SceneDef[] = [
   trails,
   bigtop,
   ferris,
+  eras,
   // Classics, recoloured by the worlds' palettes
   halo,
   kaleido,

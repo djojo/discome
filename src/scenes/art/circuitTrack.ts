@@ -35,7 +35,7 @@ const mod = (x: number, m: number) => x - m * Math.floor(x / m);
 
 /** The track's centre, sideways (metres), at s. */
 export const trackX = (s: number) => 30 * Math.sin(2 * K * s) + 12 * Math.sin(5 * K * s + 1.3) + 4 * Math.sin(11 * K * s + 2.1);
-const trackDX = (s: number) =>
+export const trackDX = (s: number) =>
   K * (60 * Math.cos(2 * K * s) + 60 * Math.cos(5 * K * s + 1.3) + 44 * Math.cos(11 * K * s + 2.1));
 const trackDDX = (s: number) =>
   -K * K * (120 * Math.sin(2 * K * s) + 300 * Math.sin(5 * K * s + 1.3) + 484 * Math.sin(11 * K * s + 2.1));
@@ -174,6 +174,8 @@ export class Racers {
   readonly fwd = Array.from({ length: PACK_MAX }, () => new THREE.Vector3());
   readonly trailL = Array.from({ length: PACK_MAX * TRAIL_PTS }, () => new THREE.Vector3());
   readonly trailR = Array.from({ length: PACK_MAX * TRAIL_PTS }, () => new THREE.Vector3());
+  /** Where each one rides along the track: s (from the lap origin), across, its colour. */
+  readonly track = Array.from({ length: PACK_MAX }, () => new THREE.Vector3());
   private frame: TrackFrame = { pos: new THREE.Vector3(), right: new THREE.Vector3(), up: new THREE.Vector3(), fwd: new THREE.Vector3() };
   private tmp = new THREE.Vector3();
 
@@ -190,6 +192,7 @@ export class Racers {
     const f = trackFrame(s, s0, this.frame);
     trackPoint(s, s0, x, HOVER + lift, leap, this.tmp);
     this.pos[i].set(this.tmp.x, this.tmp.y, this.tmp.z, colour);
+    this.track[i].set(s - s0, x, colour);
     // turned along its line
     const yaw = Math.atan(xAt(s + 0.5) - xAt(s - 0.5));
     const c = Math.cos(yaw);
@@ -255,6 +258,7 @@ export class Racers {
       uRacerF: { value: this.fwd },
       uTrailL: { value: this.trailL },
       uTrailR: { value: this.trailR },
+      uRacerT: { value: this.track },
     };
   }
 }
