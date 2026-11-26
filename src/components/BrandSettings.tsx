@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   BRAND_FREQUENCIES,
+  BRAND_REMINDERS,
   brandOn,
   SIGNATURE_CORNERS,
   SIGNATURE_SIZES,
@@ -179,6 +180,21 @@ export function BrandSettings({ brand, onBrand, onError, onShowTitle, compact }:
               ))}
             </select>
           </label>
+          <label className="field">
+            <span className="field-head">
+              <span>Rappel</span>
+            </span>
+            <select value={brand.reminder} onChange={(e) => onBrand({ reminder: Number(e.target.value) })}>
+              {BRAND_REMINDERS.map((r) => (
+                <option key={r.minutes} value={r.minutes}>
+                  {r.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {brand.reminder > 0 && (
+            <p className="hint">Le plan Titre du monde revient sur un moment calme, jamais pendant une montée ou un drop.</p>
+          )}
           <label className="field field-toggle">
             <span>Signature dans un coin</span>
             <input

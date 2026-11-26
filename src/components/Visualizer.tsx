@@ -308,7 +308,7 @@ export default function Visualizer() {
       if (brandIsOn && nextTitle && s.worldCycle.enabled) titleShape(nextTitle.font, nextTitle.world);
       const titleCtx =
         brandIsOn && titleHere && titleReady(titleHere.font, titleHere.world)
-          ? { key: titleHere.key, frequency: s.brand.frequency }
+          ? { key: titleHere.key, frequency: s.brand.frequency, reminder: s.brand.reminder }
           : null;
 
       // ---- Auto director

@@ -118,7 +118,7 @@ export interface DirectorContext {
   /** Background managed by the director (the world's background shots). */
   background?: { auto: boolean; currentId: string | null; shots: { id: string; weight?: number }[] };
   /** The night's title in this world: its plan (kept out of `plans`), when there is one and it is ready. */
-  title?: { key: string; frequency: BrandFrequency } | null;
+  title?: { key: string; frequency: BrandFrequency; reminder?: number } | null;
 }
 
 export interface Decision {
@@ -190,6 +190,8 @@ export class Director {
   /** While the title is on screen, nothing automatic cuts it before it has been read (beats). Then it lasts like
    * any plan: until the next regular cut, or a drop. */
   private titleHoldUntil = -1;
+  /** When the title was last on screen (seconds of the show's clock), for the reminder. */
+  private lastTitleTime = -1e9;
   /** Background presence multiplier: fuller in breakdowns, pulsing during bursts. */
   bgLevel = 1;
 
@@ -224,6 +226,14 @@ export class Director {
     this.burstUntil = -1;
     this.titleHoldUntil = this.beats + TITLE_HOLD_BARS * 4;
     this.lastCutBeat = this.beats;
+    this.lastTitleTime = this.now;
+  }
+
+  /** The reminder (every so many minutes): the title is due again, to be shown on a calm moment. */
+  private reminderDue(ctx: DirectorContext): boolean {
+    const t = ctx.title;
+    if (!t || !t.reminder || ctx.currentId === t.key) return false;
+    return this.now - this.lastTitleTime >= t.reminder * 60;
   }
 
   private titleDue(ctx: DirectorContext): boolean {
@@ -383,7 +393,14 @@ export class Director {
       if (f.section === "breakdown") {
         this.burstUntil = -1;
         this.holdUntil = -1;
-        return this.cut(ctx, this.cast(ctx, "breakdown"), { type: "fade", duration: pacing.breakdownBeats * beat });
+        // the reminder, when it is due: the breakdown opens on the night's title
+        const remind = this.reminderDue(ctx);
+        const d = this.cut(ctx, remind ? ctx.title!.key : this.cast(ctx, "breakdown"), {
+          type: "fade",
+          duration: pacing.breakdownBeats * beat,
+        });
+        if (remind) this.noteTitle();
+        return d;
       }
       if (f.section === "build") {
         // The build's plan first (the one on screen if it is one): a build plan comes on the next downbeat, and the
@@ -462,8 +479,9 @@ export class Director {
       const phraseAt = f.downbeat ? f.phraseBar : (f.phraseBar + 1) % 8;
       const toNext = f.downbeat ? 0 : (ahead - f.beatPhase) * beat;
       if (bars >= every && phraseAt % align === 0) {
-        // No drop came to show the title: the next regular cut does, once the world has settled
-        if (ctx.title && this.titleDue(ctx) && this.phrasesInWorld >= 4 && !inDrop) {
+        // No drop came to show the title: the next regular cut does, once the world has settled; so does the
+        // reminder (a regular cut: a calm moment, never in a build or a drop)
+        if (ctx.title && (this.reminderDue(ctx) || (this.titleDue(ctx) && this.phrasesInWorld >= 4)) && !inDrop) {
           if (!f.downbeat) return null;
           this.plannedNext = null;
           this.plannedType = null;

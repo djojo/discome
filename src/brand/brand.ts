@@ -28,6 +28,8 @@ export interface Brand {
   /** Strokes so fine they may vanish at a distance. */
   logoThin: boolean;
   frequency: BrandFrequency;
+  /** A reminder: the world's title plan comes back every so many minutes (0: never), on a calm moment. */
+  reminder: number;
   /** Small mark in a corner of every scene. */
   signature: boolean;
   /** Its size: small, medium, large (about 5, 7 and 10 % of the height). */
@@ -68,11 +70,19 @@ export const DEFAULT_BRAND: Brand = {
   logoTone: "light",
   logoThin: false,
   frequency: "world",
+  reminder: 0,
   signature: false,
   signatureSize: "m",
   signatureCorner: "br",
   signatureOpacity: 0.85,
 };
+
+export const BRAND_REMINDERS: { minutes: number; label: string }[] = [
+  { minutes: 0, label: "Jamais" },
+  { minutes: 5, label: "Toutes les 5 minutes" },
+  { minutes: 10, label: "Toutes les 10 minutes" },
+  { minutes: 15, label: "Toutes les 15 minutes" },
+];
 
 export const BRAND_FREQUENCIES: { id: BrandFrequency; label: string }[] = [
   { id: "world", label: "Une fois par monde" },
@@ -112,6 +122,7 @@ export function loadBrand(saved: unknown): Brand {
     logoTone: s.logoTone === "dark" ? "dark" : "light",
     logoThin: s.logoThin === true,
     frequency: BRAND_FREQUENCIES.some((f) => f.id === s.frequency) ? s.frequency! : DEFAULT_BRAND.frequency,
+    reminder: BRAND_REMINDERS.some((r) => r.minutes === s.reminder) ? s.reminder! : DEFAULT_BRAND.reminder,
     signature: s.signature === true,
     signatureSize: SIGNATURE_SIZES.some((z) => z.id === s.signatureSize) ? s.signatureSize! : DEFAULT_BRAND.signatureSize,
     signatureCorner: SIGNATURE_CORNERS.some((c) => c.id === s.signatureCorner) ? s.signatureCorner! : DEFAULT_BRAND.signatureCorner,
