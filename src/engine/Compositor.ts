@@ -167,6 +167,8 @@ export class Compositor {
   private signatureAspect = 1;
   /** Hidden while the title itself is on screen. */
   signatureShown = true;
+  /** The signature's height (share of the frame's), corner and opacity. */
+  signatureStyle: { h: number; corner: "br" | "bl" | "tr" | "tl"; opacity: number } = { h: 0.07, corner: "br", opacity: 0.85 };
   /**
    * The night's title plan is on screen: the effects calm down so that the title stays sharp (less bloom, no strobe,
    * no chromatic aberration, trails or mirror, softer accents and retro effects). The world's look stays.
@@ -248,6 +250,7 @@ export class Compositor {
       uSig: { value: this.black as THREE.Texture },
       uSigOn: { value: 0 },
       uSigRect: { value: new THREE.Vector4(0, 0, 1, 1) },
+      uSigAlpha: { value: 0.85 },
     };
     this.material = new THREE.ShaderMaterial({
       uniforms: this.uniforms,
@@ -536,9 +539,12 @@ export class Compositor {
     const sigTarget = this.signature && this.signatureShown ? 1 : 0;
     u.uSigOn.value += (sigTarget - u.uSigOn.value) * (1 - Math.exp(-dt * 1.5));
     if (this.signature) {
-      const h = 0.045;
+      const { h, corner, opacity } = this.signatureStyle;
       const w = (h * this.signatureAspect * this.uniforms.uRes.value.y) / this.uniforms.uRes.value.x;
-      u.uSigRect.value.set(1 - 0.028 - w, 0.04, w, h);
+      const x = corner === "br" || corner === "tr" ? 1 - 0.028 - w : 0.028;
+      const y = corner === "tr" || corner === "tl" ? 1 - 0.04 - h : 0.04;
+      u.uSigRect.value.set(x, y, w, h);
+      u.uSigAlpha.value = opacity;
     }
     // the trip (AudioFrame.trip): the picture breathes deeper, the trails grow longer and turn through the colours
     const trip = frame.trip;

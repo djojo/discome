@@ -981,6 +981,58 @@ kbd {
   color: var(--muted, rgba(255, 255, 255, 0.6));
 }
 
+/* the signature's size, corner (a little screen with a dot in that corner) and opacity */
+.brand-sig {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.brand-sig-sizes {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.brand-sig-corners {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.brand-sig-corner {
+  position: relative;
+  height: 34px;
+}
+
+.brand-sig-corner::after {
+  content: "";
+  position: absolute;
+  width: 10px;
+  height: 6px;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0.8;
+}
+
+.brand-sig-tl::after {
+  top: 7px;
+  left: 8px;
+}
+
+.brand-sig-tr::after {
+  top: 7px;
+  right: 8px;
+}
+
+.brand-sig-bl::after {
+  bottom: 7px;
+  left: 8px;
+}
+
+.brand-sig-br::after {
+  bottom: 7px;
+  right: 8px;
+}
+
 .brand-warn {
   color: #f3c26b;
 }

@@ -26,7 +26,7 @@ import {
 import { NEUTRAL_FX, type FxSettings } from "@/engine/fx";
 import { TripEnvelope } from "@/engine/trip";
 import { directorPlans, findPlan, lookBackgrounds, lookPlans, planDefaults, sceneForKey, shownPlans, titlePlan } from "@/looks";
-import { brandOn, type Brand } from "@/brand/brand";
+import { brandOn, SIGNATURE_SIZES, type Brand } from "@/brand/brand";
 import { BrandSettings } from "./BrandSettings";
 import { setBrandContent, signatureCanvas, titleReady, titleShape } from "@/brand/shape";
 import { HEADS, preloadHeads } from "@/scenes/art/heads";
@@ -420,6 +420,10 @@ export default function Visualizer() {
       lookContext(s); // keeps the background ink in sync with the world
       frame.trip = tripEnv.update(frame, dt) * fxShown.trip;
       compositor.signatureShown = compositor.sceneId !== titleHere?.key;
+      const sig = compositor.signatureStyle;
+      sig.h = SIGNATURE_SIZES.find((z) => z.id === s.brand.signatureSize)?.h ?? 0.07;
+      sig.corner = s.brand.signatureCorner;
+      sig.opacity = s.brand.signatureOpacity;
       compositor.titleOn = !!titleHere && compositor.sceneId === titleHere.key;
       frame.safeFlash = s.safeFlash;
       frame.shot = compositor.sceneId ? sceneOf(s, compositor.sceneId).id : null;

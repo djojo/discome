@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import {
   BRAND_FREQUENCIES,
   brandOn,
+  SIGNATURE_CORNERS,
+  SIGNATURE_SIZES,
   TITLE_MAX,
   WORLD_SUBTITLE,
   type Brand,
@@ -186,6 +188,46 @@ export function BrandSettings({ brand, onBrand, onError, onShowTitle, compact }:
               onChange={(e) => onBrand({ signature: e.target.checked })}
             />
           </label>
+          {brand.signature && (
+            <div className="brand-sig">
+              <div className="mode-grid brand-sig-sizes" role="group" aria-label="Taille de la signature">
+                {SIGNATURE_SIZES.map((z) => (
+                  <button
+                    key={z.id}
+                    className={`chip chip-center ${brand.signatureSize === z.id ? "chip-active" : ""}`}
+                    onClick={() => onBrand({ signatureSize: z.id })}
+                  >
+                    {z.label}
+                  </button>
+                ))}
+              </div>
+              <div className="brand-sig-corners" role="group" aria-label="Coin de la signature">
+                {SIGNATURE_CORNERS.map((c) => (
+                  <button
+                    key={c.id}
+                    className={`chip brand-sig-corner brand-sig-${c.id} ${brand.signatureCorner === c.id ? "chip-active" : ""}`}
+                    title={c.label}
+                    aria-label={c.label}
+                    onClick={() => onBrand({ signatureCorner: c.id })}
+                  />
+                ))}
+              </div>
+              <label className="field">
+                <span className="field-head">
+                  <span>Opacité</span>
+                  <span>{Math.round(brand.signatureOpacity * 100)} %</span>
+                </span>
+                <input
+                  type="range"
+                  min={0.4}
+                  max={1}
+                  step={0.05}
+                  value={brand.signatureOpacity}
+                  onChange={(e) => onBrand({ signatureOpacity: Number(e.target.value) })}
+                />
+              </label>
+            </div>
+          )}
           {onShowTitle && (
             <button className="chip chip-center brand-now" onClick={onShowTitle}>
               Afficher maintenant <kbd>N</kbd>

@@ -30,7 +30,27 @@ export interface Brand {
   frequency: BrandFrequency;
   /** Small mark in a corner of every scene. */
   signature: boolean;
+  /** Its size: small, medium, large (about 5, 7 and 10 % of the height). */
+  signatureSize: SignatureSize;
+  /** Its corner: bottom right, bottom left, top right, top left. */
+  signatureCorner: SignatureCorner;
+  /** Its opacity, 0.4 to 1. */
+  signatureOpacity: number;
 }
+
+export type SignatureSize = "s" | "m" | "l";
+export type SignatureCorner = "br" | "bl" | "tr" | "tl";
+export const SIGNATURE_SIZES: { id: SignatureSize; label: string; h: number }[] = [
+  { id: "s", label: "Petite", h: 0.05 },
+  { id: "m", label: "Moyenne", h: 0.07 },
+  { id: "l", label: "Grande", h: 0.1 },
+];
+export const SIGNATURE_CORNERS: { id: SignatureCorner; label: string }[] = [
+  { id: "tl", label: "En haut à gauche" },
+  { id: "tr", label: "En haut à droite" },
+  { id: "bl", label: "En bas à gauche" },
+  { id: "br", label: "En bas à droite" },
+];
 
 export const TITLE_MAX = 30;
 
@@ -49,6 +69,9 @@ export const DEFAULT_BRAND: Brand = {
   logoThin: false,
   frequency: "world",
   signature: false,
+  signatureSize: "m",
+  signatureCorner: "br",
+  signatureOpacity: 0.85,
 };
 
 export const BRAND_FREQUENCIES: { id: BrandFrequency; label: string }[] = [
@@ -90,5 +113,11 @@ export function loadBrand(saved: unknown): Brand {
     logoThin: s.logoThin === true,
     frequency: BRAND_FREQUENCIES.some((f) => f.id === s.frequency) ? s.frequency! : DEFAULT_BRAND.frequency,
     signature: s.signature === true,
+    signatureSize: SIGNATURE_SIZES.some((z) => z.id === s.signatureSize) ? s.signatureSize! : DEFAULT_BRAND.signatureSize,
+    signatureCorner: SIGNATURE_CORNERS.some((c) => c.id === s.signatureCorner) ? s.signatureCorner! : DEFAULT_BRAND.signatureCorner,
+    signatureOpacity:
+      typeof s.signatureOpacity === "number" && s.signatureOpacity >= 0.4 && s.signatureOpacity <= 1
+        ? s.signatureOpacity
+        : DEFAULT_BRAND.signatureOpacity,
   };
 }

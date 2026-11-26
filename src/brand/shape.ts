@@ -310,14 +310,15 @@ function toShape(m: Mask, box: { w: number; h: number }): TitleShape {
 
 /**
  * The night's signature: its title (in a world's typeface, on one line), its logo, or DISCOME by default, white on
- * transparent, about 128 px tall, for the small mark in a corner.
+ * transparent, 256 px tall (sharp even large on a big screen), for the mark in a corner.
  */
 export async function signatureCanvas(b: Brand, font: unknown): Promise<HTMLCanvasElement | null> {
   if (!brandOn(b)) return null;
-  const H = 128;
+  const H = 256;
   if (b.mode === "logo") {
+    // (its grooved shape, as the worlds sculpt it: letters laid over a shape stay readable even this small)
     const img = new Image();
-    img.src = b.logo!;
+    img.src = (b.logoArt ? await sculptedLogo(b.logo!, b.logoArt).catch(() => null) : null) ?? b.logo!;
     await img.decode();
     const w = Math.max(1, Math.round((img.width / img.height) * H));
     const { c, ctx } = canvas2d(Math.min(w, H * 8), H);
@@ -330,7 +331,7 @@ export async function signatureCanvas(b: Brand, font: unknown): Promise<HTMLCanv
     .filter(Boolean)
     .map((s) => (f.upper ? s.toLocaleUpperCase("fr") : s))
     .join("  ·  ");
-  const size = 100;
+  const size = 200;
   await document.fonts.load(`${f.weight} ${size}px ${f.family}`, text).catch(() => {});
   const { ctx: probe } = canvas2d(1, 1);
   probe.font = `${f.weight} ${size}px ${f.family}`;

@@ -75,6 +75,7 @@ uniform float uBloomAmt;
 uniform sampler2D uSig;
 uniform float uSigOn;
 uniform vec4 uSigRect;
+uniform float uSigAlpha;
 varying vec2 vUv;
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -366,11 +367,22 @@ void main() {
   // The gap before the drop: the image holds its breath with the music
   col *= 1.0 - uGap;
 
-  // The night's signature, after the grade: it stays the same in every world
+  // The night's signature, after the grade: it stays the same in every world. A soft shadow under it (its shape
+  // blurred, a little lower) keeps it readable on a bright frame.
   if (uSigOn > 0.001) {
     vec2 sq = (vUv - uSigRect.xy) / uSigRect.zw;
-    if (sq.x > 0.0 && sq.x < 1.0 && sq.y > 0.0 && sq.y < 1.0) {
-      col = mix(col, vec3(0.94, 0.93, 0.9), texture2D(uSig, sq).a * 0.62 * uSigOn);
+    if (sq.x > -0.15 && sq.x < 1.15 && sq.y > -0.3 && sq.y < 1.2) {
+      vec2 r = vec2(0.035 * uSigRect.w / uSigRect.z, 0.06);
+      float sh = 0.0;
+      for (int i = 0; i < 8; i++) {
+        float a = float(i) * 0.7854;
+        vec2 o = sq + vec2(0.0, 0.05) + vec2(cos(a), sin(a)) * r;
+        if (o.x > 0.0 && o.x < 1.0 && o.y > 0.0 && o.y < 1.0) sh += texture2D(uSig, o).a;
+      }
+      col *= 1.0 - 0.55 * (sh / 8.0) * uSigAlpha * uSigOn;
+      if (sq.x > 0.0 && sq.x < 1.0 && sq.y > 0.0 && sq.y < 1.0) {
+        col = mix(col, vec3(0.95, 0.94, 0.92), texture2D(uSig, sq).a * uSigAlpha * uSigOn);
+      }
     }
   }
 
