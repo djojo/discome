@@ -18,8 +18,9 @@ const RMAX = 8;
 const NMAX = 1100;
 const STEP = 1.1;
 const WALL = 1.25;
-/** Drops of rain around the camera. */
+/** Drops of rain around the camera; motes of light rising from the crumbling walls at most. */
 const DROPS = 900;
+const DUST = 2400;
 /** The racers' size (the track scenes' craft, 2.4 m long, scaled), and how wide the light of a wall spills on the glass. */
 const CRAFT = 1.6;
 const SPILL = 3.2;
@@ -160,17 +161,37 @@ vec3 nightCity(vec3 d, vec3 tint, float drift) {
 }
 `;
 
+/**
+ * The wall's height (in walls) at a point d metres behind its racer, of this age: it rises from the glass behind the
+ * racer, tallest close to it, and settles lower as it ages.
+ */
+const wallHeight = (d: number, age: number) =>
+  (0.28 + 0.72 * smooth01(d / 7)) * (1.25 - 0.55 * smooth01((age - 0.08) / 0.92));
+function smooth01(x: number) {
+  const t = clamp01(x);
+  return t * t * (3 - 2 * t);
+}
+
 const RIBBON_VERT = /* glsl */ `
 attribute float aAge;
 attribute float aV;
+attribute float aOdo;
+uniform float uOdo;
+uniform float uTime;
 varying float vAge;
 varying float vV;
-varying float vS;
+varying float vO;
 void main() {
   vAge = aAge;
   vV = aV;
-  vS = position.x * .13 + position.z * .17;
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.);
+  vO = aOdo;
+  // the wall rises from the glass behind its racer, tallest close to it, settling lower as it ages; its top breathes
+  float d = uOdo - aOdo;
+  float rise = smoothstep(0., 7., d);
+  float h = (.28 + .72 * rise) * (1.25 - .55 * smoothstep(.08, 1., aAge)) + .05 * sin(aOdo * .35 - uTime * 2.4) * rise;
+  vec3 p = position;
+  p.y *= h;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.);
 }
 `;
 
@@ -184,24 +205,38 @@ uniform float uTime;
 uniform float uRefl;
 varying float vAge;
 varying float vV;
-varying float vS;
+varying float vO;
 ${OUT_GLSL}
 /** The trail's colour along it: white-hot at the racer, its colour, a deep violet dissolving at the tail. */
 vec3 heat(vec3 col, float h) {
   vec3 deep = col.gbr * .3 + vec3(.22, .02, .42);
   return mix(mix(vec3(1.), col, smoothstep(0., .06, h)), deep, smoothstep(.4, 1., h));
 }
+float hash(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * .1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
 void main() {
   // a wall of light: its top edge burning, its body a glow fading down; older, dimmer; the head white-hot; on every
   // kick a pulse runs down the wall from the racer
   float edge = smoothstep(.86, .97, vV) * (1. - smoothstep(.985, 1., vV) * .4);
-  float body = .1 + .32 * vV * vV;
+  float body = .04 + .17 * vV * vV;
   float fade = 1. - smoothstep(.55, 1., vAge);
   float head = exp(-vAge * 90.);
-  float spark = step(.985, fract(sin(floor(vS * 3. + uTime * 9.) * 91.7) * 4371.3)) * uHat * 2.;
+  float spark = step(.985, fract(sin(floor(vO * .4 + uTime * 9.) * 91.7) * 4371.3)) * uHat * 2.;
   float pulse = 1. + 3. * exp(-pow((vAge - uKickT * .6) / .03, 2.)) * exp(-uKickT * 1.2);
+  // currents of energy running along it, away from the racer, in two lanes; quicker and brighter on the kick
+  float lanes = exp(-pow((vV - .38) / .035, 2.)) + exp(-pow((vV - .7) / .03, 2.)) * .7;
+  float ph = fract((vO + uTime * 26.) / 9. + step(.5, vV) * .37);
+  float current = lanes * smoothstep(0., .08, ph) * (1. - smoothstep(.08, .6, ph)) * (.6 + 1.6 * uKick);
   vec3 hc = heat(uColor, vAge);
-  vec3 c = hc * (edge * (1.8 + 1.6 * uKick) + body * (1. + .6 * uKick) + spark) * fade * pulse + mix(uColor, vec3(1.), .6) * head * 1.5;
+  vec3 c = hc * (edge * (1.4 + 1.6 * uKick) + body * (1. + .6 * uKick) + spark + current * 1.2) * fade * pulse + mix(uColor, vec3(1.), .6) * head * 1.5;
+  // ageing, it breaks up block by block (the top first): each block flares as it goes, then is gone; afar, where a
+  // pixel spans the blocks, only their average
+  float n = hash(floor(vec2(vO * .7, vV * 4.))) * .6 + hash(floor(vec2(vO * 2.1, vV * 12.)) + 17.) * .4;
+  float crumble = smoothstep(.38, 1., vAge) * (1.05 + .25 * vV);
+  float alive = step(crumble, n);
+  float flare = (1. - smoothstep(0., .06, n - crumble)) * alive * step(.01, crumble);
+  float far = smoothstep(.5, 2., fwidth(vO) * 2.1);
+  alive = mix(alive, clamp(1.05 - crumble, 0., 1.), far);
+  c = c * alive * (1. + 1.8 * flare * (1. - far));
   // the reflection in the black glass: dimmer, fading with depth
   c *= uRefl > 0. ? uRefl * (.35 + .65 * vV) : 1.;
   gl_FragColor = vec4(outC(c), 1.);
@@ -279,6 +314,34 @@ void main() {
   float fade = 1. - smoothstep(.55, 1., vAge);
   float across = exp(-vSide * vSide * 5.) + exp(-vSide * vSide * 60.) * .8;
   gl_FragColor = vec4(outC(hc * across * fade * (.07 + .05 * uKick)), 1.);
+}
+`;
+
+/** The dust of the crumbling walls: soft motes of light, rising, going out. */
+const DUST_VERT = /* glsl */ `
+attribute vec3 aCol;
+attribute float aLife;
+uniform float uScale;
+varying vec3 vCol;
+varying float vA;
+void main() {
+  vec4 mv = modelViewMatrix * vec4(position, 1.);
+  float px = .16 * uScale / max(-mv.z, .1);
+  gl_PointSize = aLife > 0. ? clamp(px, 1.5, 24.) : 0.;
+  vA = aLife * min(1., px * px / 2.25);
+  vCol = aCol;
+  gl_Position = projectionMatrix * mv;
+}
+`;
+const DUST_FRAG = /* glsl */ `
+precision highp float;
+uniform float uRefl;
+varying vec3 vCol;
+varying float vA;
+${OUT_GLSL}
+void main() {
+  vec2 q = gl_PointCoord - .5;
+  gl_FragColor = vec4(outC(vCol * exp(-dot(q, q) * 16.) * vA * 2.6 * (uRefl > 0. ? uRefl : 1.)), 1.);
 }
 `;
 
@@ -381,9 +444,11 @@ interface Racer {
   /** Distance since the last wall point. */
   since: number;
   count: number;
-  /** How far it leans into its turn; how hard its engines burn. */
+  /** How far it leans into its turn; how hard its engines burn; how far it has gone. */
   bank: number;
   burn: { value: number };
+  odo: { value: number };
+  odos: Float32Array;
   pos: Float32Array;
   age: Float32Array;
   spill: Float32Array;
@@ -399,8 +464,10 @@ interface Racer {
 /**
  * Les Traînées: an endless plain of great slabs of polished black glass under the rain, the megacity on the horizon
  * all round (towers in silhouette against its glow, their windows lit, mirrored in the glass), and racers (the track
- * scenes' craft of black glass and neon, leaning into their turns) that leave solid walls of light behind them,
- * coiling and crossing like a long exposure; the walls mirrored in the glass, their light spilt on it. They pulse with the kick and spark
+ * scenes' craft of black glass and neon, leaning into their turns) that leave walls of light behind them, coiling
+ * and crossing like a long exposure; the walls mirrored in the glass, their light spilt on it. The walls live: they
+ * rise from the glass behind their racer, tallest close to it, currents of energy running along them; ageing they
+ * settle, then break up block by block, each block flaring as it goes, shedding motes of light that rise and go out. They pulse with the kick and spark
  * with the hats; through the build the racers speed up and their loops tighten; on the drop they all break away in a
  * star. The walls stay: as the night drifts they grow longer and the plain fills up, the racers shut in by their own
  * light. « Pose longue »: straight down on the weave, growing slowly.
@@ -414,7 +481,7 @@ export const trails: SceneGLDef = {
   hdr: true,
   mask: true,
   description:
-    "Une plaine infinie de dalles de verre noir sous la pluie, la mégapole tout autour à l'horizon : des bolides de verre noir et de néon laissent derrière eux des murs de lumière qui s'enroulent et se croisent comme une photo en pose longue, reflétés dans le verre. Au kick les murs pulsent ; pendant la montée les bolides accélèrent et leurs boucles se resserrent ; au drop ils s'écartent tous en étoile. « Pose longue » : vu de haut, le tissage grandit lentement.",
+    "Une plaine infinie de dalles de verre noir sous la pluie, la mégapole tout autour à l'horizon : des bolides de verre noir et de néon laissent derrière eux des murs de lumière qui s'enroulent et se croisent comme une photo en pose longue, reflétés dans le verre. Les murs montent du sol derrière eux, parcourus de courants, puis se défont bloc par bloc en lâchant une poussière lumineuse. Au kick les murs pulsent ; pendant la montée les bolides accélèrent et leurs boucles se resserrent ; au drop ils s'écartent tous en étoile. « Pose longue » : vu de haut, le tissage grandit lentement.",
   params: [paletteParam("piste"), { type: "toggle", key: "top", label: "Pose longue (vu de haut)", default: false }],
   create({ renderer, viewport, target }) {
     const ldr = target.texture.type === THREE.UnsignedByteType;
@@ -451,7 +518,8 @@ export const trails: SceneGLDef = {
     floor.renderOrder = -1;
     scene.add(floor);
 
-    // the racers and their walls (each wall drawn as itself, mirrored in the glass, and its light spilt on the glass)
+    // the racers and their walls (each wall drawn as itself, mirrored in the glass, and its light spilt on the glass;
+    // its odometer at each of its points, to fix its currents and its holes on it)
     const index: number[] = [];
     for (let i = 0; i < NMAX - 1; i++) {
       const a = i * 2;
@@ -473,6 +541,8 @@ export const trails: SceneGLDef = {
       const pos = new Float32Array(NMAX * 2 * 3);
       const age = new Float32Array(NMAX * 2);
       const spill = new Float32Array(NMAX * 2 * 3);
+      const odos = new Float32Array(NMAX * 2);
+      const odo = { value: 0 };
       const vv = new Float32Array(NMAX * 2);
       for (let k = 0; k < NMAX; k++) vv[k * 2 + 1] = 1;
       const ageAttr = new THREE.BufferAttribute(age, 1).setUsage(THREE.DynamicDrawUsage);
@@ -480,6 +550,7 @@ export const trails: SceneGLDef = {
       geo.setAttribute("position", new THREE.BufferAttribute(pos, 3).setUsage(THREE.DynamicDrawUsage));
       geo.setAttribute("aAge", ageAttr);
       geo.setAttribute("aV", new THREE.BufferAttribute(vv, 1));
+      geo.setAttribute("aOdo", new THREE.BufferAttribute(odos, 1).setUsage(THREE.DynamicDrawUsage));
       geo.setIndex(indexAttr);
       geo.setDrawRange(0, 0);
       geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e5);
@@ -495,7 +566,7 @@ export const trails: SceneGLDef = {
       const burn = { value: 0 };
       const mk = (refl: number) =>
         new THREE.ShaderMaterial({
-          uniforms: { uColor: { value: col }, uRefl: { value: refl }, ...shared },
+          uniforms: { uColor: { value: col }, uRefl: { value: refl }, uOdo: odo, ...shared },
           vertexShader: RIBBON_VERT,
           fragmentShader: RIBBON_FRAG,
           transparent: true,
@@ -505,7 +576,7 @@ export const trails: SceneGLDef = {
           defines,
         });
       const mat = mk(0);
-      const refl = mk(0.38);
+      const refl = mk(0.3);
       const wall = new THREE.Mesh(geo, mat);
       const wallMirror = new THREE.Mesh(geo, refl);
       wallMirror.scale.y = -1;
@@ -564,6 +635,8 @@ export const trails: SceneGLDef = {
         count: 0,
         bank: 0,
         burn,
+        odo,
+        odos,
         pos,
         age,
         spill,
@@ -597,6 +670,55 @@ export const trails: SceneGLDef = {
     scene.add(rain);
     const drops = Array.from({ length: DROPS }, () => new THREE.Vector3(Math.random() * 80 - 40, Math.random() * 40, Math.random() * 80 - 40));
 
+    // the dust: motes of light shed by the crumbling walls, rising and going out (mirrored in the glass)
+    const dustPos = new Float32Array(DUST * 3);
+    const dustCol = new Float32Array(DUST * 3);
+    const dustLife = new Float32Array(DUST);
+    const dustT = new Float32Array(DUST);
+    const dustRate = new Float32Array(DUST);
+    const dustVel = new Float32Array(DUST * 3);
+    const dustGeo = new THREE.BufferGeometry();
+    dustGeo.setAttribute("position", new THREE.BufferAttribute(dustPos, 3).setUsage(THREE.DynamicDrawUsage));
+    dustGeo.setAttribute("aCol", new THREE.BufferAttribute(dustCol, 3).setUsage(THREE.DynamicDrawUsage));
+    dustGeo.setAttribute("aLife", new THREE.BufferAttribute(dustLife, 1).setUsage(THREE.DynamicDrawUsage));
+    const dustScale = { value: 1000 };
+    const dustMat = (refl: number) =>
+      new THREE.ShaderMaterial({
+        uniforms: { uScale: dustScale, uRefl: { value: refl } },
+        vertexShader: DUST_VERT,
+        fragmentShader: DUST_FRAG,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        defines,
+      });
+    const dustMats = [dustMat(0), dustMat(0.3)];
+    const dust = new THREE.Points(dustGeo, dustMats[0]);
+    const dustMirror = new THREE.Points(dustGeo, dustMats[1]);
+    dustMirror.scale.y = -1;
+    dust.frustumCulled = false;
+    dustMirror.frustumCulled = false;
+    dust.renderOrder = 4;
+    dustMirror.renderOrder = 1;
+    scene.add(dust, dustMirror);
+    let dustNext = 0;
+    /** Shed a mote from the crumbling part of a racer's wall. */
+    const shed = (r: Racer, k0: number, nmax: number) => {
+      const k = k0 + Math.floor(Math.random() * (r.count - k0));
+      const age = k / Math.max(1, nmax - 1);
+      const i = dustNext;
+      dustNext = (dustNext + 1) % DUST;
+      const h = WALL * wallHeight(r.odo.value - r.odos[k * 2], age) * Math.random();
+      dustPos.set([r.pos[k * 6] + (Math.random() - 0.5) * 0.3, h, r.pos[k * 6 + 2] + (Math.random() - 0.5) * 0.3], i * 3);
+      dustVel.set([(Math.random() - 0.5) * 0.7, 0.5 + 1.1 * Math.random(), (Math.random() - 0.5) * 0.7], i * 3);
+      dustT[i] = 1;
+      dustRate[i] = 1 / (1.6 + 1.8 * Math.random());
+      // its wall's colour at that age (white-hot near the racer, deep violet at the tail)
+      const c = r.colour;
+      const m = smooth01((age - 0.4) / 0.6);
+      dustCol.set([c.r + (c.g * 0.3 + 0.22 - c.r) * m, c.g + (c.b * 0.3 + 0.02 - c.g) * m, c.b + (c.r * 0.3 + 0.42 - c.b) * m], i * 3);
+    };
+
     const cad = new Cadrage(FRAMINGS, 3);
     const centre = new THREE.Vector3();
     const look = new THREE.Vector3();
@@ -615,10 +737,13 @@ export const trails: SceneGLDef = {
         r.count = 0;
         r.since = 0;
         r.bank = 0;
+        r.odo.value = 0;
         r.geo.setDrawRange(0, 0);
         r.spillGeo.setDrawRange(0, 0);
       });
       cad.reset(seed);
+      dustT.fill(0);
+      dustLife.fill(0);
       star = 99;
       boost = 0;
     };
@@ -626,12 +751,16 @@ export const trails: SceneGLDef = {
     /** Push a new wall point at the racer's position (the head point always follows it). */
     const advance = (r: Racer, dist: number, nmax: number) => {
       r.since += dist;
+      r.odo.value += dist;
       if (r.count === 0 || r.since >= STEP) {
         r.since = 0;
         r.pos.copyWithin(6, 0, (NMAX - 1) * 6);
         r.spill.copyWithin(6, 0, (NMAX - 1) * 6);
+        r.odos.copyWithin(2, 0, (NMAX - 1) * 2);
         r.count = Math.min(nmax, r.count + 1);
       }
+      r.odos[0] = r.odo.value;
+      r.odos[1] = r.odo.value;
       r.pos[0] = r.x;
       r.pos[1] = 0;
       r.pos[2] = r.z;
@@ -652,6 +781,7 @@ export const trails: SceneGLDef = {
       (r.geo.attributes.position as THREE.BufferAttribute).needsUpdate = true;
       (r.geo.attributes.aAge as THREE.BufferAttribute).needsUpdate = true;
       (r.spillGeo.attributes.position as THREE.BufferAttribute).needsUpdate = true;
+      (r.geo.attributes.aOdo as THREE.BufferAttribute).needsUpdate = true;
     };
 
     return {
@@ -735,6 +865,12 @@ export const trails: SceneGLDef = {
           r.mirror.rotation.set(0, yaw, -r.bank);
           r.pool.position.set(ox, 0.03, oz);
           r.pool.rotation.set(0, yaw, 0);
+          // the crumbling part of its wall sheds its dust
+          const k0 = Math.ceil(0.42 * (nmax - 1));
+          if (r.count > k0 + 1) {
+            const rate = 90 * ((r.count - k0) / nmax) * (1 + 1.5 * boost);
+            for (let n = Math.floor(rate * dt + Math.random()); n > 0; n--) shed(r, k0, nmax);
+          }
         });
 
         // the camera: a framing round the pack's centre (straight down in Pose longue)
@@ -751,6 +887,26 @@ export const trails: SceneGLDef = {
         pa.value = 1 / (cad.focal * target.height);
         (floorMat.uniforms.uCam.value as THREE.Vector3).copy(camera.position);
         sky.position.copy(camera.position);
+
+        // the dust rises, slows, goes out
+        dustScale.value = target.height * cad.focal;
+        const drag = Math.exp(-dt * 0.6);
+        for (let i = 0; i < DUST; i++) {
+          if (dustT[i] <= 0) {
+            dustLife[i] = 0;
+            continue;
+          }
+          const t = (dustT[i] -= dt * dustRate[i]);
+          dustVel[i * 3] *= drag;
+          dustVel[i * 3 + 2] *= drag;
+          dustPos[i * 3] += dustVel[i * 3] * dt;
+          dustPos[i * 3 + 1] += dustVel[i * 3 + 1] * dt;
+          dustPos[i * 3 + 2] += dustVel[i * 3 + 2] * dt;
+          dustLife[i] = t <= 0 ? 0 : t > 0.85 ? (1 - t) / 0.15 : t / 0.85;
+        }
+        (dustGeo.attributes.position as THREE.BufferAttribute).needsUpdate = true;
+        (dustGeo.attributes.aCol as THREE.BufferAttribute).needsUpdate = true;
+        (dustGeo.attributes.aLife as THREE.BufferAttribute).needsUpdate = true;
 
         // the rain falls round the camera
         rainCol.set(tint.x, tint.y, tint.z).lerp(new THREE.Vector3(1, 1, 1), 0.6).multiplyScalar(0.12);
@@ -781,6 +937,8 @@ export const trails: SceneGLDef = {
         poolGeo.dispose();
         rainGeo.dispose();
         rainMat.dispose();
+        dustGeo.dispose();
+        for (const m of dustMats) m.dispose();
         for (const r of racers) {
           r.geo.dispose();
           r.spillGeo.dispose();
