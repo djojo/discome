@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { titleShape } from "@/brand/shape";
+import { cook } from "./sculpt/oven";
 import type { ParamDef, ParamValues } from "../types";
 
 /** The families of the head library (the "Tête" setting lists them in this order). */
@@ -20,9 +21,10 @@ export type HeadLicence = "code" | "cc0" | "cc-by" | "personnel";
 
 /**
  * Where a head's field comes from: "sculpted" (a function of lib.glsl.ts, evaluated live), "file" (a grid baked by
- * scripts/bake-heads.mjs from a model, public/heads/<id>.sdf.gz).
+ * scripts/bake-heads.mjs from a model, public/heads/<id>.sdf.gz), "code" (sculpted in code, sculpt/sculpt.glsl.ts,
+ * and cooked into a grid on the graphics card at first use: nothing to download).
  */
-export type HeadKind = "sculpted" | "file";
+export type HeadKind = "sculpted" | "file" | "code";
 
 interface HeadInfo {
   id: string;
@@ -35,17 +37,27 @@ interface HeadInfo {
 /**
  * The head library: real sculpted busts (Printables, see public/heads/CREDITS.md) baked by scripts/bake-heads.mjs
  * into signed distance grids, so every head effect (shell, shards, contour lines, halftone, chrome…) works with
- * any of them. "humain" and "patron" are sculpted heads of lib.glsl.ts (no file).
+ * any of them; heads sculpted in code (sculpt/), cooked into the same grids by the oven; "humain" and "patron",
+ * sculpted heads of lib.glsl.ts evaluated live.
  */
 export const HEADS = [
   { id: "humain", label: "Humain", family: "visage", licence: "code", kind: "sculpted" },
   { id: "patron", label: "Le Patron", family: "archetype", licence: "code", kind: "sculpted" },
+  { id: "tresses", label: "Tresses", family: "visage", licence: "code", kind: "code" },
+  { id: "chignon", label: "Chignon", family: "visage", licence: "code", kind: "code" },
+  { id: "afro", label: "Afro", family: "visage", licence: "code", kind: "code" },
+  { id: "aieule", label: "L'Aïeule", family: "visage", licence: "code", kind: "code" },
+  { id: "jeune", label: "Le Jeune Homme", family: "visage", licence: "code", kind: "code" },
+  { id: "locks", label: "Locks", family: "visage", licence: "code", kind: "code" },
+  { id: "barbu", label: "Le Barbu", family: "visage", licence: "code", kind: "code" },
+  { id: "aieul", label: "L'Aïeul", family: "visage", licence: "code", kind: "code" },
   { id: "tigre", label: "Tigre", family: "animal", licence: "personnel", kind: "file" },
   { id: "loup", label: "Loup", family: "animal", licence: "personnel", kind: "file" },
   { id: "faucon", label: "Faucon", family: "animal", licence: "personnel", kind: "file" },
   { id: "lion", label: "Lion", family: "animal", licence: "personnel", kind: "file" },
   { id: "hibou", label: "Hibou", family: "animal", licence: "personnel", kind: "file" },
   { id: "belier", label: "Bélier", family: "animal", licence: "personnel", kind: "file" },
+  { id: "cobra", label: "Cobra", family: "animal", licence: "code", kind: "code" },
   { id: "moai", label: "Moai", family: "sculpture", licence: "personnel", kind: "file" },
   { id: "nefertiti", label: "Néfertiti", family: "sculpture", licence: "personnel", kind: "file" },
 ] as const satisfies readonly HeadInfo[];
@@ -72,13 +84,18 @@ export const headParam = (def: HeadId = "humain"): ParamDef => ({
 });
 
 const headInfo = (id: unknown): HeadInfo | undefined => HEADS.find((h) => h.id === id);
-/** The heads whose field is a grid (a file to load): the others are sculpted live, or the title. */
-const isBaked = (id: unknown): id is HeadId => headInfo(id)?.kind === "file";
+/** The heads whose field is a grid (a file to load, or cooked from code): the others are sculpted live, or the title. */
+const isBaked = (id: unknown): id is HeadId => {
+  const k = headInfo(id)?.kind;
+  return k === "file" || k === "code";
+};
 
 export interface HeadGrid {
   tex: THREE.Data3DTexture;
   min: THREE.Vector3;
   size: THREE.Vector3;
+  /** Let go of its texture (a cooked head: its render target). */
+  dispose?: () => void;
 }
 
 const loaded = new Map<string, HeadGrid>();
@@ -118,6 +135,13 @@ async function fetchGrid(id: string): Promise<HeadGrid | null> {
   }
 }
 
+/** A head sculpted in code, cooked into its grid by the oven (sculpt/oven.ts). */
+async function cookGrid(id: string): Promise<HeadGrid | null> {
+  const grid = await cook(id);
+  if (grid) loaded.set(id, grid);
+  return grid;
+}
+
 /** Start loading a head (no-op if loaded, loading, or the sculpted human head). */
 export function loadHead(id: unknown): Promise<HeadGrid | null> {
   if (!isBaked(id)) return Promise.resolve(null);
@@ -125,7 +149,7 @@ export function loadHead(id: unknown): Promise<HeadGrid | null> {
   if (done) return Promise.resolve(done);
   let p = loading.get(id);
   if (!p) {
-    p = fetchGrid(id);
+    p = headInfo(id)?.kind === "code" ? cookGrid(id) : fetchGrid(id);
     loading.set(id, p);
   }
   return p;
@@ -144,7 +168,8 @@ export function releaseHeads(keep: Iterable<unknown>) {
   const k = new Set(keep);
   for (const [id, g] of loaded) {
     if (k.has(id)) continue;
-    g.tex.dispose();
+    if (g.dispose) g.dispose();
+    else g.tex.dispose();
     loaded.delete(id);
     loading.delete(id);
   }

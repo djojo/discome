@@ -6,6 +6,7 @@ import { blendCode, transitionCode, type LayerSettings, type TransitionSpec } fr
 import { NEUTRAL_FX, type FxSettings } from "./fx";
 import { Bloom } from "./bloom";
 import { TONE_GLSL } from "./tone";
+import { bindOven, ovenStep } from "@/scenes/art/sculpt/oven";
 
 /** How the background (fond) sits behind the main scene. */
 export interface BackgroundLook {
@@ -189,6 +190,8 @@ export class Compositor {
     this.renderer.setClearColor(0x000000, 1);
     // Scene colours are authored as final display values (like the 2D canvas): no sRGB encode at the end.
     this.renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
+    // the heads sculpted in code are cooked on this renderer (scenes/art/sculpt/oven.ts)
+    bindOven(this.renderer);
 
     this.black = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1);
     this.black.needsUpdate = true;
@@ -426,6 +429,8 @@ export class Compositor {
     post: PostFx = { tension: 0, fx: NEUTRAL_FX, safeFlash: false },
     background: BackgroundLook = NO_BACKGROUND,
   ) {
+    // a few layers of a head sculpted in code, if one is cooking
+    ovenStep();
     this.time += dt;
     if (this.next) {
       this.elapsed += dt;
