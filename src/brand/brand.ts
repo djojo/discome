@@ -18,6 +18,15 @@ export interface Brand {
   subtitle: string;
   /** The logo's silhouette: a PNG, white shape on transparent, cropped (made by importLogo). */
   logo: string | null;
+  /** The logo in its own colours, opaque, cropped like the silhouette, which gives it its shape (null: a logo saved
+   * before the colours were kept: re-import it). */
+  logoArt: string | null;
+  /** Its leading colours, the most present first. */
+  logoColors: string[];
+  /** Mostly light or mostly dark (the halo under it is the other). */
+  logoTone: "light" | "dark";
+  /** Strokes so fine they may vanish at a distance. */
+  logoThin: boolean;
   frequency: BrandFrequency;
   /** Small mark in a corner of every scene. */
   signature: boolean;
@@ -28,7 +37,19 @@ export const TITLE_MAX = 30;
 /** The second line under a world's name. */
 export const WORLD_SUBTITLE = "DISCOME";
 
-export const DEFAULT_BRAND: Brand = { v: 2, mode: "world", title: "", subtitle: "", logo: null, frequency: "world", signature: false };
+export const DEFAULT_BRAND: Brand = {
+  v: 2,
+  mode: "world",
+  title: "",
+  subtitle: "",
+  logo: null,
+  logoArt: null,
+  logoColors: [],
+  logoTone: "light",
+  logoThin: false,
+  frequency: "world",
+  signature: false,
+};
 
 export const BRAND_FREQUENCIES: { id: BrandFrequency; label: string }[] = [
   { id: "world", label: "Une fois par monde" },
@@ -47,7 +68,7 @@ export const brandShapeKey = (b: Brand) =>
     : b.mode === "world"
       ? "world"
       : b.mode === "logo"
-        ? `logo:${b.logo!.length}:${b.logo!.slice(-64)}`
+        ? `logo:${b.logo!.length}:${b.logo!.slice(-64)}:${b.logoArt?.length ?? 0}:${b.logoArt?.slice(-64) ?? ""}`
         : `title:${b.title.trim()}\n${b.subtitle.trim()}`;
 
 /** A saved brand merged over the defaults (fields added later, bad values). */
@@ -63,6 +84,10 @@ export function loadBrand(saved: unknown): Brand {
     title: str(s.title),
     subtitle: str(s.subtitle),
     logo: typeof s.logo === "string" && s.logo.startsWith("data:image/png") ? s.logo : null,
+    logoArt: typeof s.logo === "string" && typeof s.logoArt === "string" && s.logoArt.startsWith("data:image/png") ? s.logoArt : null,
+    logoColors: Array.isArray(s.logoColors) ? s.logoColors.filter((c): c is string => typeof c === "string" && /^#[0-9a-f]{6}$/i.test(c)).slice(0, 4) : [],
+    logoTone: s.logoTone === "dark" ? "dark" : "light",
+    logoThin: s.logoThin === true,
     frequency: BRAND_FREQUENCIES.some((f) => f.id === s.frequency) ? s.frequency! : DEFAULT_BRAND.frequency,
     signature: s.signature === true,
   };

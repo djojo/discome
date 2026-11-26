@@ -88,7 +88,7 @@ export const titleReady = (font: unknown, world?: unknown) => !!titleShape(font,
 
 async function build(b: Brand, font: unknown, world: unknown): Promise<TitleShape | null> {
   if (b.mode === "logo") {
-    const mask = b.logo ? await logoMask(b.logo) : null;
+    const mask = b.logo ? await logoMask(b.logo, b.logoArt) : null;
     return mask && toShape(mask, LOGO_BOX);
   }
   const mask =
@@ -150,8 +150,11 @@ export async function textMask(title: string, subtitle: string, f: TitleFont): P
   return { a: coverage(ctx, w, h), w, h, cw: W * k, ch: H * k };
 }
 
-/** The logo's silhouette (already cropped by importLogo), with the margins around it. */
-async function logoMask(dataUrl: string): Promise<Mask | null> {
+/**
+ * The logo's silhouette (already cropped by importLogo), with the margins around it. Where two of its colours meet
+ * inside it (letters laid over a shape), a fine groove is cut, so that the worlds sculpt them too.
+ */
+async function logoMask(dataUrl: string, art: string | null): Promise<Mask | null> {
   const img = new Image();
   img.src = dataUrl;
   await img.decode();
@@ -162,7 +165,66 @@ async function logoMask(dataUrl: string): Promise<Mask | null> {
   const h = Math.ceil(ch + 2 * PAD);
   const { ctx } = canvas2d(w, h);
   ctx.drawImage(img, PAD, PAD, cw, ch);
-  return { a: coverage(ctx, w, h), w, h, cw, ch };
+  const a = coverage(ctx, w, h);
+  if (art) {
+    const colours = new Image();
+    colours.src = art;
+    await colours.decode();
+    const { ctx: cc } = canvas2d(w, h);
+    cc.drawImage(colours, PAD, PAD, cw, ch);
+    groove(a, cc.getImageData(0, 0, w, h).data, w, h, Math.max(cw, ch));
+  }
+  return { a, w, h, cw, ch };
+}
+
+/**
+ * Cut a groove into the shape (coverage a) wherever its colours (rgb) change sharply between two of its pixels:
+ * about 1.1 % of the logo's size wide (size: its larger side, in pixels).
+ */
+function groove(a: Float32Array, rgb: Uint8ClampedArray, w: number, h: number, size: number) {
+  const s = Math.max(1, Math.round(size / 450));
+  const edge = new Uint8Array(w * h);
+  const differs = (i: number, j: number) => {
+    const dr = rgb[i * 4] - rgb[j * 4];
+    const dg = rgb[i * 4 + 1] - rgb[j * 4 + 1];
+    const db = rgb[i * 4 + 2] - rgb[j * 4 + 2];
+    return dr * dr + dg * dg + db * db > (0.2 * 255) ** 2 * 3;
+  };
+  let any = false;
+  for (let y = s; y < h - s; y++) {
+    for (let x = s; x < w - s; x++) {
+      const i = y * w + x;
+      if (a[i] < 0.5) continue;
+      for (const j of [i + s, i - s, i + s * w, i - s * w]) {
+        if (a[j] >= 0.5 && differs(i, j)) {
+          edge[i] = 1;
+          any = true;
+          break;
+        }
+      }
+    }
+  }
+  if (!any) return;
+  const half = Math.max(1.6, 0.0055 * size);
+  const dist = distanceTo((i) => edge[i] === 1, w, h);
+  for (let i = 0; i < a.length; i++) a[i] = Math.min(a[i], Math.min(1, Math.max(0, dist[i] - half + 0.5)));
+}
+
+/** The shape the worlds sculpt from the night's logo (its grooves included), white on transparent, for a preview. */
+export async function sculptedLogo(logo: string, art: string | null): Promise<string | null> {
+  const m = await logoMask(logo, art);
+  if (!m) return null;
+  const { c, ctx } = canvas2d(Math.ceil(m.cw), Math.ceil(m.ch));
+  const img = ctx.createImageData(c.width, c.height);
+  for (let y = 0; y < c.height; y++) {
+    for (let x = 0; x < c.width; x++) {
+      const o = (y * c.width + x) * 4;
+      img.data[o] = img.data[o + 1] = img.data[o + 2] = 255;
+      img.data[o + 3] = Math.round(m.a[(y + PAD) * m.w + x + PAD] * 255);
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return c.toDataURL("image/png");
 }
 
 // ---------------------------------------------------------------- distance field

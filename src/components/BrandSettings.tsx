@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   BRAND_FREQUENCIES,
   brandOn,
@@ -10,7 +10,8 @@ import {
   type BrandFrequency,
   type BrandMode,
 } from "@/brand/brand";
-import { importLogo, invertLogo, LogoError } from "@/brand/logo";
+import { analyzeLogo, importLogo, invertLogo, LogoError } from "@/brand/logo";
+import { sculptedLogo } from "@/brand/shape";
 
 const MODES: { id: BrandMode; label: string }[] = [
   { id: "world", label: "Monde" },
@@ -34,12 +35,26 @@ export function BrandSettings({ brand, onBrand, onError, onShowTitle, compact }:
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const on = brandOn(brand);
+  // the shape the worlds sculpt (its grooves included), for the preview
+  const [sculpted, setSculpted] = useState<{ key: string; url: string | null } | null>(null);
+  const shapeKey = brand.logo ? `${brand.logo.length}:${brand.logo.slice(-32)}:${brand.logoArt?.length ?? 0}` : "";
+  useEffect(() => {
+    if (!brand.logo) return;
+    let alive = true;
+    sculptedLogo(brand.logo, brand.logoArt)
+      .catch(() => null)
+      .then((url) => alive && setSculpted({ key: shapeKey, url }));
+    return () => {
+      alive = false;
+    };
+  }, [brand.logo, brand.logoArt, shapeKey]);
 
   const onFile = async (file: File | undefined) => {
     if (!file) return;
     setBusy(true);
     try {
-      onBrand({ logo: await importLogo(file), mode: "logo" });
+      const imp = await importLogo(file);
+      onBrand({ logo: imp.logo, logoArt: imp.art, logoColors: imp.colors, logoTone: imp.tone, logoThin: imp.thin, mode: "logo" });
     } catch (e) {
       onError(e instanceof LogoError ? e.message : "Impossible de lire ce logo.");
     } finally {
@@ -91,8 +106,39 @@ export function BrandSettings({ brand, onBrand, onError, onShowTitle, compact }:
       {brand.mode === "logo" && (
         <div className="brand-logo">
           {brand.logo ? (
-            // eslint-disable-next-line @next/next/no-img-element -- a local data URL, nothing for next/image to optimise
-            <img src={brand.logo} alt="La silhouette retenue pour ton logo" className="brand-preview" />
+            <>
+              {brand.logoArt && (
+                <>
+                  <span className="brand-caption">Ton logo, tel qu&apos;il sera affiché</span>
+                  <div className="brand-art" role="img" aria-label="Ton logo dans ses couleurs, sur fond sombre et sur fond clair">
+                    {["dark", "light"].map((bg) => (
+                      <span key={bg} className={`brand-art-tile brand-art-${bg}`}>
+                        <span className="brand-art-logo" style={artStyle(brand.logoArt!, brand.logo!)} />
+                      </span>
+                    ))}
+                  </div>
+                </>
+              )}
+              <span className="brand-caption">La forme que sculptent les mondes</span>
+              {/* eslint-disable-next-line @next/next/no-img-element -- a local data URL, nothing for next/image to optimise */}
+              <img
+                src={sculpted?.key === shapeKey && sculpted.url ? sculpted.url : brand.logo}
+                alt="La forme que les mondes sculptent à partir de ton logo"
+                className="brand-preview"
+              />
+              {!brand.logoArt && (
+                <p className="hint brand-warn">
+                  Ce logo a été enregistré avant que Discome garde ses couleurs : réimporte-le (« Changer ») pour les
+                  retrouver.
+                </p>
+              )}
+              {brand.logoThin && (
+                <p className="hint brand-warn">
+                  Certains traits sont très fins : de loin, ils risquent de disparaître. Une version plus épaisse de ton
+                  logo passera mieux.
+                </p>
+              )}
+            </>
           ) : (
             <p className="hint">Aucun logo pour l&apos;instant.</p>
           )}
@@ -108,7 +154,9 @@ export function BrandSettings({ brand, onBrand, onError, onShowTitle, compact }:
                 onClick={async () => {
                   setBusy(true);
                   try {
-                    onBrand({ logo: await invertLogo(brand.logo!) });
+                    const logo = await invertLogo(brand.logo!);
+                    const seen = brand.logoArt ? await analyzeLogo(logo, brand.logoArt) : null;
+                    onBrand({ logo, ...(seen ? { logoColors: seen.colors, logoTone: seen.tone, logoThin: seen.thin } : {}) });
                   } catch (e) {
                     onError(e instanceof LogoError ? e.message : "Impossible d'inverser ce logo.");
                   } finally {
@@ -121,8 +169,8 @@ export function BrandSettings({ brand, onBrand, onError, onShowTitle, compact }:
             )}
           </div>
           <p className="hint">
-            Discome garde la silhouette, chaque monde lui donne sa matière. Idéal : un logo en aplat sur fond transparent
-            (PNG ou SVG).
+            Discome garde ton logo tel quel pour l&apos;afficher net, et sa silhouette pour que chaque monde la sculpte
+            dans sa matière. Idéal : un logo en aplat sur fond transparent (PNG ou SVG).
           </p>
         </div>
       )}
@@ -174,3 +222,10 @@ export function BrandSettings({ brand, onBrand, onError, onShowTitle, compact }:
     </div>
   );
 }
+
+/** The logo in its colours, shaped by its silhouette (both images line up: same crop, same size). */
+const artStyle = (art: string, logo: string): CSSProperties => ({
+  backgroundImage: `url(${art})`,
+  WebkitMaskImage: `url(${logo})`,
+  maskImage: `url(${logo})`,
+});
