@@ -420,6 +420,7 @@ export default function Visualizer() {
       lookContext(s); // keeps the background ink in sync with the world
       frame.trip = tripEnv.update(frame, dt) * fxShown.trip;
       compositor.signatureShown = compositor.sceneId !== titleHere?.key;
+      compositor.titleOn = !!titleHere && compositor.sceneId === titleHere.key;
       frame.safeFlash = s.safeFlash;
       frame.shot = compositor.sceneId ? sceneOf(s, compositor.sceneId).id : null;
       frame.camCut = director.camCut;

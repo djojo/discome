@@ -167,6 +167,13 @@ export class Compositor {
   private signatureAspect = 1;
   /** Hidden while the title itself is on screen. */
   signatureShown = true;
+  /**
+   * The night's title plan is on screen: the effects calm down so that the title stays sharp (less bloom, no strobe,
+   * no chromatic aberration, trails or mirror, softer accents and retro effects). The world's look stays.
+   */
+  titleOn = false;
+  /** How calm the effects are now (0..1, following titleOn over about a second). */
+  private calm = 0;
 
   /**
    * `resolve` maps a key (a world plan "world:plan", or a plain scene id) to its scene: two plans of the same
@@ -471,7 +478,8 @@ export class Compositor {
 
     // Bloom: the glow around the highlights of the scene on screen (and of the incoming one), from their real light
     // when they are photographic
-    const bloom = post.fx?.bloom ?? 0;
+    this.calm += ((this.titleOn ? 1 : 0) - this.calm) * (1 - Math.exp(-dt * 2));
+    const bloom = (post.fx?.bloom ?? 0) * (1 - 0.65 * this.calm);
     if (bloom > 0.005 && this.current) {
       if (!this.bloom) {
         this.bloom = new Bloom(this.renderer, this.targetType, this.black);
@@ -493,7 +501,7 @@ export class Compositor {
     u.uMotionB.value = this.next ? (this.next.instance.motion?.() ?? 0) * blur : 0;
 
     u.uTime.value = this.time;
-    u.uTension.value = post.tension * (post.safeFlash ? 0.5 : 1);
+    u.uTension.value = post.tension * (post.safeFlash ? 0.5 : 1) * (1 - this.calm);
     u.uBeatPulse.value = frame.beatPulse;
     this.renderer.getDrawingBufferSize(u.uRes.value);
     this.applyFx(post, frame, dt);
@@ -534,14 +542,15 @@ export class Compositor {
     }
     // the trip (AudioFrame.trip): the picture breathes deeper, the trails grow longer and turn through the colours
     const trip = frame.trip;
-    u.uBreathe.value = (fx.breathe ?? 0) * (0.003 + 0.012 * trip);
+    const calm = this.calm;
+    u.uBreathe.value = (fx.breathe ?? 0) * (0.003 + 0.012 * trip) * (1 - calm);
     u.uBreathPhase.value =
       frame.bpm > 0 ? Math.PI * ((frame.bar % 2) + (frame.beatInBar + frame.beatPhase) / 4) : this.time * 0.5;
     u.uTrailHue.value = (fx.trailHue ?? 0) * (6 + 14 * trip);
-    u.uTrails.value = (fx.trailHue ?? 0) > 0.01 ? Math.min(0.92, fx.trails * (0.6 + 0.9 * trip)) : fx.trails;
-    u.uChroma.value = fx.chroma;
-    u.uScan.value = fx.scanlines;
-    u.uCrt.value = fx.crt;
+    u.uTrails.value = ((fx.trailHue ?? 0) > 0.01 ? Math.min(0.92, fx.trails * (0.6 + 0.9 * trip)) : fx.trails) * (1 - calm);
+    u.uChroma.value = fx.chroma * (1 - calm);
+    u.uScan.value = fx.scanlines * (1 - 0.5 * calm);
+    u.uCrt.value = fx.crt * (1 - 0.6 * calm);
     u.uGrain.value = fx.grain;
     // Pixel and VHS: all the time, or only on the big moments, and stronger then since they are brief: on the drop the
     // image breaks into big blocks that resolve step by step (4, 3, 2 pixels) in a little over a second; the strong
@@ -551,15 +560,15 @@ export class Compositor {
     const hit = Math.max(this.dropHit, this.kickHit);
     const pixel = fx.retroOnHits ? (hit > 0.02 ? Math.min(1, fx.pixel * 4) * hit : 0) : fx.pixel;
     const vhs = fx.retroOnHits ? (hit > 0.02 ? Math.min(1, fx.vhs * 3) * hit : 0) : fx.vhs;
-    u.uVhs.value = vhs;
+    u.uVhs.value = vhs * (1 - 0.7 * calm);
     u.uVignette.value = fx.vignette;
     u.uHue.value = fx.hue;
     u.uSat.value = fx.saturation;
     u.uContrast.value = fx.contrast;
     u.uBright.value = fx.brightness;
-    u.uMirror.value = fx.mirror;
-    u.uPoster.value = fx.posterize;
-    u.uPixel.value = pixel;
+    u.uMirror.value = calm > 0.5 ? 0 : fx.mirror;
+    u.uPoster.value = fx.posterize * (1 - 0.5 * calm);
+    u.uPixel.value = pixel * (1 - 0.6 * calm);
 
     // Strobe: fires on the kicks of the first seconds of a drop
     const armed = fx.strobe !== "off" && frame.section === "drop" && frame.sectionTime < 16;
@@ -569,7 +578,7 @@ export class Compositor {
       this.lastStrobe = this.time;
     }
     this.strobeEnv *= Math.exp(-dt * 18);
-    u.uStrobe.value = this.strobeEnv * (post.safeFlash ? 0.35 : 0.85);
+    u.uStrobe.value = this.strobeEnv * (post.safeFlash ? 0.35 : 0.85) * (1 - calm);
     // The gap before the drop: black while the music holds its breath (only dimmed with flashes tamed), the drop's
     // impact comes out of it
     this.gapEnv = frame.gap ? Math.min(1, this.gapEnv + dt * 30) : Math.max(0, this.gapEnv - dt * 14);
@@ -579,7 +588,8 @@ export class Compositor {
     // lifts, the claps flicker, the first beat of a drop's phrase hits harder. Full in a drop, light in a groove,
     // none in a breakdown (and the build has its own push); a second drop harder still.
     const sectionDose = frame.section === "drop" ? 1 : frame.section === "calm" ? 0.4 : 0;
-    const dose = (fx.accents ?? 0) * sectionDose * ((post.dropLevel ?? 1) >= 2 && frame.section === "drop" ? 1.3 : 1);
+    const dose =
+      (fx.accents ?? 0) * sectionDose * ((post.dropLevel ?? 1) >= 2 && frame.section === "drop" ? 1.3 : 1) * (1 - 0.7 * calm);
     this.kickEnv = frame.beat ? 1 : this.kickEnv * Math.exp(-dt * 9);
     this.snapEnv = frame.onset && !frame.beat && frame.mid > 0.5 ? 1 : this.snapEnv * Math.exp(-dt * 16);
     this.phraseEnv = frame.downbeat && frame.phraseBar === 0 && frame.section === "drop" ? 1 : this.phraseEnv * Math.exp(-dt * 4);
