@@ -57,8 +57,6 @@ export const PALETTES: Record<string, Palette> = {
   spores: P("Spores", "#07030D", ["#E7D6FF", "#A86BFF", "#FF5FC2", "#FFC46B"]),
   // Circuit: black glass drawn in light, cyan first, white hot
   piste: P("Piste", "#020309", ["#3FE8FF", "#2A5BFF", "#FFFFFF"]),
-  // the fairground's bulbs: amber, red, warm white on a blue night
-  foraine: P("Foraine", "#040614", ["#FFB347", "#FF3B2E", "#FFF1D6"]),
   // the old screens: phosphor green and amber
   phosphore: P("Phosphore", "#010402", ["#5CFF8A", "#1E7A3C", "#FFB000"]),
   // ---- legacy, vivid (kept for the "Classique" world)

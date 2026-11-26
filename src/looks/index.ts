@@ -471,9 +471,9 @@ export const LOOKS: Look[] = [
   {
     id: "circuit",
     name: "Circuit",
-    description: "La course du futur, sans fin : une piste de verre noir au-dessus d'une mégapole, une meute de bolides aux traînées de lumière, une fête foraine électrique, et la même course à travers les âges du jeu vidéo.",
+    description: "La course du futur, sans fin : une piste de verre noir au-dessus d'une mégapole, une meute de bolides aux traînées de lumière, la foule des gradins, les stands, et la même course à travers les âges du jeu vidéo.",
     swatch: ["#020309", "#3FE8FF", "#FF7A1F"],
-    palettes: ["piste", "foraine", "phosphore"],
+    palettes: ["piste", "phosphore"],
     // the light of the race: cyan, orange, magenta, acid green (a new one on every drop)
     tints: ["#3FE8FF", "#FF7A1F", "#FF2FB4", "#B6FF3B"],
     scenes: [
@@ -485,10 +485,6 @@ export const LOOKS: Look[] = [
       { id: "circuit-city", key: "extinction", label: "Extinction", weight: 2, role: "after", params: { palette: "piste", dark: true } },
       { id: "circuit-trails", weight: 2, role: "drop", params: { palette: "piste" } },
       { id: "circuit-trails", key: "pose", label: "Pose longue", weight: 2, role: "calm", params: { palette: "piste", top: true } },
-      { id: "circuit-bigtop", weight: 2, role: "drop", params: { palette: "foraine" } },
-      { id: "circuit-bigtop", key: "charge", label: "Charge", weight: 2, role: "build", params: { palette: "foraine", charge: true } },
-      { id: "circuit-ferris", weight: 2, role: "calm", params: { palette: "foraine" } },
-      { id: "circuit-ferris", key: "panne", label: "Panne", weight: 2, role: "after", params: { palette: "foraine", broken: true } },
       { id: "circuit-eras", weight: 2, role: "arc", params: { palette: "phosphore" } },
     ],
     // no background: every scene draws its own night
