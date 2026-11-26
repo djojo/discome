@@ -66,6 +66,7 @@ import { trails } from "./art/trails";
 import { eras } from "./art/eras";
 import { arena } from "./art/arena";
 import { pits } from "./art/pits";
+import { pilot } from "./art/pilot";
 
 /**
  * The scene library. To add a scene: create a file exporting a SceneDef
@@ -134,6 +135,7 @@ export const SCENES: SceneDef[] = [
   eras,
   arena,
   pits,
+  pilot,
   // Classics, recoloured by the worlds' palettes
   halo,
   kaleido,
