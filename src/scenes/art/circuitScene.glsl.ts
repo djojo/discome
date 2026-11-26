@@ -21,6 +21,9 @@ uniform float uRail;     // the rails' lights' offset (they race ahead through t
 uniform float uBoost;    // the drop's boost, fading
 uniform float uBurn;     // how hard the engines burn
 uniform vec3 uGantry;    // x: 0 the lap lights, 1 the start lights; y: how many are lit; z: the start lights' glow
+#ifdef CLEAR_ZONE
+uniform vec2 uClear;     // no towers between these s (a stadium stands there)
+#endif
 #ifdef TUBE
 uniform vec3 uTube;     // the tube: from s, to s, its radius
 #endif
@@ -128,6 +131,9 @@ float towersD(vec3 p) {
   // bounds: the next cell's tower (beyond the cell's edge), the other side's (beyond the track)
   float bound = min(TC * .5 - abs(-p.z - sc) + 30., abs(p.x - xc) + 18.);
   if (h1 < .3) return bound;
+#ifdef CLEAR_ZONE
+  if (sc > uClear.x && sc < uClear.y) return bound;
+#endif
   float w = 5. + 9. * h2;
   float top = -50. + 115. * h3;
   vec3 c = vec3(xc + side * (34. + 90. * fract(h1 * 7.3)), (top + CITY_Y) * .5, -sc);

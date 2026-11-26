@@ -64,6 +64,7 @@ import { tube } from "./art/tube";
 import { city } from "./art/city";
 import { trails } from "./art/trails";
 import { eras } from "./art/eras";
+import { arena } from "./art/arena";
 
 /**
  * The scene library. To add a scene: create a file exporting a SceneDef
@@ -130,6 +131,7 @@ export const SCENES: SceneDef[] = [
   city,
   trails,
   eras,
+  arena,
   // Classics, recoloured by the worlds' palettes
   halo,
   kaleido,
