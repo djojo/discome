@@ -480,6 +480,7 @@ export const LOOKS: Look[] = [
       { id: "circuit-track", weight: 3, role: "drop", params: { palette: "piste" } },
       { id: "circuit-track", key: "croisiere", label: "Croisière", weight: 2, role: "calm", params: { palette: "piste", cruise: true, speed: 0.7 } },
       { id: "circuit-grid", weight: 2, role: "arc", params: { palette: "piste" } },
+      { id: "circuit-tube", weight: 2, role: "arc", params: { palette: "piste" } },
     ],
     // no background: every scene draws its own night
     title: {

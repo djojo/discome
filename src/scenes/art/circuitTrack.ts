@@ -207,6 +207,45 @@ export class Racers {
     }
   }
 
+  /**
+   * Place racer i at s riding a wall round the track's axis (a tube): `at(s)` gives where it rides in the track's
+   * frame: [x, y, angle] (its belly at x, y; its up turned by `angle` toward the axis: 0 on the floor). Its trails
+   * follow it round.
+   */
+  placeAround(i: number, s: number, s0: number, at: (s: number) => [number, number, number], colour: number, trail: number, from = -Infinity) {
+    const [x, y, a] = at(s);
+    const f = trackFrame(s, s0, this.frame);
+    trackPoint(s, s0, x, y, null, this.tmp);
+    this.pos[i].set(this.tmp.x, this.tmp.y, this.tmp.z, colour);
+    this.fwd[i].copy(f.fwd);
+    this.localUp(s, a, this.up[i]);
+    this.right[i].crossVectors(this.fwd[i], this.up[i]).normalize();
+    this.up[i].crossVectors(this.right[i], this.fwd[i]).normalize();
+    const tail = Math.max(0, Math.min(trail, s - 1.05 - from));
+    for (let k = 0; k < TRAIL_PTS; k++) {
+      const ts = s - 1.05 - (tail * k) / (TRAIL_PTS - 1);
+      const [tx, ty, ta] = at(ts);
+      // the pods: across the racer (turned with it round the axis), a little above its belly
+      const cx = Math.cos(ta);
+      const sx = Math.sin(ta);
+      const ux = -sx * 0.12;
+      const uy = cx * 0.12;
+      trackPoint(ts, s0, tx - 0.46 * cx + ux, ty - 0.46 * sx + uy, null, this.trailL[i * TRAIL_PTS + k]);
+      trackPoint(ts, s0, tx + 0.46 * cx + ux, ty + 0.46 * sx + uy, null, this.trailR[i * TRAIL_PTS + k]);
+    }
+  }
+
+  /** The direction (world) of a local up turned by `a` toward the track's axis, at s. */
+  private localUp(s: number, a: number, out: THREE.Vector3) {
+    const r = trackRoll(s);
+    const c = Math.cos(r);
+    const sn = Math.sin(r);
+    // local axes in the world: ex = (c, -sn), ey = (sn, c); up = -sin(a) ex + cos(a) ey
+    const lx = -Math.sin(a);
+    const ly = Math.cos(a);
+    return out.set(c * lx + sn * ly, -sn * lx + c * ly, 0).normalize();
+  }
+
   /** The racers' uniforms. */
   uniforms() {
     return {

@@ -21,6 +21,9 @@ uniform float uRail;     // the rails' lights' offset (they race ahead through t
 uniform float uBoost;    // the drop's boost, fading
 uniform float uBurn;     // how hard the engines burn
 uniform vec3 uGantry;    // x: 0 the lap lights, 1 the start lights; y: how many are lit; z: the start lights' glow
+#ifdef TUBE
+uniform vec3 uTube;     // the tube: from s, to s, its radius
+#endif
 #ifdef TITLE_SIGN
 uniform float uTitle;    // the night's title on the gantry
 uniform float uTitleT;   // since when it is lit
@@ -54,6 +57,18 @@ vec3 signBox() {
 float trackD(vec3 p) {
   vec3 q = toTrack(p);
   gTq = q;
+#ifdef TUBE
+  if (q.z > uTube.x && q.z < uTube.y) {
+    // inside the tube's span: no deck, the rings of light round the tube, and a heavier one at its mouth
+    vec2 qq = vec2(q.x, q.y - uTube.z);
+    float r = length(qq);
+    float ds = mod(q.z + 7., 14.) - 7.;
+    float ring = length(vec2(r - uTube.z - .08, ds)) - .07;
+    float mouth = length(vec2(r - uTube.z - .2, q.z - uTube.y + .3)) - .25;
+    gMat = 8.;
+    return min(ring, mouth);
+  }
+#endif
   float deck = max(abs(q.x) - TRACK_W, abs(q.y + .3) - .3);
   float rail = max(abs(abs(q.x) - TRACK_W + .12) - .12, abs(q.y - .09) - .09);
   float d = min(deck, rail);
@@ -320,6 +335,54 @@ vec3 signColor(vec3 q, vec3 n, vec3 rd, float fw) {
 }
 #endif
 
+/** The light of a hit (gMat, gTq set by the march at p). */
+vec3 shadeHit(vec3 p, vec3 rd, float t, float pa) {
+  vec3 c;
+  if (gMat > 5.5 && gMat < 6.5) {
+    towersD(p);
+    c = towerColor(p, rd, t, pa);
+  } else if (gMat > 4.5 && gMat < 5.5) {
+    // a racer
+    int i = int(gRacer + .5);
+    vec4 rp = uRacerP[i];
+    vec3 R = uRacerR[i], U = uRacerU[i], F = uRacerF[i];
+    vec3 o = p - rp.xyz;
+    vec3 cp = vec3(dot(o, R), dot(o, U), dot(o, F));
+    const vec2 k = vec2(1, -1);
+    const float e = .004;
+    vec3 nl = normalize(k.xyy * craftD(cp + k.xyy * e) + k.yyx * craftD(cp + k.yyx * e) + k.yxy * craftD(cp + k.yxy * e) + k.xxx * craftD(cp + k.xxx * e));
+    vec3 rdl = vec3(dot(rd, R), dot(rd, U), dot(rd, F));
+    c = craftColor(cp, nl, rdl, racerCol(rp.w), uBurn, t * pa);
+  } else {
+    float m = gMat;
+    vec3 q = gTq;
+    vec3 n = nrmTrack(p, max(m < .5 ? .01 : .004, t * pa * 2.));
+    float fw = t * pa / max(abs(dot(n, rd)), .1);
+    float waveK = exp(-pow((q.z - uWave.x) / 8., 2.)) * uWave.y;
+    if (m < .5) c = deckColor(p, q, n, rd, t, pa);
+    else if (m < 1.5) c = railColor(q, n, rd, t, pa);
+    else if (m < 2.5) {
+      // the deck's edge and underside: dark, a line of light under its centre, the levitation's emitters
+      c = vec3(.004) + glassEnv(reflect(rd, n)) * fresnel(n, rd) * .5;
+      c += uTint * neon(abs(abs(q.x) - TRACK_W), .03, fw) * smoothstep(-.2, -.5, q.y) * .6;
+      float em = mod(q.z + 10., 20.) - 10.;
+      c += uTint * halo(length(vec2(q.x, em)), .6) * step(q.y, -.55) * (.5 + uBoost);
+    } else if (m < 3.5 || m > 7.5) {
+      // a hoop, or a ring of the tube: a tube of light, flashing as the wave runs through it
+      float face = pow(abs(dot(n, rd)), 1.5);
+      c = mix(uTint, vec3(1.), .3 * face) * (.25 + 1.4 * face) * (1. + 3. * waveK + 2. * uBoost);
+      // the tube's rings far down it fade, or they tangle into a knot where it curves away
+      if (m > 7.5) c *= .12 + .88 * exp(-t / 110.);
+    } else if (m < 4.5) c = gantryColor(q, n, rd, fw);
+#ifdef TITLE_SIGN
+    else c = signColor(q, n, rd, fw);
+#else
+    else c = vec3(0.);
+#endif
+  }
+  return c;
+}
+
 /** Everything a ray sees: the march, the shading, the city, the trails. */
 vec3 renderTrack(vec3 ro, vec3 rd, float pa) {
   float t = .05;
@@ -336,49 +399,8 @@ vec3 renderTrack(vec3 ro, vec3 rd, float pa) {
   col = mix(col, city.rgb, city.a);
   float tEnd = 1e4;
   if (hit) {
-    vec3 p = ro + rd * t;
     tEnd = t;
-    vec3 c;
-    if (gMat > 5.5 && gMat < 6.5) {
-      towersD(p);
-      c = towerColor(p, rd, t, pa);
-    } else if (gMat > 4.5 && gMat < 5.5) {
-      // a racer
-      int i = int(gRacer + .5);
-      vec4 rp = uRacerP[i];
-      vec3 R = uRacerR[i], U = uRacerU[i], F = uRacerF[i];
-      vec3 o = p - rp.xyz;
-      vec3 cp = vec3(dot(o, R), dot(o, U), dot(o, F));
-      const vec2 k = vec2(1, -1);
-      const float e = .004;
-      vec3 nl = normalize(k.xyy * craftD(cp + k.xyy * e) + k.yyx * craftD(cp + k.yyx * e) + k.yxy * craftD(cp + k.yxy * e) + k.xxx * craftD(cp + k.xxx * e));
-      vec3 rdl = vec3(dot(rd, R), dot(rd, U), dot(rd, F));
-      c = craftColor(cp, nl, rdl, racerCol(rp.w), uBurn, t * pa);
-    } else {
-      float m = gMat;
-      vec3 q = gTq;
-      vec3 n = nrmTrack(p, max(m < .5 ? .01 : .004, t * pa * 2.));
-      float fw = t * pa / max(abs(dot(n, rd)), .1);
-      if (m < .5) c = deckColor(p, q, n, rd, t, pa);
-      else if (m < 1.5) c = railColor(q, n, rd, t, pa);
-      else if (m < 2.5) {
-        // the deck's edge and underside: dark, a line of light under its centre, the levitation's emitters
-        c = vec3(.004) + glassEnv(reflect(rd, n)) * fresnel(n, rd) * .5;
-        c += uTint * neon(abs(abs(q.x) - TRACK_W), .03, fw) * smoothstep(-.2, -.5, q.y) * .6;
-        float em = mod(q.z + 10., 20.) - 10.;
-        c += uTint * halo(length(vec2(q.x, em)), .6) * step(q.y, -.55) * (.5 + uBoost);
-      } else if (m < 3.5) {
-        // a hoop: a tube of light, flashing as the wave runs through it
-        float waveK = exp(-pow((q.z - uWave.x) / 8., 2.)) * uWave.y;
-        float face = pow(abs(dot(n, rd)), 1.5);
-        c = mix(uTint, vec3(1.), .3 * face) * (.25 + 1.4 * face) * (1. + 3. * waveK + 2. * uBoost);
-      } else if (m < 4.5) c = gantryColor(q, n, rd, fw);
-#ifdef TITLE_SIGN
-      else c = signColor(q, n, rd, fw);
-#else
-      else c = vec3(0.);
-#endif
-    }
+    vec3 c = shadeHit(ro + rd * t, rd, t, pa);
     // far off, everything melts into the night
     col = mix(c, col, smoothstep(320., 650., t));
   }

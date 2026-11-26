@@ -60,6 +60,7 @@ import { den } from "./art/den";
 import { visions } from "./art/visions";
 import { race } from "./art/race";
 import { grid } from "./art/grid";
+import { tube } from "./art/tube";
 
 /**
  * The scene library. To add a scene: create a file exporting a SceneDef
@@ -122,6 +123,7 @@ export const SCENES: SceneDef[] = [
   // Circuit
   race,
   grid,
+  tube,
   // Classics, recoloured by the worlds' palettes
   halo,
   kaleido,
