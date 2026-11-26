@@ -469,12 +469,39 @@ export const LOOKS: Look[] = [
     director: "chill",
   },
   {
+    id: "circuit",
+    name: "Circuit",
+    description: "La course du futur, sans fin : une piste de verre noir au-dessus d'une mégapole, une meute de bolides aux traînées de lumière, une fête foraine électrique, et la même course à travers les âges du jeu vidéo.",
+    swatch: ["#020309", "#3FE8FF", "#FF7A1F"],
+    palettes: ["piste", "foraine", "phosphore"],
+    // the light of the race: cyan, orange, magenta, acid green (a new one on every drop)
+    tints: ["#3FE8FF", "#FF7A1F", "#FF2FB4", "#B6FF3B"],
+    scenes: [
+      { id: "circuit-track", weight: 3, role: "drop", params: { palette: "piste" } },
+      { id: "circuit-track", key: "croisiere", label: "Croisière", weight: 2, role: "calm", params: { palette: "piste", cruise: true, speed: 0.7 } },
+    ],
+    // no background: every scene draws its own night
+    fx: {
+      grain: 0.08,
+      vignette: 0.35,
+      bloom: 0.6,
+      trails: 0.18,
+      chroma: 0.12,
+      saturation: 1.1,
+      contrast: 1.08,
+      accents: 0.8,
+      speedBlur: 0.8,
+    },
+    transitions: { calm: ["fade", "luma", "dip"], drop: ["flash", "glitch", "punch"] },
+    director: "club",
+  },
+  {
     id: "classique",
     name: "Classique",
     description: "Les premières scènes et leurs couleurs vives, hors rotation des mondes.",
     swatch: ["#ff3cac", "#a855f7", "#22d3ee"],
     palettes: ["acid", "neon", "sunset", "ocean", "ice", "fire", "chrome", "vhs"],
-    scenes: SCENES.filter((s) => !["porcelain", "metamorphosis", "faithful", "torrent", "panopticon", "collective", "warehouse", "downpour", "pilgrimage", "mercury-beads", "mercury-wave", "mercury-blend", "mercury-flow", "mercury-melt", "flesh-morph", "flesh-radiolaria", "flesh-jelly", "canyon-cactus", "canyon-spirit", "canyon-vision", "topo-head", "profile-head", "halftone-head", "mercury", "cathedral", "monolith", "canyon-gorge", "canyon-mesas", "arcane-architect", "arcane-nomad", "arcane-prism", "arcane-portal", "arcane-road", "grimoire", "flesh", "flesh-skin", "signal", "museum", "rose", "organ", "kintsugi", "series", "wheel", "swirl", "myc-forest", "myc-grotto", "myc-giants", "myc-fall", "myc-maze", "myc-den", "myc-mirror", "myc-visions"].includes(s.id)).map((s) => ({ id: s.id, weight: 1 })),
+    scenes: SCENES.filter((s) => !["porcelain", "metamorphosis", "faithful", "torrent", "panopticon", "collective", "warehouse", "downpour", "pilgrimage", "mercury-beads", "mercury-wave", "mercury-blend", "mercury-flow", "mercury-melt", "flesh-morph", "flesh-radiolaria", "flesh-jelly", "canyon-cactus", "canyon-spirit", "canyon-vision", "topo-head", "profile-head", "halftone-head", "mercury", "cathedral", "monolith", "canyon-gorge", "canyon-mesas", "arcane-architect", "arcane-nomad", "arcane-prism", "arcane-portal", "arcane-road", "grimoire", "flesh", "flesh-skin", "signal", "museum", "rose", "organ", "kintsugi", "series", "wheel", "swirl", "myc-forest", "myc-grotto", "myc-giants", "myc-fall", "myc-maze", "myc-den", "myc-mirror", "myc-visions"].includes(s.id) && !s.id.startsWith("circuit-")).map((s) => ({ id: s.id, weight: 1 })),
     fx: {},
     classic: true,
   },
@@ -585,7 +612,7 @@ export function pickShot(shots: Shot[], avoid: (string | null)[] = []): Shot | n
 
 /** The art-directed worlds that take turns when "Enchaîner les mondes" is on. */
 /** The rotation alternates nature and machine: the cut between two worlds says something on its own. */
-const ROTATION_ORDER = ["porcelaine", "canyon", "monolithe", "chair", "signal", "bestiaire", "mercure", "mycelium", "arcanes", "cathedrale"];
+const ROTATION_ORDER = ["porcelaine", "canyon", "monolithe", "chair", "signal", "bestiaire", "mercure", "mycelium", "circuit", "arcanes", "cathedrale"];
 export const ROTATION = [
   ...ROTATION_ORDER.filter((id) => LOOKS.some((l) => l.id === id && !l.classic)),
   ...LOOKS.filter((l) => !l.classic && !ROTATION_ORDER.includes(l.id)).map((l) => l.id),
