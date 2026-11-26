@@ -3,6 +3,7 @@ import { paletteParam } from "../palettes";
 import { num } from "../utils";
 import { ART_LIB } from "./lib.glsl";
 import { MYCELIUM_GLSL } from "./mycelium.glsl";
+import { tripUniforms, updateTrip } from "./mycTrip";
 
 const smooth = (a: number, b: number, x: number) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
@@ -32,6 +33,7 @@ export const fall = defineShaderScene({
     "La chute dans le terrier : un puits de terre sans fin, ses strates qui défilent, des racines, des pierres et du mycélium lumineux ; de vieux objets flottent en tournant (une montre, une clé, une petite porte, un flacon). La chute accélère pendant la montée ; au drop, le puits s'ouvre sur une caverne immense pleine de champignons lumineux et la chute ralentit.",
   params: [paletteParam("boismort"), { type: "range", key: "pace", label: "Vitesse de chute", min: 0.3, max: 2, step: 0.05, default: 1 }],
   uniforms: () => ({
+    ...tripUniforms(),
     uFall: { value: 0 },
     uSpeed: { value: 2 },
     uSpin: { value: 0 },
@@ -45,6 +47,7 @@ export const fall = defineShaderScene({
   }),
   motion: (u) => Math.min(1, Math.max(0, ((u.uSpeed.value as number) - 4) / 10)),
   update(u, f, p, dt) {
+    updateTrip(u, f, dt);
     // Back on screen: at the top of the shaft again
     if (f.time - (u.uLast.value as number) > 1.5) {
       u.uFall.value = 0;
@@ -105,7 +108,8 @@ vec2 axisAt(float y) { return vec2(1.3 * sin(y * .035) + .5 * sin(y * .091 + 1.7
 /** The shaft's radius at height y, angle a: lumpy earth. */
 float radiusAt(float y, float a) {
   vec3 q = vec3(cos(a) * 2., y * .35, sin(a) * 2.);
-  return R0 + .35 * vnoise(q) + .14 * vnoise(q * 3.1);
+  // (the trip: the shaft breathes, a swell running down it)
+  return R0 + .35 * vnoise(q) + .14 * vnoise(q * 3.1) + uTrip * (.18 * uBreath + .14 * sin(y * .6 - uTime * 1.8 + a * 2.));
 }
 
 /** The things floating in the shaft: k-th, at y_k; its place (offset from the axis) and kind. */
@@ -296,11 +300,14 @@ vec3 nrm(vec3 p, float e) {
 
 /** The earth's strata at height y: dark soil, red clay, pale chalk, in uneven layers. */
 vec3 strata(float y, float a) {
-  float s = y * .9 + .8 * vnoise(vec3(a * 2., y * .2, 1.));
+  // (the trip: the strata twist into a slow spiral and flow down)
+  float s = y * .9 + .8 * vnoise(vec3(a * 2., y * .2, 1.)) + uTrip * (a * 1.6 + uTime * .5);
   float b = fract(s * .37);
   vec3 soil = vec3(.05, .035, .025), clay = vec3(.12, .055, .035), chalk = vec3(.2, .18, .15);
   vec3 c = b < .5 ? soil : b < .78 ? clay : chalk;
-  return c * (.7 + .5 * vnoise(vec3(a * 9., y * 3., 4.)));
+  c *= .7 + .5 * vnoise(vec3(a * 9., y * 3., 4.));
+  // their colours change with the depth as the trip deepens
+  return mix(c, tripPal(fract(s * .37) * .5 + y * .01) * (.12 + .1 * b), .55 * uTrip);
 }
 
 void main() {
@@ -333,7 +340,7 @@ void main() {
   float flash = uSafe > .5 ? .3 : 1.;
   vec3 col = vec3(0.);
   // light: a cold glow from far above (the hole's mouth), fading as the camera falls
-  vec3 skyL = mix(uInk, vec3(.7, .8, 1.), .4) * (.15 + .5 * exp(-uFall * .02));
+  vec3 skyL = enchant(mix(uInk, vec3(.7, .8, 1.), .4)) * (.15 + .5 * exp(-uFall * .02));
   if (hit) {
     vec3 p = ro + rd * t;
     map(p);
@@ -352,12 +359,15 @@ void main() {
       // the mycelium in veins running down the walls (wavering, broken), and specks of glowing fungus
       float u = a * R0 * 2. + .9 * vnoise(vec3(a * R0 * .7, p.y * .25, 3.));
       float th = mycLine(abs(fract(u) - .5) * .5, .006, fwid) * smoothstep(.55, .75, vnoise(vec3(a * R0 * 2., p.y * 1.1, 9.)));
-      emit += glowC * th * (.25 + 4. * pulse);
+      emit += mix(glowC, tripPal(p.y * .05 + uTime * .05), uTrip) * th * (.25 + 4. * pulse);
+      // living patterns flowing down the walls
+      vec2 tf = tripFlow(vec2(a * R0, p.y * .7), fwid);
+      emit += tripPal(tf.y) * tf.x * (.15 + 1.5 * uTrip);
       vec2 g = floor(vec2(a * R0 * 3., p.y * 3.));
       float hs = hash12(g + 3.1);
       if (hs > .93) {
         vec2 lc = fract(vec2(a * R0 * 3., p.y * 3.)) - .5;
-        emit += glowC * 1.5 * exp(-dot(lc, lc) * 40.) * (.6 + .8 * uHat * fract(hs * 9.));
+        emit += mix(glowC, tripPal(hs * 3.), uTrip) * 1.5 * exp(-dot(lc, lc) * 40.) * (.6 + .8 * uHat * fract(hs * 9.));
       }
     } else if (mat < 1.5) {
       alb = vec3(.06, .045, .035);
@@ -366,7 +376,7 @@ void main() {
     } else if (mat < 3.5) {
       // old things: brass (the watch, the key), dark wood (the door), glass with a glowing drink (the bottle)
       if (kind < 1.5) {
-        alb = vec3(.55, .38, .14);
+        alb = mix(vec3(.55, .38, .14), iridescence(dot(n, -rd), uTime * .1) * .5, .6 * uTrip);
         vec3 rf = reflect(rd, n);
         emit += vec3(.9, .7, .35) * pow(max(dot(rf, vec3(0., 1., 0.)), 0.), 6.) * .5 + glowC * .25 * max(-rf.y, 0.);
       } else if (kind < 2.5) {
@@ -389,6 +399,8 @@ void main() {
       float Rc = 2.5 + 2.5 * fract(h * 9.1);
       float k = clamp(length(p.xz - c * 18. - o) / Rc, 0., 1.);
       vec3 gc = mix(glowC, pal(fract(h + .2 + k * .3)) * .6, .3);
+      // (the trip: waves of the enchanted colours roll through the giants, from one to the next)
+      gc = mix(gc, tripPal(length(c) * .07 - uTime * .08 + k * .3), .75 * uTrip);
       alb = vec3(.02, .018, .022);
       emit += gc * (.03 + 1.1 * pow(k, 4.) + 1.3 * smoothstep(.2, -.6, n.y)) * (1. + .6 * pulse);
     }
@@ -398,7 +410,8 @@ void main() {
       float vein = cavNet(p.xz, fwid);
       float th = mycThreads(p.xz * .6, fwid * .6);
       float ring = uBurst < 99. ? exp(-pow((length(p.xz - ro.xz) - uBurst * 9.) / 5., 2.)) * exp(-uBurst * .1) * flash : 0.;
-      emit += glowC * (vein * (.8 + 3. * pulse + 6. * ring) + th * .4 + .01);
+      vec3 vc = mix(glowC, tripPal(length(p.xz - ro.xz) * .01 - uTime * .1), .8 * uTrip);
+      emit += vc * (vein * (.8 + 3. * pulse + 6. * ring) + th * .4 + .01);
     }
     // the light: a cold glow from above, and a soft light falling with the camera (the walls rushing past)
     vec3 lv = ro + fw * .6 - p;

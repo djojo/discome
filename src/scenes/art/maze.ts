@@ -4,6 +4,7 @@ import { paletteParam } from "../palettes";
 import { num } from "../utils";
 import { ART_LIB } from "./lib.glsl";
 import { MYCELIUM_GLSL } from "./mycelium.glsl";
+import { tripUniforms, updateTrip } from "./mycTrip";
 
 const smooth = (a: number, b: number, x: number) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
@@ -77,6 +78,7 @@ export const maze = defineShaderScene({
     { type: "range", key: "mist", label: "Brume", min: 0, max: 2, step: 0.05, default: 1 },
   ],
   uniforms: () => ({
+    ...tripUniforms(),
     uEye: { value: new THREE.Vector3(0, EYE, 0) },
     uLook: { value: new THREE.Vector3(0, EYE, 1) },
     uMaze: { value: 1 },
@@ -96,6 +98,7 @@ export const maze = defineShaderScene({
     uLast: { value: -1 },
   }),
   update(u, f, p, dt) {
+    updateTrip(u, f, dt);
     const bar = f.bpm > 0 ? 240 / f.bpm : 2;
     // Back on screen (a new seed): a new maze, from its first cell, no drop in progress
     let walk = u.uWalk.value as Walk | null;
@@ -224,6 +227,8 @@ float map(vec3 p) {
   if (d < .5) {
     vec3 q = mat3(.8, .36, -.48, -.6, .48, -.64, 0., .8, .6) * p;
     d -= .07 * (vnoise(q * 3.3) - .5) + .035 * (vnoise(q * 9.1 + 4.) - .5);
+    // the trip: the hedges breathe, a slow swell running along them
+    d -= uTrip * (.05 * uBreath + .05 * sin(p.y * 1.7 - uTime * 1.4 + (p.x + p.z) * .4));
   }
   vec2 l = mod(p.xz, C);
   float border = min(min(l.x, C - l.x), min(l.y, C - l.y));
@@ -267,7 +272,7 @@ void main() {
   vec2 uv = (fc - .5 * uRes) / uRes.y;
   gSeed = uint(uMaze);
   gMd = normalize(vec3(.45 + .3 * fract(uMaze * .013), .42, .8));
-  vec3 moonC = mix(uInk, vec3(.8, .88, 1.), .4) * uDim;
+  vec3 moonC = enchant(mix(uInk, vec3(.8, .88, 1.), .4)) * uDim;
   vec3 glowC = uTint * uTint * 1.3;
   vec3 ro = uEye;
   // (a wide lens in the alleys; wider still up above: the maze below and the horizon)
@@ -351,14 +356,22 @@ void main() {
       alb = mix(alb, vec3(.08, .14, .08), top);
       float th = mycThreads(vec2(p.x + p.z, p.y * .35) * 1.6, fw) * smoothstep(.7, 0., p.y);
       emit += glowC * th * (.12 + 2.5 * pulse + 2. * passed + 3. * wave);
+      // the leaves iridescent, and living patterns flowing over the hedge
+      emit += iridescence(dot(n, -rd), (p.x + p.z) * .1 + uTime * .05) * glint * .05 * uTrip;
+      vec2 tf = tripFlow(vec2(p.x + p.z, p.y), fw);
+      // (the hedges fill the frame: the patterns come late, barely there on the groove)
+      emit += tripPal(tf.y) * tf.x * (.03 + 1.25 * uTrip * uTrip);
       // (far below, the tops read flat: a little lighter, the moon on them)
       if (flatFar) alb = vec3(.07, .12, .07) * (.7 + .6 * vnoise(vec3(p.xz * 2., 3.)));
+      // up above: the tops ripple with colour waves running out from under the camera
+      if (p.y > uHedge - .3) emit += tripPal(rg * .025 - uTime * .15) * (.5 + .5 * sin(rg * .35 - uTime * 2.)) * .05 * uTrip * uRise;
     } else {
       // the alleys' floor: moss and gravel, the strand of mycelium along the middle
       float m = vnoise(vec3(p.xz * 4., 1.)) * .6 + vnoise(vec3(p.xz * 13., 5.)) * .4;
       alb = mix(vec3(.05, .055, .04), vec3(.1, .1, .08), m);
       float line = mycLine(alleys(p.xz), .025, fw);
-      emit += glowC * line * (.35 + 4. * pulse + 3. * passed + 5. * wave);
+      vec3 lc = mix(glowC, tripPal(rg * .03 - uTime * .2), .25 + .7 * uTrip);
+      emit += lc * line * (.35 + 4. * pulse + 3. * passed + 5. * wave + 2. * uTrip * uRise);
       emit += glowC * mycThreads(p.xz * 1.5, fw * 1.5) * (.04 + 1.2 * pulse);
       sh = tHit < 40. ? softShadow(p + vec3(0., .02, 0.), gMd) : .5;
     }
@@ -366,7 +379,8 @@ void main() {
       // a far alley, seen flat: dark between the tops, its strand of light
       float line = mycLine(alleys(p.xz), .025, fw);
       alb = vec3(.015, .02, .015);
-      emit = glowC * line * (.35 + 4. * pulse + 3. * passed + 5. * wave);
+      vec3 lc = mix(glowC, tripPal(rg * .03 - uTime * .2), .25 + .7 * uTrip);
+      emit = lc * line * (.35 + 4. * pulse + 3. * passed + 5. * wave + 2. * uTrip * uRise);
     }
     float dif = max(dot(n, gMd), 0.);
     // the moon, and the sky's light from above (the alleys' floors darker than the hedges' tops)
@@ -377,7 +391,7 @@ void main() {
     // deep among the hedges: their dark mass
     col = vec3(.008, .014, .009) * uDim;
   } else {
-    col = mycSky(rd, gMd, moonC, pa) + moonC * 2.2 * mycMoon(rd, gMd, .05, pa);
+    col = mycSky(rd, gMd, moonC, pa) + moonC * 2.2 * mycMoon(rd, gMd, .05, pa) + aurora(rd);
   }
 
   // the mist: lying in the alleys (thick below a metre and a half), lit by the moon and the strands under it

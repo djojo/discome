@@ -5,6 +5,7 @@ import { ART_LIB } from "./lib.glsl";
 import { CAMERA_GLSL, type Framing } from "./camera";
 import { HEAD_GLSL, headUniforms, setHead, TITLE_HEAD } from "./heads";
 import { MYCELIUM_GLSL } from "./mycelium.glsl";
+import { tripUniforms, updateTrip } from "./mycTrip";
 
 const approach = (cur: number, target: number, rate: number, dt: number) => cur + (target - cur) * (1 - Math.exp(-dt * rate));
 
@@ -57,6 +58,7 @@ export const grotto = defineShaderScene({
     },
   ],
   uniforms: () => ({
+    ...tripUniforms(),
     uDrops: { value: Array.from({ length: DROPS }, () => new THREE.Vector4(0, 0, 99, 0)) },
     uDropI: { value: 0 },
     uBoat: { value: new THREE.Vector3(5, -13, 0.4) },
@@ -70,6 +72,7 @@ export const grotto = defineShaderScene({
     ...headUniforms(),
   }),
   update(u, f, p, dt, ctx) {
+    updateTrip(u, f, dt);
     if (f.time - (u.uLast.value as number) > 1.5) {
       u.uBurst.value = 99;
       u.uTitleT.value = 0;
@@ -161,7 +164,9 @@ float map(vec3 p) {
     vec2 o = (vec2(h, fract(h * 7.3)) - .5) * 1.6;
     float L = 1.2 + 3.3 * fract(h * 3.1);
     float yc = ceilY(sc * 3.5 + o);
-    float st = sdTaper(vec3(sl.x, p.y, sl.y), vec3(o.x, yc + 1., o.y), vec3(o.x, yc - L, o.y), .25 + .35 * fract(h * 5.7), .01) * .9;
+    // (the trip: they breathe)
+    float sr = (.25 + .35 * fract(h * 5.7)) * (1. + uTrip * (.1 * uBreath + .1 * sin(p.y * 2. - uTime * 1.5 + h * 9.)));
+    float st = sdTaper(vec3(sl.x, p.y, sl.y), vec3(o.x, yc + 1., o.y), vec3(o.x, yc - L, o.y), sr, .01) * .85;
     st = min(st, 1.75 - max(abs(sl.x), abs(sl.y)) + .3);
     if (h < .7 && st < d) { d = st; gMat = 2.; }
     else d = min(d, 1.75 - max(abs(sl.x), abs(sl.y)) + .3);
@@ -209,6 +214,19 @@ float march(vec3 ro, vec3 rd, float tmax, float pa, int steps) {
   return -1.;
 }
 
+/**
+ * The glowworms' colour at (x, z): their blue, and as the trip deepens slow waves of the enchanted colours drifting
+ * across the vault like a galaxy turning; on the drop, a wave of colour runs out across it.
+ */
+vec3 gwC(vec2 xz) {
+  vec3 c = mix(uInk, tripPal(xz.x * .025 + xz.y * .018 + uTime * .03), .2 + .65 * uTrip);
+  if (uBurst < 10.) {
+    float r = length(xz - vec2(0., -12.));
+    c += tripPal(r * .05 + .3) * 1.5 * exp(-pow((r - uBurst * 7.) / 3., 2.)) * exp(-uBurst * .3) * (uSafe > .5 ? .35 : 1.);
+  }
+  return c;
+}
+
 /** The glowworms' threads hanging under the vault near where the ray meets it (h): their light. */
 vec3 threads(vec3 ro, vec3 rd, vec3 h, float pa) {
   vec3 acc = vec3(0.);
@@ -220,6 +238,8 @@ vec3 threads(vec3 ro, vec3 rd, vec3 h, float pa) {
       float hs = hash12(c + 5.5);
       if (hs > .6) continue;
       vec2 o = (c + .2 + .6 * vec2(hs, fract(hs * 13.7))) * G;
+      // they sway (more as the trip deepens)
+      o += vec2(sin(uTime * .7 + hs * 20.), cos(uTime * .6 + hs * 13.)) * .03 * (.3 + uTrip);
       float top = ceilY(o);
       float L = .2 + 1.1 * fract(hs * 7.1);
       // the ray's closest approach to the vertical thread at o
@@ -237,9 +257,9 @@ vec3 threads(vec3 ro, vec3 rd, vec3 h, float pa) {
       float k = (top - y) / L;
       float bead = .35 + .65 * smoothstep(.6, 1., sin(y * 38. + hs * 20.)) + 1.5 * smoothstep(.9, 1., k);
       float tw = .7 + .5 * sin(uTime * (1.3 + 2. * hs) + hs * 50.) * (.5 + .5 * uHat);
-      acc += (.006 * .006) / (r * r) * exp(-dd * dd / (r * r)) * bead * tw;
+      acc += gwC(o) * (.006 * .006) / (r * r) * exp(-dd * dd / (r * r)) * bead * tw;
     }
-  return acc * uInk * 9.;
+  return acc * 9.;
 }
 
 /** The night's title on the cliff, in threads of glowing mycelium growing into its letters: its light at p. */
@@ -284,7 +304,7 @@ vec3 shade(vec3 ro, vec3 rd, float t, float pa) {
       if (hs > .35) {
         vec3 lc = gq - gi - .2 - .6 * vec3(hs, fract(hs * 9.1), fract(hs * 5.3));
         float r = max(.14, fw * 6. * .8);
-        col += uInk * (.0196 / (r * r)) * exp(-dot(lc, lc) / (r * r)) * (.7 + .5 * sin(uTime * (1. + 3. * hs) + hs * 40.) * (.5 + .5 * uHat)) * gwK * 9.;
+        col += gwC(p.xz) * (.0196 / (r * r)) * exp(-dot(lc, lc) / (r * r)) * (.7 + .5 * sin(uTime * (1. + 3. * hs) + hs * 40.) * (.5 + .5 * uHat)) * gwK * 9.;
       }
       if (n.y < -.3 && p.y > 9.) col += threads(ro, rd, p, pa);
     }
@@ -346,6 +366,8 @@ void main() {
       g += dv / max(r, 1e-3) * cos(x * 26.) * amp * .25;
       ringL += amp * smoothstep(.0, .05, x + .05);
     }
+    // the trip: slow swells run over the lake, its reflections ripple
+    g += uTrip * .03 * vec2(sin(p.x * .8 + uTime * .9 + sin(p.z * .5)), cos(p.z * .7 - uTime * .8 + sin(p.x * .4)));
     vec3 n = normalize(vec3(-g.x, 1., -g.y));
     vec3 rr = reflect(rd, n);
     vec3 ro2 = p + n * .01;
@@ -353,6 +375,8 @@ void main() {
     vec3 refl = t2 > 0. ? shade(ro2, rr, t2, pa) : vec3(0.);
     float F = .04 + .96 * pow(1. - max(dot(-rd, n), 0.), 5.);
     col = refl * mix(.55, 1., F) + uInk * .004;
+    // a rainbow sheen on the water as the trip deepens
+    col *= mix(vec3(1.), .6 + .8 * iridescence(dot(-rd, n), p.x * .05 + uTime * .04), .35 * uTrip);
     col += uInk * ringL * .02;
     tHit = tW;
   } else {

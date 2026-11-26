@@ -4,6 +4,7 @@ import { paletteParam } from "../palettes";
 import { ART_LIB } from "./lib.glsl";
 import { CAMERA_GLSL, type Framing } from "./camera";
 import { MYCELIUM_GLSL } from "./mycelium.glsl";
+import { tripUniforms, updateTrip } from "./mycTrip";
 
 const smooth = (a: number, b: number, x: number) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
@@ -41,6 +42,7 @@ export const mirror = defineShaderScene({
     "« De l'autre côté » : un étang immobile dans une forêt morte, grise et givrée ; son reflet montre la même forêt vivante, fleurie, lumineuse. Au kick une goutte trouble les deux mondes ; au drop la surface se brise et la couleur du reflet déborde dans la vraie forêt.",
   params: [paletteParam("boismort")],
   uniforms: () => ({
+    ...tripUniforms(),
     uDrops: { value: Array.from({ length: DROPS }, () => new THREE.Vector4(0, 0, 99, 0)) },
     uDropI: { value: 0 },
     uBurst: { value: 99 },
@@ -49,6 +51,7 @@ export const mirror = defineShaderScene({
     uLast: { value: -99 },
   }),
   update(u, f, _p, dt, ctx) {
+    updateTrip(u, f, dt);
     const bar = f.bpm > 0 ? 240 / f.bpm : 2;
     if (f.time - (u.uLast.value as number) > 1.5) {
       u.uBurst.value = 99;
@@ -110,6 +113,8 @@ float tree(vec3 p, vec4 t, float alive, out float mat) {
   float H = t.z;
   vec2 ax = vec2(.25 * sin(l.y * .4 + t.w * 9.), .2 * cos(l.y * .33 + t.w * 5.)) * smoothstep(0., 3., l.y);
   float r = (.32 + .12 * t.w) * (1. - .75 * smoothstep(0., H, l.y)) * (1. + .6 * exp(-l.y * 2.));
+  // the living ones breathe (on the other side, and wherever the spill has woken them)
+  r *= 1. + alive * uTrip * (.08 * uBreath + .08 * sin(l.y * 1.2 - uTime * 1.4 + t.w * 9.));
   float d = max(length(l.xz - ax) - r, l.y - H);
   d *= .85;
   if (length(l.xz) < 4.5 && l.y > H * .3) {
@@ -148,7 +153,8 @@ float map(vec3 p) {
     float bb = length(q) - 4.2;
     if (bb > d) continue;
     // the real forest wakes where the spill has climbed (from the water up the trunk)
-    float alive = gAlive > .5 ? 1. : uSpill * smoothstep(t.z * uSpill + .5, t.z * uSpill - 1., p.y);
+    float reach = uSpill * (1. + .6 * uTrip);
+    float alive = gAlive > .5 ? 1. : min(1., uSpill * 1.3) * smoothstep(t.z * reach + .5, t.z * reach - 1., p.y);
     float m;
     float tr = tree(p, t, alive, m);
     if (tr < d) { d = tr; gMat = m; gTree = float(i); }
@@ -189,13 +195,15 @@ float march(vec3 ro, vec3 rd, float tmax, float pa) {
 
 /** The sky: cold and pale above the dead forest; in the water, a deep night with a warm moon and many stars. */
 vec3 skyOf(vec3 rd, float alive, float pa) {
-  vec3 moonC = mix(uInk, vec3(.85, .9, 1.), .5);
-  vec3 cold = mycSky(rd, gMd, moonC, pa) * 1.6 + moonC * .05 * exp(-max(rd.y, 0.) * 4.) + moonC * 2. * mycMoon(rd, gMd, .05, pa);
+  vec3 moonC = enchant(mix(uInk, vec3(.85, .9, 1.), .5));
+  vec3 cold = aurora(rd) * .6 + mycSky(rd, gMd, moonC, pa) * 1.6 + moonC * .05 * exp(-max(rd.y, 0.) * 4.) + moonC * 2. * mycMoon(rd, gMd, .05, pa);
   vec3 warmC = mix(vec3(1., .72, .45), uTint, .25);
   // the other side's night: amber at the horizon, violet above, many stars, a warm moon
   float up = max(rd.y, 0.);
   vec3 warm = mix(vec3(.16, .07, .04), vec3(.025, .015, .05), smoothstep(0., .5, up)) + uTint * .02 * exp(-up * 4.);
   warm += mycSky(rd, gMd, warmC, pa) * 2.5 + warmC * 2.5 * mycMoon(rd, gMd, .05, pa);
+  // the other side's sky is hallucinated: aurora curtains, colours turning
+  warm += aurora(rd) * 2.5 + tripPal(rd.x * .3 + rd.y + uTime * .02) * .04 * uTrip * exp(-max(rd.y, 0.) * 2.);
   return mix(cold, warm, alive);
 }
 
@@ -208,8 +216,9 @@ vec3 world(vec3 ro, vec3 rd, float alive, float pa, out float tHit) {
   if (bank) t = tG;
   tHit = t > 0. ? t : 70.;
   vec3 col;
-  vec3 moonC = mix(uInk, vec3(.85, .9, 1.), .5);
-  vec3 warmC = mix(vec3(1., .72, .45), uTint, .25);
+  vec3 moonC = enchant(mix(uInk, vec3(.85, .9, 1.), .5));
+  // the other side's light: warm, and saturated with the enchanted colours as the trip deepens
+  vec3 warmC = mix(mix(vec3(1., .72, .45), uTint, .25), tripPal(.25 + uTime * .02) * 1.2, .6 * uTrip);
   vec3 glowC = uTint * uTint * 1.3;
   if (t > 0.) {
     vec3 p = ro + rd * t;
@@ -223,7 +232,8 @@ vec3 world(vec3 ro, vec3 rd, float alive, float pa, out float tHit) {
     }
     float fw = t * pa / max(abs(dot(n, rd)), .15);
     // how alive this point is: the other side wholly; this side where the spill has reached
-    float al = alive > .5 ? 1. : uSpill * smoothstep(9. * uSpill + .5, 9. * uSpill - 1.5, p.y + length(p.xz - POND) * .3);
+    float reach = 9. * uSpill * (1. + .6 * uTrip);
+    float al = alive > .5 ? 1. : min(1., uSpill * 1.3) * smoothstep(reach + .5, reach - 1.5, p.y + length(p.xz - POND) * .3);
     vec3 lightC = mix(moonC, warmC, al);
     float dif = max(dot(n, gMd), 0.);
     vec3 alb;
@@ -265,6 +275,7 @@ vec3 world(vec3 ro, vec3 rd, float alive, float pa, out float tHit) {
         vec3 lc = gq - gi - .5;
         float r = max(.16, fw * 4. * .8);
         vec3 bc = pal(fract(hs * 5.1 + .3));
+        bc = mix(bc, tripPal(hs * 4. + uTime * .05), .7 * uTrip);
         emit += mix(bc, bc * bc * 1.5, .5) * (.0256 / (r * r)) * exp(-dot(lc, lc) / (r * r)) * 2.5 * (.8 + .4 * uHat);
       }
     }

@@ -3,6 +3,7 @@ import { defineShaderScene } from "../shader/defineShaderScene";
 import { paletteParam } from "../palettes";
 import { ART_LIB } from "./lib.glsl";
 import { MYCELIUM_GLSL } from "./mycelium.glsl";
+import { tripUniforms, updateTrip } from "./mycTrip";
 
 const EYES = 7;
 const WOLVES = 5;
@@ -24,17 +25,19 @@ export const den = defineShaderScene({
     "Depuis le terrier du loup, une arche de terre et de racines encadre la forêt sous la lune, dans la brume. Des paires d'yeux s'allument une à une dans le noir ; sur certaines phrases un loup hurle en silhouette sur la crête ; au drop, la lune perce et toute la meute hurle.",
   params: [paletteParam("boismort")],
   uniforms: () => ({
+    ...tripUniforms(),
     // eyes: x, y (screen), seconds since they opened, how long they stay (0: none)
     uEyes: { value: Array.from({ length: EYES }, () => new THREE.Vector4(0, 0, 99, 0)) },
     // wolves on the ridge: x, size, seconds since it rose, how long it howls (0: none)
     uWolves: { value: Array.from({ length: WOLVES }, () => new THREE.Vector4(0, 0, 99, 0)) },
     uMoon: { value: 0 },
-    uBreath: { value: 99 },
+    uPuff: { value: 99 },
     uSafe: { value: 0 },
     uLast: { value: -99 },
     uNextEye: { value: 0 },
   }),
   update(u, f, _p, dt) {
+    updateTrip(u, f, dt);
     const bar = f.bpm > 0 ? 240 / f.bpm : 2;
     const eyes = u.uEyes.value as THREE.Vector4[];
     const wolves = u.uWolves.value as THREE.Vector4[];
@@ -71,14 +74,14 @@ export const den = defineShaderScene({
       wolves.forEach((w, i) => w.set(-0.62 + i * 0.3 + (Math.random() - 0.5) * 0.08, 0.75 + Math.random() * 0.5, -i * 0.15, bar * 4));
     }
     u.uMoon.value = Math.max(0, (u.uMoon.value as number) - dt / (bar * 8));
-    u.uBreath.value = (u.uBreath.value as number) + dt;
-    if ((u.uBreath.value as number) > 4 + Math.random() * 3) u.uBreath.value = 0;
+    u.uPuff.value = (u.uPuff.value as number) + dt;
+    if ((u.uPuff.value as number) > 4 + Math.random() * 3) u.uPuff.value = 0;
   },
   fragment: /* glsl */ `
 uniform vec4 uEyes[${EYES}];
 uniform vec4 uWolves[${WOLVES}];
 uniform float uMoon;     // the drop: the moon breaks through (fades over the hold)
-uniform float uBreath;   // seconds since the last breath at the den's mouth
+uniform float uPuff;     // seconds since the last breath steamed at the den's mouth
 uniform float uSafe;
 ${ART_LIB}
 ${MYCELIUM_GLSL}
@@ -114,7 +117,7 @@ void main() {
   vec2 fc = gl_FragCoord.xy;
   vec2 uv = (fc - .5 * uRes) / uRes.y;
   float px = 1. / uRes.y;
-  vec3 moonC = mix(uInk, vec3(.82, .88, 1.), .4);
+  vec3 moonC = enchant(mix(uInk, vec3(.82, .88, 1.), .4));
   vec3 eyeC = mix(uTint, vec3(1., .7, .3), .55);
   // a slow drift, so the frame breathes
   vec2 q = uv + vec2(.01 * sin(uTime * .05), .006 * sin(uTime * .07));
@@ -127,6 +130,12 @@ void main() {
   float veil = (1. - uMoon) * smoothstep(.35, .75, vnoise(vec3(rd.xy * 6. + vec2(uTime * .02, 0.), 4.)));
   col += moonC * 2.4 * moon * (1. - .75 * veil);
   col += moonC * .25 * exp(-length(rd - md) * 6.) * (.4 + .9 * uMoon);
+  // the trip: an aurora, and a corona of rainbow rings round the moon, pulsing (rings running out of it on the drop)
+  col += aurora(rd) * .8;
+  float am = length(rd - md);
+  float rings = .5 + .5 * sin(am * 70. - uTime * 1.2 - uBreath);
+  col += tripPal(am * 4. - uTime * .05) * rings * exp(-am * 7.) * (.05 + .25 * uTrip);
+  col += tripPal(am * 3.) * exp(-pow((am - (1. - uMoon) * .6) / .02, 2.)) * uMoon * .6 * (uSafe > .5 ? .4 : 1.);
 
   // ---- the ridge and the trees on it, the wolves on it before the moon
   float ry = ridgeY(q.x);
@@ -159,6 +168,9 @@ void main() {
   // ---- the slope below: misty forest in layers (dead trees, sparse, leaning, a branch or two), nearer and darker
   for (int L = 0; L < 3; L++) {
     float fl = float(L);
+    // (the trip: each layer of the forest wavers)
+    vec2 q0 = q;
+    q.x += uTrip * .008 * sin(q.y * 18. + uTime * 1.3 + fl * 2.) * (1. + fl * .5);
     float base = ry - .05 - fl * .085 + .03 * vnoise(vec3(q.x * 3. + fl * 4., fl, 1.));
     float sc = .075 + fl * .055;
     float c = floor((q.x + fl * 1.7) / sc);
@@ -190,6 +202,7 @@ void main() {
     // mist between the layers, drifting
     float mist = smoothstep(.0, .1, base + .05 - q.y) * (.5 + .5 * vnoise(vec3(q.x * 3. + uTime * .03 * (fl + 1.), q.y * 6., fl)));
     col += moonC * .03 * mist * (1. + .6 * uMoon);
+    q = q0;
   }
 
   // ---- eyes in the dark under the trees (before the den's arch covers the sides)
@@ -201,7 +214,7 @@ void main() {
     float s = .006;
     for (int k = 0; k < 2; k++) {
       vec2 ep = (q - E.xy - vec2((float(k) - .5) * s * 3.2, 0.)) / vec2(s, s * .55 * blink + 1e-4);
-      col += eyeC * exp(-dot(ep, ep) * 1.5) * o * 1.2;
+      col += mix(eyeC, tripPal(float(i) * .29 + uTime * .03), uTrip) * exp(-dot(ep, ep) * 1.5) * o * 1.2;
     }
   }
 
@@ -243,13 +256,13 @@ void main() {
     float s = .011;
     for (int k = 0; k < 2; k++) {
       vec2 ep = (uv - E.xy - vec2((float(k) - .5) * s * 3.2, 0.)) / vec2(s, s * .5 * blink + 1e-4);
-      earth += eyeC * exp(-dot(ep, ep) * 1.5) * o * 1.5;
+      earth += mix(eyeC, tripPal(float(i) * .29 + uTime * .03), uTrip) * exp(-dot(ep, ep) * 1.5) * o * 1.5;
     }
   }
   col = mix(col, earth, archA);
 
   // ---- breath steaming at the mouth, low in the frame, lit by the moon
-  float br = uBreath;
+  float br = uPuff;
   vec2 bq = uv - vec2(.08, -.42 + br * .05);
   float puff = exp(-dot(bq, bq) / (.02 + br * .03)) * smoothstep(0., .4, br) * exp(-br * .8);
   puff *= .6 + .4 * vnoise(vec3(uv * 9. + vec2(0., -br * .3), br * .5));

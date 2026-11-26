@@ -31,7 +31,10 @@ export const visions = defineShaderScene({
     updateTrip(u, f, dt);
     // deeper in a breakdown: the inner moment, the visions come forward
     u.uDeep.value = approach(u.uDeep.value as number, f.section === "breakdown" ? 1 : 0, 0.6, dt);
-    u.uLevel.value = approach(u.uLevel.value as number, f.trip, 2, dt);
+    // quieter over the plans whose own lights are the show (the glowworms, and the title on their cliff; the shadow
+    // play of the den), so the visions never drown them
+    const damp = f.shot === "myc-grotto" ? 0.5 : f.shot === "myc-den" ? 0.65 : 1;
+    u.uLevel.value = approach(u.uLevel.value as number, f.trip * damp, 2, dt);
     u.uKick.value = f.beat ? 0 : (u.uKick.value as number) + dt;
   },
   fragment: /* glsl */ `
