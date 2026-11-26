@@ -22,8 +22,6 @@ const CORKSCREWS: [number, number, number][] = [
   [520, 700, 1],
   [1620, 1800, -1],
 ];
-/** The racers' weave across their lane: wavelength LAP / WEAVE_N. */
-const WEAVE_N = 50;
 /** A racer floats this high above the track. */
 export const HOVER = 0.34;
 
@@ -51,8 +49,36 @@ export function trackRoll(s: number) {
   return r;
 }
 
-/** A racer's weave across its lane at s. */
-export const weave = (s: number, phase: number) => 0.8 * Math.sin(WEAVE_N * K * s + phase);
+/** The racing lanes across the track (a racer holds one, and changes now and then). */
+export const LANES = [-2.8, -1.4, 0, 1.4, 2.8];
+
+/** The racing line in the turns: how far toward the inside of the curve a racer rides at s (metres). */
+export const inside = (s: number) => Math.max(-1, Math.min(1, trackDDX(s) * 220));
+
+/**
+ * Steering across the track like a vehicle: toward a target line with a critically damped spring, so a change of lane
+ * is one long, smooth S (about 2 / w seconds), never a zigzag.
+ */
+export class Steer {
+  x = 0;
+  vx = 0;
+  constructor(private readonly w = 1.7) {}
+  reset(x: number) {
+    this.x = x;
+    this.vx = 0;
+  }
+  update(dt: number, to: number) {
+    const w = this.w;
+    const h = Math.min(dt, 0.05);
+    for (let t = 0; t < dt - 1e-6; t += h) {
+      const k = Math.min(h, dt - t);
+      this.vx += (w * w * (to - this.x) - 2 * w * this.vx) * k;
+      this.x += this.vx * k;
+    }
+    this.x = Math.max(-TRACK_W + 0.75, Math.min(TRACK_W - 0.75, this.x));
+    return this.x;
+  }
+}
 
 /**
  * The drop's leap: the track sinks away ahead (a bell DIP metres deep between start and start + len), while everything
@@ -140,17 +166,29 @@ vec3 toTrack(vec3 p) {
 }
 `;
 
-/** One racer of the pack: its lane, its weave, its colour, and how far ahead of the camera it rides (s). */
-interface Racer {
-  lane: number;
-  phase: number;
-  /** Mean distance ahead of the camera, and its swing (overtaking, falling back). */
-  base: number;
-  swing: number;
-  rate: number;
-  clock: number;
-  colour: number;
+/** History of a racer's line (where it was across the track, every HIST_STEP metres), so its trails follow it. */
+const HIST = 80;
+const HIST_STEP = 2;
+
+/** One driver of the pack: its lanes, its pace against the camera, its steering, its recent line. */
+interface Driver {
+  /** The lane it likes, the lane it steers for now. */
+  pref: number;
+  target: number;
+  steer: Steer;
+  /** How far ahead of the camera it rides (s), its speed against the camera, where that speed is heading, when it changes. */
   ahead: number;
+  rel: number;
+  relTo: number;
+  relT: number;
+  /** Seconds until it picks another lane to like; seconds it keeps out after passing. */
+  prefT: number;
+  holdT: number;
+  colour: number;
+  hs: Float64Array;
+  hx: Float32Array;
+  n: number;
+  head: number;
 }
 
 /** Racers drawn at most (uniform arrays). */
@@ -264,12 +302,14 @@ export class Racers {
 }
 
 /**
- * The pack around the camera: each racer keeps its lane and weaves across it, drifts ahead and falls back on its own
- * slow clock (some pass the camera now and then), and leaves two trails of light behind its pods. The CPU places
- * them on the track (world positions, frames, trail points) for the shader.
+ * The pack around the camera, driven like a race: each racer holds its lane and takes the inside line in the turns;
+ * now and then it picks another lane and moves over in one long S; the gaps change slowly (each has its own pace
+ * against the camera), and a racer catching another in its lane pulls out to a free lane, passes, and moves back in
+ * (or sits behind when it can't). Its trails follow the line it really took. The CPU places them on the track (world
+ * positions, frames, trail points) for the shader.
  */
 export class Pack extends Racers {
-  private racers: Racer[] = [];
+  private drivers: Driver[] = [];
 
   constructor(seed = Math.random() * 100) {
     super();
@@ -277,37 +317,121 @@ export class Pack extends Racers {
   }
 
   reseed(seed: number) {
-    const lanes = [-2.7, 2.7, -0.9, 0.9, -1.8, 1.8, 0, -2.7, 2.7, 0.9, -0.9, 1.8];
-    this.racers = lanes.map((lane, i) => {
-      const h = hashF(seed + i * 7.3);
+    this.drivers = Array.from({ length: PACK_MAX }, (_, i) => {
+      const lane = LANES[(i * 2 + Math.floor(seed)) % LANES.length];
+      const steer = new Steer(1.6 + 0.4 * hashF(seed + i * 2.2));
+      steer.reset(lane);
       return {
-        lane: lane + (hashF(seed + i * 3.1) - 0.5) * 0.4,
-        phase: h * 6.283,
-        base: 7 + i * 11 + h * 6,
-        swing: 5 + 10 * hashF(seed + i * 5.7),
-        rate: 0.05 + 0.08 * hashF(seed + i * 9.1),
-        clock: hashF(seed + i * 1.9) * 40,
+        pref: lane,
+        target: lane,
+        steer,
+        ahead: 8 + i * 11 + hashF(seed + i * 7.3) * 5,
+        rel: 0,
+        relTo: 0,
+        relT: hashF(seed + i * 3.1) * 4,
+        prefT: 6 + 14 * hashF(seed + i * 5.7),
+        holdT: 0,
         colour: i % 4,
-        ahead: 0,
+        hs: new Float64Array(HIST),
+        hx: new Float32Array(HIST),
+        n: 0,
+        head: 0,
       };
     });
   }
 
+  /** Where driver d rode across the track at q (its recorded line; now beyond its last record). */
+  private lineAt(d: Driver, q: number) {
+    if (d.n === 0) return d.steer.x;
+    let k = d.head;
+    if (q >= d.hs[k]) return d.steer.x;
+    for (let m = 1; m < d.n; m++) {
+      const j = (d.head - m + HIST) % HIST;
+      if (q >= d.hs[j]) {
+        const t = (q - d.hs[j]) / Math.max(1e-6, d.hs[k] - d.hs[j]);
+        return d.hx[j] + (d.hx[k] - d.hx[j]) * t;
+      }
+      k = j;
+    }
+    return d.hx[k];
+  }
+
+  /** Is the lane at x free between `from` and `to` metres ahead of the camera (for driver i)? */
+  private free(i: number, x: number, from: number, to: number, count: number) {
+    for (let j = 0; j < count; j++) {
+      if (j === i) continue;
+      const o = this.drivers[j];
+      if (o.ahead > from && o.ahead < to && (Math.abs(o.steer.x - x) < 1.15 || Math.abs(o.target - x) < 0.7)) return false;
+    }
+    return true;
+  }
+
   /**
-   * Place the pack around the camera at s (the lap origin s0). `count`: racers on the track; `trail`: their trails'
-   * length (metres); `spread` scales how far ahead they ride.
+   * Drive the pack around the camera at s (the lap origin s0), the camera going v m/s. `count`: racers on the track;
+   * `trail`: their trails' length (metres); `spread` scales how far ahead they ride.
    */
-  update(dt: number, s: number, s0: number, count: number, trail: number, spread: number, leap: Leap | null, time: number) {
+  update(dt: number, s: number, s0: number, count: number, trail: number, spread: number, leap: Leap | null, time: number, v = 40) {
+    const lo = -14 * spread;
+    const hi = 135 * spread;
     for (let i = 0; i < PACK_MAX; i++) {
-      const r = this.racers[i];
-      r.clock += dt * r.rate;
-      r.ahead = (r.base + r.swing * Math.sin(r.clock)) * spread;
+      const d = this.drivers[i];
       if (i >= count) {
         this.hide(i);
         continue;
       }
+      // its pace against the camera: changing slowly, keeping it within the pack
+      d.relT -= dt;
+      if (d.relT < 0) {
+        d.relTo = (Math.random() - 0.5) * 7;
+        d.relT = 3 + 6 * Math.random();
+      }
+      if (d.ahead > hi) d.relTo = -Math.abs(d.relTo) - 1;
+      if (d.ahead < lo) d.relTo = Math.abs(d.relTo) + 1;
+      d.rel += (d.relTo - d.rel) * (1 - Math.exp(-dt * 0.6));
+      // caught up with someone in its lane: pull out to a free lane, or sit behind
+      let blocker: Driver | null = null;
+      for (let j = 0; j < count; j++) {
+        const o = this.drivers[j];
+        if (j === i) continue;
+        const gap = o.ahead - d.ahead;
+        if (gap > 0 && gap < 14 && Math.abs(o.steer.x - d.steer.x) < 1.15 && Math.abs(o.target - d.target) < 0.7) blocker = o;
+      }
+      if (blocker && d.rel > blocker.rel - 0.2) {
+        const li = LANES.indexOf(d.target);
+        const sides = [li - 1, li + 1].filter((k) => k >= 0 && k < LANES.length).sort(() => Math.random() - 0.5);
+        const out = sides.find((k) => this.free(i, LANES[k], d.ahead - 10, d.ahead + 22, count));
+        if (out !== undefined) {
+          d.target = LANES[out];
+          d.holdT = 2.5;
+        } else d.rel = Math.min(d.rel, blocker.rel);
+      }
+      // back to the lane it likes once clear; and now and then it likes another
+      d.holdT -= dt;
+      d.prefT -= dt;
+      if (d.prefT < 0) {
+        const li = LANES.indexOf(d.pref);
+        const k = Math.max(0, Math.min(LANES.length - 1, li + (Math.random() < 0.5 ? -1 : 1)));
+        d.pref = LANES[k];
+        d.prefT = 8 + 12 * Math.random();
+      }
+      if (d.target !== d.pref && d.holdT < 0 && this.free(i, d.pref, d.ahead - 10, d.ahead + 16, count)) d.target = d.pref;
+      // never drift back faster than the camera goes forward (its line along s must keep going on)
+      d.rel = Math.max(d.rel, -0.5 * v);
+      d.ahead += d.rel * dt * spread;
+      const rs = s + d.ahead;
+      d.steer.update(dt, d.target + 0.9 * inside(rs));
+      // record its line
+      if (d.n === 0 || rs - d.hs[d.head] >= HIST_STEP) {
+        d.head = (d.head + 1) % HIST;
+        d.hs[d.head] = rs;
+        d.hx[d.head] = d.steer.x;
+        d.n = Math.min(HIST, d.n + 1);
+      } else if (rs < d.hs[d.head]) {
+        // (the camera jumped back: start the line again)
+        d.n = 0;
+      }
       const bob = 0.04 * Math.sin(time * (2.1 + i * 0.37) + i);
-      this.place(i, s + r.ahead, s0, (x) => r.lane + weave(x, r.phase), bob, r.colour, trail, leap);
+      this.place(i, rs, s0, (q) => this.lineAt(d, q), bob, d.colour, trail, leap);
     }
   }
 }

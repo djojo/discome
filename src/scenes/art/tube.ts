@@ -4,7 +4,7 @@ import { paletteParam } from "../palettes";
 import { ART_LIB } from "./lib.glsl";
 import { CIRCUIT_GLSL } from "./circuit.glsl";
 import { FLIGHT_GLSL } from "./flight";
-import { HOVER, LAP, PACK_MAX, Racers, TRACK_GLSL, trackPoint, trackRoll, weave } from "./circuitTrack";
+import { HOVER, inside, LANES, LAP, PACK_MAX, Racers, TRACK_GLSL, trackPoint, trackRoll } from "./circuitTrack";
 import { TRACK_SCENE_GLSL } from "./circuitScene.glsl";
 
 const smooth = (a: number, b: number, x: number) => {
@@ -29,7 +29,6 @@ interface TubeRacer {
   angle: number;
   spiral: number;
   lane: number;
-  phase: number;
   base: number;
   swing: number;
   rate: number;
@@ -137,9 +136,8 @@ export const tube = defineShaderScene({
       st.boost = 0;
       st.pack = Array.from({ length: PACK_MAX }, (_, i) => ({
         angle: (i / PACK_MAX) * Math.PI * 2 + hashF(seed + i) * 0.5,
-        spiral: (hashF(seed + i * 2.7) - 0.5) * 0.02,
-        lane: [-2.4, 2.4, -0.8, 0.8, -1.6, 1.6][i % 6],
-        phase: hashF(seed + i * 4.1) * 6.283,
+        spiral: (hashF(seed + i * 2.7) - 0.5) * 0.006,
+        lane: LANES[i % LANES.length],
         base: 6 + i * 8 + hashF(seed + i * 3.3) * 5,
         swing: 4 + 8 * hashF(seed + i * 5.5),
         rate: 0.05 + 0.08 * hashF(seed + i * 6.6),
@@ -205,7 +203,7 @@ export const tube = defineShaderScene({
         i,
         rs,
         s0,
-        (x) => rideAt(x, st, r.angle + r.spiral * x, wallR, r.lane + weave(x, r.phase)),
+        (x) => rideAt(x, st, r.angle + r.spiral * x, wallR, r.lane + 0.9 * inside(x)),
         r.colour,
         trail,
       );

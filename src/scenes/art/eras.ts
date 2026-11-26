@@ -4,7 +4,7 @@ import { paletteParam } from "../palettes";
 import { ART_LIB } from "./lib.glsl";
 import { CIRCUIT_GLSL } from "./circuit.glsl";
 import { FLIGHT_GLSL } from "./flight";
-import { LAP, Pack, TRACK_GLSL, trackDX, trackFrame, trackPoint, type TrackFrame } from "./circuitTrack";
+import { inside, LANES, LAP, Pack, Steer, TRACK_GLSL, trackDX, trackFrame, trackPoint, type TrackFrame } from "./circuitTrack";
 import { TRACK_SCENE_GLSL } from "./circuitScene.glsl";
 
 const approach = (cur: number, target: number, rate: number, dt: number) => cur + (target - cur) * (1 - Math.exp(-dt * rate));
@@ -27,6 +27,8 @@ interface ErasState {
   frame: TrackFrame;
   pos: THREE.Vector3;
   look: THREE.Vector3;
+  camLane: number;
+  cam: Steer;
 }
 
 /**
@@ -62,6 +64,8 @@ export const eras = defineShaderScene({
       frame: { pos: new THREE.Vector3(), right: new THREE.Vector3(), up: new THREE.Vector3(), fwd: new THREE.Vector3() },
       pos: new THREE.Vector3(),
       look: new THREE.Vector3(),
+      camLane: 0,
+      cam: new Steer(1.2),
     };
     return {
       uState: { value: st },
@@ -93,6 +97,8 @@ export const eras = defineShaderScene({
       st.pack.reseed(Math.random() * 100);
       st.era = st.next = Math.floor(Math.random() * 3);
       st.wipe = 1;
+      st.camLane = LANES[1 + Math.floor(Math.random() * 3)];
+      st.cam.reset(st.camLane);
     }
     st.last = f.time;
     const s = fl.travel + st.offset;
@@ -112,8 +118,12 @@ export const eras = defineShaderScene({
     (u.uEra.value as THREE.Vector3).set(st.era, st.next, st.wipe);
     u.uMotion.value = st.era === 3 && st.next === 3 ? fl.motion : 0;
 
-    // the camera: just above the deck, as in Le Circuit (the retro eras read the same s and sway)
-    const sway = fl.sway * 1.6;
+    // the camera: just above the deck, riding a lane as in Le Circuit (the retro eras read the same s and lane)
+    if (f.downbeat && f.phraseBar === 0 && Math.random() < 0.5) {
+      const li = LANES.indexOf(st.camLane);
+      st.camLane = LANES[Math.max(0, Math.min(LANES.length - 1, li + (Math.random() < 0.5 ? -1 : 1)))];
+    }
+    const sway = st.cam.update(dt, st.camLane + 0.9 * inside(s));
     trackPoint(s, s0, sway, EYE, null, st.pos);
     trackPoint(s + 16, s0, sway * 0.6, EYE - 0.6, null, st.look);
     const fr = trackFrame(s, s0, st.frame);
@@ -125,7 +135,7 @@ export const eras = defineShaderScene({
     u.uCamX.value = sway;
     u.uDX.value = trackDX(s);
 
-    st.pack.update(dt, s, s0, Math.round(7 + 2 * f.drift), 16 + 40 * fl.speedNorm, 1, null, f.time);
+    st.pack.update(dt, s, s0, Math.round(7 + 2 * f.drift), 16 + 40 * fl.speedNorm, 1, null, f.time, CRUISE * fl.speed);
     if (f.beat) {
       st.waveS = s + 4;
       st.waveT = 0;

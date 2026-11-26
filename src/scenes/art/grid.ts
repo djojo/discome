@@ -6,7 +6,7 @@ import { CIRCUIT_GLSL } from "./circuit.glsl";
 import { FLIGHT_GLSL, flightUniforms } from "./flight";
 import { Cadrage, type Framing } from "./camera";
 import { HEAD_GLSL, headUniforms, setHead, TITLE_HEAD } from "./heads";
-import { LAP, PACK_MAX, Racers, TRACK_GLSL, trackFrame, trackPoint, weave, type TrackFrame } from "./circuitTrack";
+import { inside, LANES, LAP, PACK_MAX, Racers, TRACK_GLSL, trackFrame, trackPoint, type TrackFrame } from "./circuitTrack";
 import { TRACK_SCENE_GLSL } from "./circuitScene.glsl";
 
 const smooth = (a: number, b: number, x: number) => {
@@ -49,7 +49,6 @@ interface GridRacer {
   s: number;
   x: number;
   lane: number;
-  phase: number;
   delay: number;
   accel: number;
   vmax: number;
@@ -166,8 +165,7 @@ export const grid = defineShaderScene({
         return {
           s: (left ? -7 : -11.5) - 9 * row,
           x: left ? -1.7 : 1.7,
-          lane: (left ? -1 : 1) * (0.6 + 2.1 * hashF(seed + i * 3.3)),
-          phase: hashF(seed + i * 7.1) * 6.283,
+          lane: LANES[Math.floor(hashF(seed + i * 3.3) * LANES.length)],
           delay: 0.05 * row + 0.08 * hashF(seed + i * 1.7),
           accel: 24 + 8 * hashF(seed + i * 5.9),
           vmax: 85 + 25 * hashF(seed + i * 2.3),
@@ -210,7 +208,7 @@ export const grid = defineShaderScene({
       const r = st.grid[i];
       const xAt = (x: number) => {
         const k = smooth(0, 90, x - r.s);
-        return r.x + (r.lane + weave(x, r.phase) - r.x) * k;
+        return r.x + (r.lane + 0.9 * inside(x) - r.x) * k;
       };
       const idle = st.launch < 0 ? 0.025 * Math.sin(f.time * 9 + i * 1.7) * (1 + (f.section === "build" ? f.buildProgress : 0)) : 0;
       st.racers.place(i, at[i], s0, xAt, -0.06 + idle, r.colour, 26 + 30 * smooth(0, 3, st.launch), null, r.s);

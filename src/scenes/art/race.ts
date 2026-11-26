@@ -5,7 +5,7 @@ import { num } from "../utils";
 import { ART_LIB } from "./lib.glsl";
 import { CIRCUIT_GLSL } from "./circuit.glsl";
 import { FLIGHT_GLSL, flightParams } from "./flight";
-import { LAP, Pack, PACK_MAX, TRACK_GLSL, trackFrame, trackPoint, type Leap, type TrackFrame } from "./circuitTrack";
+import { inside, LANES, LAP, Pack, PACK_MAX, Steer, TRACK_GLSL, trackFrame, trackPoint, type Leap, type TrackFrame } from "./circuitTrack";
 import { TRACK_SCENE_GLSL } from "./circuitScene.glsl";
 
 const approach = (cur: number, target: number, rate: number, dt: number) => cur + (target - cur) * (1 - Math.exp(-dt * rate));
@@ -30,6 +30,9 @@ interface RaceState {
   frame: TrackFrame;
   pos: THREE.Vector3;
   look: THREE.Vector3;
+  /** The camera rides like a racer: its lane, its steering. */
+  camLane: number;
+  cam: Steer;
 }
 
 /**
@@ -71,6 +74,8 @@ export const race = defineShaderScene({
       frame: { pos: new THREE.Vector3(), right: new THREE.Vector3(), up: new THREE.Vector3(), fwd: new THREE.Vector3() },
       pos: new THREE.Vector3(),
       look: new THREE.Vector3(),
+      camLane: 0,
+      cam: new Steer(1.2),
     };
     return {
       uState: { value: st },
@@ -99,6 +104,8 @@ export const race = defineShaderScene({
       st.leap = null;
       st.boost = 0;
       st.lap = Math.floor((fl.travel + st.offset) / LAP);
+      st.camLane = LANES[1 + Math.floor(Math.random() * 3)];
+      st.cam.reset(st.camLane);
     }
     st.last = f.time;
     const s = fl.travel + st.offset;
@@ -124,22 +131,27 @@ export const race = defineShaderScene({
     if (leap) lp.set(leap.start - s0, leap.len, leap.open);
     else lp.set(0, 1, 0);
 
-    // the camera: just above the deck (higher in Croisière), lower through the build, swaying across the lanes
-    const sway = fl.sway * 2.3;
+    // the camera: just above the deck (higher in Croisière), lower through the build; it rides like a racer, holding a
+    // lane, moving over now and then on a new phrase, taking the inside line in the turns
+    if (f.downbeat && f.phraseBar === 0 && Math.random() < 0.5) {
+      const li = LANES.indexOf(st.camLane);
+      st.camLane = LANES[Math.max(0, Math.min(LANES.length - 1, li + (Math.random() < 0.5 ? -1 : 1)))];
+    }
+    const sway = st.cam.update(dt, st.camLane + 0.9 * inside(s));
     const h = (cruise ? 3.2 : 1.25) * (1 + 0.3 * Math.min(fl.dive, 0));
     trackPoint(s, s0, sway, h, leap, st.pos);
     trackPoint(s + (cruise ? 26 : 15), s0, sway * 0.6, h - (cruise ? 1.6 : 0.65), leap, st.look);
     const fr = trackFrame(s, s0, st.frame);
     const F = (u.uCamF.value as THREE.Vector3).subVectors(st.look, st.pos).normalize();
-    // the track's up, turned by the flight's bank on its slaloms (not its barrel rolls: the corkscrews are the track's)
-    const up = fr.up.clone().applyAxisAngle(F, fl.move === "roll" ? 0 : fl.bank);
+    // the track's up (its banked turns, its corkscrews), leaning a little into a change of lane
+    const up = fr.up.clone().applyAxisAngle(F, -st.cam.vx * 0.06);
     const R = (u.uCamR.value as THREE.Vector3).crossVectors(F, up).normalize();
     (u.uCamU.value as THREE.Vector3).crossVectors(R, F);
     (u.uCamP.value as THREE.Vector3).copy(st.pos);
 
     // the pack: denser as the night drifts (the race consumes everything)
     const count = Math.min(PACK_MAX, Math.round((cruise ? 4 : 8) + 2 * f.drift));
-    st.pack.update(dt, s, s0, count, 16 + 46 * fl.speedNorm, cruise ? 1.5 : 1, leap, f.time);
+    st.pack.update(dt, s, s0, count, 16 + 46 * fl.speedNorm, cruise ? 1.5 : 1, leap, f.time, v);
 
     // the kick's wave of light, running ahead faster than the pack
     if (f.beat) {
