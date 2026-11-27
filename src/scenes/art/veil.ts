@@ -3,7 +3,7 @@ import { paletteParam } from "../palettes";
 import { ART_LIB } from "./lib.glsl";
 import { HEAD_GLSL, headUniforms, setHead, type HeadId } from "./heads";
 import { SKY_GLSL } from "./sky.glsl";
-import { wantCloudNoise } from "./cloudnoise";
+import { olympeUniforms, olympeWarp } from "./olympe";
 import { Casting, pick } from "./casting";
 
 /** The god behind the veil: one of the assembly's (already loaded with the world), another on each passage. */
@@ -27,20 +27,21 @@ export const veil = defineShaderScene({
   name: "Le Voile",
   energy: "calm",
   hdr: true,
+  timeWarp: olympeWarp,
   renderScale: 0.75,
   heads: ["athena"],
   description:
     "La tête colossale d'un dieu au-dessus des nuages ; devant elle, un immense voile blanc translucide dérive dans le vent, la lumière le traverse, il cache puis découvre le visage. Au drop, le vent l'emporte et le visage apparaît dans la lumière ; il revient pendant le break.",
   params: [paletteParam("olympe")],
   uniforms: () => ({
-    ...wantCloudNoise(),
+    ...olympeUniforms(),
     ...headUniforms(),
     uWander: { value: 0 },
     uGone: { value: 0 },
     uKickT: { value: 9 },
     uReveal: { value: 0 },
   }),
-  update(u, f, _p, dt) {
+  update(u, f, _p, dt, ctx) {
     const seed = u.uSeed.value as number;
     let pass = passes.get(u);
     if (!pass || pass.seed !== seed) passes.set(u, (pass = { seed, head: casting.pass()[0] }));
@@ -48,7 +49,7 @@ export const veil = defineShaderScene({
     const bar = f.bpm > 0 ? 240 / f.bpm : 2;
     u.uKickT.value = f.beat ? 0 : (u.uKickT.value as number) + dt;
     // the veil drifts back and forth before the face at its own pace
-    u.uWander.value = (u.uWander.value as number) + dt * 0.05;
+    u.uWander.value = (u.uWander.value as number) + ctx.dt * 0.05;
     // the drop: the wind carries it off over a bar; it comes back through the breakdown, over four
     const g = u.uGone.value as number;
     const goal = f.section === "drop" ? 1 : f.section === "breakdown" || f.section === "build" ? 0 : g;
@@ -101,7 +102,7 @@ float veilW(vec2 q) {
 void main() {
   vec2 uv = (gl_FragCoord.xy - .5 * uRes) / uRes.y;
   float side = fract(uSeed * .37) < .5 ? -1. : 1.;
-  gSun = normalize(vec3(.4 * side, .22, -1.));
+  gSun = normalize(vec3(.4 * side, sunY(), -1.));
   gKey = normalize(vec3(.4 * side, .65, .6));
   gSeaY = -14.;
   gCloudBase = -16.;

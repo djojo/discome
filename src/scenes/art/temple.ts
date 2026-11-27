@@ -4,7 +4,7 @@ import { ART_LIB } from "./lib.glsl";
 import { CAMERA_GLSL, type Framing } from "./camera";
 import { SKY_GLSL } from "./sky.glsl";
 import { TEMPLE_GLSL } from "./temple.glsl";
-import { wantCloudNoise } from "./cloudnoise";
+import { olympeUniforms, olympeWarp } from "./olympe";
 
 /** The temple: 6 by 11 Doric columns, s apart, H high, R in radius; its front faces +z. */
 const NX = 6;
@@ -40,13 +40,14 @@ export const temple = defineShaderScene({
   name: "Le Temple",
   energy: "medium",
   hdr: true,
+  timeWarp: olympeWarp,
   renderScale: 0.75,
   camera: { framings: FRAMINGS, glideBars: 4 },
   description:
     "Un temple dorique flotte au-dessus des nuages, la lumière d'un soleil bas passant entre ses colonnes. À la montée, il n'est qu'un dessin d'architecte au crayon, tracé trait après trait ; au drop, le marbre le remplit d'un bord à l'autre ; pendant le break, il redevient dessin.",
   params: [paletteParam("olympe")],
   uniforms: () => ({
-    ...wantCloudNoise(),
+    ...olympeUniforms(),
     uDraw: { value: 1 },
     uBuilt: { value: 1 },
     uKickT: { value: 9 },
@@ -115,7 +116,7 @@ void main() {
   vec2 fc = gl_FragCoord.xy;
   vec2 uv = (fc - .5 * uRes) / uRes.y;
   float side = fract(uSeed * .37) < .5 ? -1. : 1.;
-  gSun = normalize(vec3(.35 * side, .2, -1.));
+  gSun = normalize(vec3(.35 * side, sunY(), -1.));
   gKey = normalize(vec3(.5 * side, .7, .45));
   gSeaY = -14.;
   gCloudBase = -16.;

@@ -8,6 +8,15 @@
  * paper white), shadows stay light. The night slowly tarnishes it all (uDrift): greyer clouds, a weathered marble.
  */
 export const SKY_GLSL = /* glsl */ `
+/** The world's sun (art/olympe.ts): how high it stands (0..1), how warm its light is (0..1). */
+uniform float uSunEl;
+uniform float uSunWarm;
+/** The height of the sun toward which a scene sets gSun (its bearing stays the scene's own). */
+float sunY() { return mix(.05, .62, uSunEl); }
+/** The colour of the sun's light: pale gold, warmer through the breakdown and over the night. */
+vec3 sunCol() { return mix(uAccent, vec3(1., .74, .46), uSunWarm * .85); }
+/** The tint the warm sun lays on the white light (the key on the statues, the lit sides of the clouds). */
+vec3 warmLight() { return mix(vec3(1.), vec3(1.07, .95, .8), uSunWarm); }
 /** The low sun (toward it), and the key light that models the statues (the white sky's brightest side). */
 vec3 gSun = normalize(vec3(-.55, .2, -1.));
 vec3 gKey = normalize(vec3(-.6, .62, .55));
@@ -23,7 +32,9 @@ vec3 skyO(vec3 rd) {
   vec3 c = mix(uInk * 2.5, pale * 1.9, smoothstep(-.05, .75, rd.y));
   c = mix(c, c * vec3(.82, .83, .86), tarnish());
   float s = max(dot(rd, gSun), 0.);
-  c += uAccent * (.12 * pow(s, 4.) + .45 * pow(s, 40.)) + vec3(3.) * smoothstep(.9994, .9997, s);
+  c += sunCol() * (.12 * pow(s, 4.) + .45 * pow(s, 40.)) + vec3(3.) * smoothstep(.9994, .9997, s);
+  // the low sun warms the sky round the horizon
+  c = mix(c, c * mix(vec3(1.), sunCol() / max(max(uAccent.r, uAccent.g), .5), .5 * uSunWarm), 1. - smoothstep(-.05, .65, rd.y));
   if (rd.y > .02) {
     vec2 q = rd.xz / (rd.y + .12);
     float n = fbm3(vec3(q.x * .45 + uTime * .003, q.y * 1.7, 2.3));
@@ -225,7 +236,7 @@ vec4 cloudsO(vec3 ro, vec3 rd, float tmax) {
       float h = clamp((p.y - gCloudBase) / gCloudThick, 0., 1.);
       vec3 amb = mix(mix(uPal1, uInk, gCloudUnder - .45) * gCloudUnder, uInk * 1., smoothstep(.05, .9, h));
       float glow = gCloudGlow * (gGlowR < 0. ? 1. : exp(-pow(t - gGlowR, 2.) * .006));
-      vec3 S = amb + (uInk * 1.9 + uAccent * .6) * sunT * (.45 + phase) + uAccent * glow * 1.6;
+      vec3 S = amb + (uInk * 1.9 * warmLight() + sunCol() * .6) * sunT * (.45 + phase) + uAccent * glow * 1.6;
       // far away the clouds melt into the white
       S = mix(S, sky, 1. - exp(-t * .0045));
       float a = exp(-d * dt * .95);
@@ -330,7 +341,7 @@ vec3 shaftsO(vec3 ro, vec3 rd, float tEnd) {
  */
 vec3 withShafts(vec3 col, vec3 ro, vec3 rd, float tEnd, float k) {
   vec3 s = shaftsO(ro, rd, tEnd);
-  return col * (1. - min(k, 1.6) * (.32 * s.y + .2 * s.z)) + (uAccent * 1.1 + uInk * .3) * s.x * k * .5;
+  return col * (1. - min(k, 1.6) * (.32 * s.y + .2 * s.z)) + (sunCol() * 1.1 + uInk * .3) * s.x * k * .5;
 }
 
 // ---- the statues
@@ -382,9 +393,9 @@ vec3 lightO(vec3 a, vec3 n, vec3 rd, float ao) {
   float bounce = clamp(-n.y, 0., 1.);
   float sun = clamp(dot(n, gSun), 0., 1.);
   float rim = pow(1. - clamp(dot(n, -rd), 0., 1.), 3.);
-  vec3 c = a * (uInk * (1.05 * key + .75 * dome + .45 * bounce) * (.35 + .65 * ao) + uAccent * .5 * sun * ao);
+  vec3 c = a * (uInk * (1.05 * key * warmLight() + .75 * dome + .45 * bounce) * (.35 + .65 * ao) + sunCol() * .5 * sun * ao);
   c += uInk * pow(clamp(dot(reflect(-gKey, n), -rd), 0., 1.), 24.) * .25 * ao;
-  return c + (uAccent * .6 * sun + uInk * .2) * rim * ao;
+  return c + (sunCol() * .6 * sun + uInk * .2) * rim * ao;
 }
 
 // ---- the canon of proportions, drawn over a face in graphite

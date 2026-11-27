@@ -6,7 +6,7 @@ import { FLIGHT_GLSL, flightParams } from "./flight";
 import { HEAD_GLSL, headsOf, headUniforms, setHead, type HeadId } from "./heads";
 import { SKY_GLSL } from "./sky.glsl";
 import { TEMPLE_GLSL } from "./temple.glsl";
-import { wantCloudNoise } from "./cloudnoise";
+import { olympeUniforms, olympeWarp } from "./olympe";
 import { Procession } from "./casting";
 
 /**
@@ -36,6 +36,7 @@ export const cloudSea = defineShaderScene({
   name: "La Mer de nuages",
   energy: "calm",
   hdr: true,
+  timeWarp: olympeWarp,
   renderScale: 0.75,
   flight: { cruise: 2.4, pump: 0.15 },
   heads: FIRST,
@@ -43,7 +44,7 @@ export const cloudSea = defineShaderScene({
     "Un vol très lent au ras d'une mer de nuages, vers un soleil bas : des têtes antiques colossales en émergent comme des îles, le visage tourné vers le ciel, toutes différentes. Au kick, une onde de lumière roule sur les nuages ; à la montée, le soleil se lève ; au drop, on plonge dans les nuages et on ressort au-dessus d'une autre mer.",
   params: [paletteParam("olympe"), { type: "range", key: "sky", label: "Ciel dans la pierre", min: 0, max: 1, step: 0.05, default: 0.6 }, ...flightParams()],
   uniforms: () => ({
-    ...wantCloudNoise(),
+    ...olympeUniforms(),
     ...Object.assign({}, ...SLOTS.map((s) => headUniforms(s))),
     uM0: { value: 0 },
     uWho: { value: new Array<number>(AHEAD + 2).fill(-1) },
@@ -173,7 +174,7 @@ void main() {
   vec2 uv = (gl_FragCoord.xy - .5 * uRes) / uRes.y;
   // toward the low sun, which climbs through the build
   float side = fract(uSeed * .37) < .5 ? -1. : 1.;
-  gSun = normalize(vec3(.35 * side, .05 + .3 * uRise, -1.));
+  gSun = normalize(vec3(.35 * side, max(sunY(), .05 + .3 * uRise), -1.));
   gKey = normalize(vec3(.45 * side, .72, .5));
   gSeaY = -4.;
   gSeaDrift = vec2(uTime * .004 + uSeaShift * 3.7, uSeed * .1 + uSeaShift * 1.9);

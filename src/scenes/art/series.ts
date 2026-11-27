@@ -3,7 +3,7 @@ import { paletteParam } from "../palettes";
 import { ART_LIB } from "./lib.glsl";
 import { HEAD_GLSL, headsOf, headUniforms, setHead, type HeadId } from "./heads";
 import { SKY_GLSL } from "./sky.glsl";
-import { wantCloudNoise } from "./cloudnoise";
+import { olympeUniforms, olympeWarp } from "./olympe";
 import { Casting, pick } from "./casting";
 
 /**
@@ -34,13 +34,14 @@ export const series = defineShaderScene({
   name: "Les Œuvres mortes",
   energy: "calm",
   hdr: true,
+  timeWarp: olympeWarp,
   renderScale: 0.8,
   heads: FIRST,
   description:
     "Une réserve oubliée dans les nuages : des rangées de plâtres tirés du même moule, copies de copies d'un portrait antique, certains sous des draps blancs ; de la poussière dans les rais de lumière. Pendant un break, un drap glisse et découvre un visage ; au drop, un plâtre se fend et une lumière d'or pâle sort de la fêlure.",
   params: [paletteParam("olympe")],
   uniforms: () => ({
-    ...wantCloudNoise(),
+    ...olympeUniforms(),
     ...headUniforms(),
     uTravel: { value: 0 },
     uKickT: { value: 9 },
@@ -57,13 +58,13 @@ export const series = defineShaderScene({
     uWasBreak: { value: 0 },
     uBreakT: { value: 0 },
   }),
-  update(u, f, _p, dt) {
+  update(u, f, _p, dt, ctx) {
     // the portrait of this passage
     const seed = u.uSeed.value as number;
     let pass = passes.get(u);
     if (!pass || pass.seed !== seed) passes.set(u, (pass = { seed, head: casting.pass()[0] }));
     setHead(u, pass.head);
-    u.uTravel.value = (u.uTravel.value as number) + dt * 0.16;
+    u.uTravel.value = (u.uTravel.value as number) + ctx.dt * 0.16;
     u.uKickT.value = f.beat ? 0 : (u.uKickT.value as number) + dt;
     const bar = f.bpm > 0 ? 240 / f.bpm : 2;
     // a new way of looking at the shelves on every phrase
@@ -195,7 +196,7 @@ void main() {
   vec2 fc = gl_FragCoord.xy;
   vec2 uv = (fc - .5 * uRes) / uRes.y;
   float T = uTravel;
-  gSun = normalize(vec3(-.55, .5, -.65));
+  gSun = normalize(vec3(-.55, .25 + sunY(), -.65));
   gKey = normalize(vec3(-.4, .75, .55));
   gSeaY = -6.;
   gCloudBase = -15.;

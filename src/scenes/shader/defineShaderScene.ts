@@ -65,6 +65,11 @@ interface ShaderSceneOptions {
   camera?: { framings: Framing[]; glideBars?: number };
   /** A scene moving on its own (not a Flight): how much radial speed blur the compositor applies, 0..1. */
   motion?: (u: Uniforms) => number;
+  /**
+   * A time of its own (a world's slow motion, see art/olympe.ts): uTime, the flight and the camera follow it; update
+   * still gets the frame's real dt (the lights of the kick keep the tempo), and the warped time and step in ctx.
+   */
+  timeWarp?: (f: AudioFrame, dt: number) => { time: number; dt: number };
   update?: (u: Uniforms, frame: AudioFrame, params: ParamValues, dt: number, ctx: SceneCtx) => void;
 }
 
@@ -72,6 +77,9 @@ interface ShaderSceneOptions {
 export interface SceneCtx {
   flight: Flight | null;
   camera: Cadrage | null;
+  /** The scene's own time and step (its timeWarp; the frame's otherwise). */
+  time: number;
+  dt: number;
 }
 
 /** Fullscreen-quad scene: write a fragment shader, get audio uniforms + palette wired up. */
@@ -115,7 +123,7 @@ export function defineShaderScene(opts: ShaderSceneOptions): SceneGLDef {
       };
       const flight = opts.flight ? new Flight() : null;
       const cadrage = opts.camera ? new Cadrage(opts.camera.framings, opts.camera.glideBars) : null;
-      const ctx: SceneCtx = { flight, camera: cadrage };
+      const ctx: SceneCtx = { flight, camera: cadrage, time: 0, dt: 0 };
       let lastSeen = -1e9;
       const material = new THREE.ShaderMaterial({
         uniforms,
@@ -132,7 +140,10 @@ export function defineShaderScene(opts: ShaderSceneOptions): SceneGLDef {
       return {
         render(f, params, dt) {
           (uniforms.uRes.value as THREE.Vector2).set(target.width, target.height);
-          uniforms.uTime.value = f.time;
+          const warp = opts.timeWarp ? opts.timeWarp(f, dt) : { time: f.time, dt };
+          ctx.time = warp.time;
+          ctx.dt = warp.dt;
+          uniforms.uTime.value = warp.time;
           uniforms.uEnergy.value = f.energy;
           uniforms.uBass.value = f.bass;
           uniforms.uMid.value = f.mid;
@@ -156,7 +167,7 @@ export function defineShaderScene(opts: ShaderSceneOptions): SceneGLDef {
           if (f.tint) tint.set(f.tint[0], f.tint[1], f.tint[2]);
           else tint.copy(pal.uAccent.value as THREE.Vector3);
           if (flight) {
-            flight.update(f, dt, opts.flight!.cruise * num(params.speed, 1), num(params.dynamics, 1), opts.flight!.pump);
+            flight.update(f, warp.dt, opts.flight!.cruise * num(params.speed, 1), num(params.dynamics, 1), opts.flight!.pump);
             uniforms.uTravel.value = flight.travel;
             uniforms.uSpeed.value = flight.speedNorm;
             uniforms.uAccel.value = flight.accel;
@@ -172,7 +183,7 @@ export function defineShaderScene(opts: ShaderSceneOptions): SceneGLDef {
           lastSeen = f.time;
           opts.update?.(uniforms, f, params, dt, ctx);
           if (cadrage) {
-            cadrage.update(f, dt);
+            cadrage.update(f, warp.dt);
             (uniforms.uCamPos.value as THREE.Vector3).copy(cadrage.pos);
             (uniforms.uCamTarget.value as THREE.Vector3).copy(cadrage.target);
             uniforms.uFocal.value = cadrage.focal;

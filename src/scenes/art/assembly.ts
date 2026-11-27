@@ -4,7 +4,7 @@ import { ART_LIB } from "./lib.glsl";
 import { HEAD_GLSL, headUniforms, setHead, type HeadId } from "./heads";
 import { SKY_GLSL } from "./sky.glsl";
 import { TEMPLE_GLSL } from "./temple.glsl";
-import { wantCloudNoise } from "./cloudnoise";
+import { olympeUniforms, olympeWarp } from "./olympe";
 
 /**
  * The gods of the assembly, round the ring: Hera, Athena, Dionysos, Homer (the bearded one, as Zeus), the Emperor
@@ -29,13 +29,14 @@ export const assembly = defineShaderScene({
   name: "L'Assemblée des dieux",
   energy: "intense",
   hdr: true,
+  timeWarp: olympeWarp,
   renderScale: 0.75,
   heads: GODS,
   description:
     "Au centre d'un cercle de têtes olympiennes colossales (Héra, Athéna, Dionysos, Homère en Zeus, l'Empereur, l'Impératrice) posées sur des colonnes de nuages, qui baissent les yeux vers nous. Au kick, un anneau de lumière fait le tour ; au drop, une colonne de lumière tombe du zénith, les nuages tourbillonnent et les dieux s'éclairent de l'intérieur.",
   params: [paletteParam("olympe")],
   uniforms: () => ({
-    ...wantCloudNoise(),
+    ...olympeUniforms(),
     ...Object.assign({}, ...SLOTS.map((s) => headUniforms(s))),
     uKickT: { value: 9 },
     uKicks: { value: 0 },
@@ -47,7 +48,7 @@ export const assembly = defineShaderScene({
     // CPU side only
     uDropT: { value: 99 },
   }),
-  update(u, f, _p, dt) {
+  update(u, f, _p, dt, ctx) {
     GODS.forEach((id, i) => setHead(u, id, SLOTS[i]));
     const bar = f.bpm > 0 ? 240 / f.bpm : 2;
     if (f.beat) u.uKicks.value = (u.uKicks.value as number) + 1;
@@ -62,9 +63,9 @@ export const assembly = defineShaderScene({
     // the gods light up from within with the column, and a little through the build
     u.uInner.value = Math.max(u.uBeam.value as number, 0.35 * (u.uCharge.value as number));
     // the clouds whirl: slowly, fast while the column of light stands
-    u.uSwirl.value = (u.uSwirl.value as number) + dt * (0.04 + 0.6 * (u.uBeam.value as number));
+    u.uSwirl.value = (u.uSwirl.value as number) + ctx.dt * (0.04 + 0.6 * (u.uBeam.value as number));
     // the camera turns slowly round the ring
-    u.uTurn.value = (u.uTurn.value as number) + dt * 0.035;
+    u.uTurn.value = (u.uTurn.value as number) + ctx.dt * 0.035;
   },
   fragment: /* glsl */ `
 uniform float uKickT;
@@ -169,7 +170,7 @@ vec3 calcN(vec3 p, float e) {
 
 void main() {
   vec2 uv = (gl_FragCoord.xy - .5 * uRes) / uRes.y;
-  gSun = normalize(vec3(cos(uSeed), .55, sin(uSeed)));
+  gSun = normalize(vec3(cos(uSeed), .25 + sunY(), sin(uSeed)));
   gKey = normalize(vec3(0., .75, 0.) + gSun * .35);
   gSeaY = -10.;
   gSeaDrift = vec2(uTime * .003, uSeed * .1);

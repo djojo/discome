@@ -7,7 +7,7 @@ import { CAMERA_GLSL, type Framing } from "./camera";
 import { HEAD_GLSL, headGrid, headParam, headsOf, headUniforms, setHead, TITLE_HEAD, type HeadId } from "./heads";
 import { DETAIL_GLSL } from "./detail.glsl";
 import { SKY_GLSL } from "./sky.glsl";
-import { wantCloudNoise } from "./cloudnoise";
+import { olympeUniforms, olympeWarp } from "./olympe";
 import { Casting, pick } from "./casting";
 import type { ParamDef } from "../types";
 
@@ -79,6 +79,7 @@ export const porcelain = defineShaderScene({
   tag: "Visage",
   energy: "calm",
   hdr: true,
+  timeWarp: olympeWarp,
   renderScale: 0.75,
   mask: true,
   heads: (p) => (p.head === ANTIQUE ? FIRST : []),
@@ -106,7 +107,7 @@ export const porcelain = defineShaderScene({
     { type: "toggle", key: "letterbox", label: "Format cinéma 2.39 (bandes noires)", default: false },
   ],
   uniforms: () => ({
-    ...wantCloudNoise(),
+    ...olympeUniforms(),
     ...headUniforms(),
     uOpen: { value: 0 },
     uOpenVel: { value: 0 },
@@ -198,7 +199,7 @@ export const porcelain = defineShaderScene({
       const align = at < bar * 0.5 ? smoothstep01(at / (bar * 0.5)) : at < bar * 1.5 ? 1 : 1 - smoothstep01((at - bar * 1.5) / (bar * 2));
       const burst = at > bar * 1.5 && at < bar * 3.5 ? Math.sin(Math.PI * ((at - bar * 1.5) / (bar * 2))) * 0.8 : 0;
       u.uAlign.value = align;
-      const time = f.time;
+      const time = ctx.time;
       const side = u.uSeed.value < 50 ? -1 : 1;
       frag.forEach((g, i) => {
         const a = g.a + time * g.w;
@@ -472,7 +473,7 @@ void main() {
   gBob = .035 * sin(uTime * .19 + uSeed) * (1. - uTitle);
   // the low sun, on one side or the other from one return to the next; the key light on the same side
   float side = fract(uSeed * .37) < .5 ? -1. : 1.;
-  gSun = normalize(vec3(.65 * side, .16, -1.));
+  gSun = normalize(vec3(.65 * side, sunY(), -1.));
   gKey = normalize(vec3(.6 * side, .62, .55));
   gSeaY = -9.;
   gCloudBase = -21.;
