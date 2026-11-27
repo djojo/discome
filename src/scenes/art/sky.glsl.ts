@@ -11,6 +11,8 @@ export const SKY_GLSL = /* glsl */ `
 /** The world's sun (art/olympe.ts): how high it stands (0..1), how warm its light is (0..1). */
 uniform float uSunEl;
 uniform float uSunWarm;
+/** The world's whirl of feathers on the drop (radians turned). */
+uniform float uFeatherSwirl;
 /** The height of the sun toward which a scene sets gSun (its bearing stays the scene's own). */
 float sunY() { return mix(.05, .62, uSunEl); }
 /** The colour of the sun's light: pale gold, warmer through the breakdown and over the night. */
@@ -426,6 +428,52 @@ vec4 dovesO(vec3 ro, vec3 rd, float tEnd) {
     if (a <= 0.) continue;
     // white, the undersides of the wings a pearl grey; hazy far away
     vec3 c = mix(uPal1 * .62 + uInk * .15, uInk * 1.3 * warmLight(), .5 - .35 * flap);
+    c = mix(c, uInk * 2.2, 1. - exp(-tb * .004));
+    acc = vec4(c, a);
+    nearest = tb;
+  }
+  return acc;
+}
+
+// ---- feathers: white feathers falling slowly through the light, rocking and rolling over as they fall, whirled
+// round on the drop. Where each one is (xyz) and its own number (w) comes from the scene (art/olympe.ts: featherStep:
+// a box of air round the eye, fixed in the world, wrapping round as the eye moves); uFeatherL: a feather's length.
+uniform vec4 uFeathers[24];
+uniform float uFeatherL;
+
+/** The feathers before tEnd along the ray: their colour, how much of the pixel they cover. */
+vec4 feathersO(vec3 ro, vec3 rd, float tEnd) {
+  float L = uFeatherL;
+  if (L <= 0.) return vec4(0.);
+  vec4 acc = vec4(0.);
+  float nearest = tEnd;
+  vec3 right = vec3(0.), upv = vec3(0.);
+  for (int i = 0; i < 24; i++) {
+    vec3 v = uFeathers[i].xyz - ro;
+    float tb = dot(v, rd);
+    if (tb < .05 || tb > nearest) continue;
+    vec3 q = v - rd * tb;
+    if (dot(q, q) > L * L * .4) continue;
+    if (right.x == 0. && right.z == 0.) {
+      right = normalize(cross(rd, vec3(0., 1., 0.)));
+      upv = cross(right, rd);
+    }
+    // in its own frame, in lengths of a feather: rocking in the view, rolling over (the vane narrows edge-on)
+    float h = uFeathers[i].w;
+    vec2 l = vec2(-dot(q, right), -dot(q, upv)) / L;
+    l *= rot(h * 6.28 + .8 * sin(uTime * (.7 + .5 * fract(h * 7.)) + h * 30.));
+    float roll = cos(uTime * (1.2 + fract(h * 13.)) + h * 50.);
+    float s = l.x + .5;
+    float px = tb / (uRes.y * L);
+    float w = .27 * sqrt(max(s * (1.05 - s), 0.)) * (.3 + .7 * abs(roll));
+    float dv = abs(l.y - .04 * sin(s * 3.1));
+    float vane = (1. - smoothstep(w - px, w + px, dv)) * smoothstep(-px, px, s) * (1. - smoothstep(1. - px, 1. + px, s));
+    float quill = (1. - smoothstep(.006, .006 + px * 1.5, abs(l.y))) * smoothstep(-.12, -.1, s) * (1. - smoothstep(.9, .95, s));
+    float a = max(vane * .9, quill * .8);
+    if (a <= 0.) continue;
+    // (a touch darker than the white sky, or white on white they would not show)
+    vec3 c = mix(uPal1 * .58 + uInk * .12, uInk * 1.2 * warmLight(), .45 + .35 * roll);
+    c = mix(c, uPal1 * .5, quill * .5);
     c = mix(c, uInk * 2.2, 1. - exp(-tb * .004));
     acc = vec4(c, a);
     nearest = tb;

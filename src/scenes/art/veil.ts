@@ -1,15 +1,20 @@
+import * as THREE from "three";
 import { defineShaderScene } from "../shader/defineShaderScene";
 import { paletteParam } from "../palettes";
 import { ART_LIB } from "./lib.glsl";
 import { HEAD_GLSL, headUniforms, setHead, type HeadId } from "./heads";
 import { SKY_GLSL } from "./sky.glsl";
-import { flockStep, olympeUniforms, olympeWarp } from "./olympe";
+import { featherStep, flockStep, olympeUniforms, olympeWarp } from "./olympe";
 import { Casting, pick } from "./casting";
 
 /** The god behind the veil: one of the assembly's (already loaded with the world), another on each passage. */
 const GODS: HeadId[] = ["hera", "athena", "dionysos", "homere", "empereur", "imperatrice"];
 const casting = new Casting(["athena"], (avoid) => pick(GODS, 1, avoid));
 const passes = new WeakMap<object, { seed: number; head: HeadId }>();
+
+/** (where the eye is, roughly, and where it looks: for the feathers) */
+const EYE = new THREE.Vector3(0, 3.4, 30);
+const LOOK = new THREE.Vector3(0, 0, -1);
 
 const smooth = (x: number) => {
   const t = Math.min(1, Math.max(0, x));
@@ -51,6 +56,7 @@ export const veil = defineShaderScene({
     u.uKickT.value = f.beat ? 0 : (u.uKickT.value as number) + dt;
     // the veil drifts back and forth before the face at its own pace
     u.uWander.value = (u.uWander.value as number) + ctx.dt * 0.05;
+    featherStep(u, ctx.time, EYE, LOOK, { size: 26, length: 0.8, fall: 0.45, ahead: 13 });
     flockStep(u, f, ctx.dt, () => {
       const sd = Math.random() < 0.5 ? -1 : 1;
       return { a: [sd * 30, 3, -10], b: [-sd * 30, 5, -16], r: 3.5, size: 1.1, dur: 11 };
@@ -245,6 +251,9 @@ void main() {
   gTear = clamp(uGone * 1.25 - .05, 0., 1.);
   v = veilO(ro, rd, tEnd, .55);
   col = mix(col, v.rgb, v.a);
+  // feathers in the air before the god
+  vec4 fe = feathersO(ro, rd, tEnd);
+  col = mix(col, fe.rgb, fe.a);
   col = withShafts(col, ro, rd, tEnd, .5 + .4 * exp(-uKickT * 3.) + 1.2 * uDrop);
   gl_FragColor = vec4(hdrOut(col), 1.);
 }

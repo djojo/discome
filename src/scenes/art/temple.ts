@@ -1,10 +1,11 @@
+import * as THREE from "three";
 import { defineShaderScene } from "../shader/defineShaderScene";
 import { paletteParam } from "../palettes";
 import { ART_LIB } from "./lib.glsl";
 import { CAMERA_GLSL, type Framing } from "./camera";
 import { SKY_GLSL } from "./sky.glsl";
 import { TEMPLE_GLSL } from "./temple.glsl";
-import { flockStep, olympeUniforms, olympeWarp } from "./olympe";
+import { featherStep, flockStep, olympeUniforms, olympeWarp } from "./olympe";
 
 /** The temple: 6 by 11 Doric columns, s apart, H high, R in radius; its front faces +z. */
 const NX = 6;
@@ -14,6 +15,9 @@ const H = 7;
 const R = 0.62;
 const HX = ((NX - 1) / 2) * S;
 const HZ = ((NZ - 1) / 2) * S;
+
+/** (the direction the camera looks, for the feathers) */
+const FWD = new THREE.Vector3();
 
 const FRAMINGS: Framing[] = [
   // the front, from afar, the clouds under it
@@ -54,6 +58,10 @@ export const temple = defineShaderScene({
     uKickT: { value: 9 },
   }),
   update(u, f, _p, dt, ctx) {
+    if (ctx.camera) {
+      const look = FWD.subVectors(ctx.camera.target, ctx.camera.pos);
+      featherStep(u, ctx.time, ctx.camera.pos, look, { size: 36, length: 1.1, fall: 0.55, ahead: 18 });
+    }
     flockStep(u, f, ctx.dt, () => {
       const sd = Math.random() < 0.5 ? -1 : 1;
       return { a: [sd * 32, 8, 6], b: [-sd * 32, 10, -6], r: 3, size: 1, dur: 11 };
@@ -313,6 +321,8 @@ void main() {
   col = col * wv.a + wv.rgb;
   vec4 dv = dovesO(ro, rd, tt > 0. ? tt : 1e4);
   col = mix(col, dv.rgb, dv.a);
+  vec4 fe = feathersO(ro, rd, tt > 0. ? tt : 1e4);
+  col = mix(col, fe.rgb, fe.a);
   col = withShafts(col, ro, rd, tt > 0. ? tt : 60., .7 + .5 * exp(-uKickT * 3.) + 1.2 * uDrop);
   gl_FragColor = vec4(hdrOut(col), 1.);
 }

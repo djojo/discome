@@ -8,7 +8,8 @@ import { wantCloudNoise } from "./cloudnoise";
  *   veil, the dust and the clouds all slow down together, while the lights of the kick keep the tempo);
  * - its sun: how high it stands and how warm it is, following the track (low and golden in the intro, rising through
  *   the build, at its highest on the drop, sinking warm through the breakdown; the night warms it a little more). Each
- *   scene keeps its own bearing (the sun behind its subject).
+ *   scene keeps its own bearing (the sun behind its subject);
+ * - its feathers' whirl on the drop.
  * Advanced once a frame, whichever scene draws first (two scenes draw during a transition).
  */
 export const OLYMPE_UNIFORMS = {
@@ -18,6 +19,8 @@ export const OLYMPE_UNIFORMS = {
   uSunWarm: { value: 0.3 },
   /** The time scale now (1, down to .2 in the slow motion). */
   uSlow: { value: 1 },
+  /** How far the feathers have whirled round (a burst on each drop). */
+  uFeatherSwirl: { value: 0 },
 };
 
 let lastTime = Number.NaN;
@@ -48,6 +51,8 @@ function step(f: AudioFrame, dt: number) {
           : 1;
   clock += dt * scale;
   OLYMPE_UNIFORMS.uSlow.value = scale;
+  // the feathers whirl round on the drop, and settle back to their slow fall
+  OLYMPE_UNIFORMS.uFeatherSwirl.value += dt * scale * (0.03 + 1.6 * Math.exp(-dropT / (bar * 1.2)));
   // the sun follows the track
   const el = f.section === "build" ? 0.25 + 0.5 * f.buildProgress : f.section === "drop" ? 0.85 : f.section === "breakdown" ? 0.08 : 0.25;
   const e = OLYMPE_UNIFORMS.uSunEl.value;
@@ -63,9 +68,61 @@ export function olympeWarp(f: AudioFrame, dt: number) {
   return { time: clock, dt: dt * scale };
 }
 
-/** The uniforms an Olympe scene needs: the clouds' noise and the shared sun, and its own flight of doves. */
+/** The uniforms an Olympe scene needs: the clouds' noise and the shared sun, its own doves and feathers. */
 export function olympeUniforms() {
-  return { ...wantCloudNoise(), ...OLYMPE_UNIFORMS, ...flockUniforms() };
+  return { ...wantCloudNoise(), ...OLYMPE_UNIFORMS, ...flockUniforms(), ...featherUniforms() };
+}
+
+// ---- the feathers (sky.glsl.ts: feathersO)
+
+const FEATHERS = 24;
+/** Each feather's own numbers: where in the box, how it sways and falls, its turn. */
+const FEATHER_H = Array.from({ length: FEATHERS }, () => [Math.random(), Math.random(), Math.random(), Math.random()]);
+
+function featherUniforms() {
+  return {
+    uFeathers: { value: Array.from({ length: FEATHERS }, () => new THREE.Vector4(0, -1e5, 0, 0)) },
+    uFeatherL: { value: 0 },
+  };
+}
+
+/** The box of air a scene's feathers fall through: its size, a feather's length, how fast they fall, how far ahead. */
+export type FeatherBox = { size: number; length: number; fall: number; ahead: number };
+
+const fCtr = new THREE.Vector3();
+const fP = new THREE.Vector3();
+
+/**
+ * Where the scene's feathers are now (once a frame: the shader only reads them): falling and swaying in a box of air
+ * ahead of the eye (eye: where it is, roughly; fwd: where it looks), fixed in the world, each wrapping round to the
+ * other side as the eye moves on; whirled round on the drop (uFeatherSwirl). time: the world's slowed time.
+ */
+export function featherStep(
+  u: Record<string, THREE.IUniform>,
+  time: number,
+  eye: THREE.Vector3,
+  fwd: THREE.Vector3,
+  box: FeatherBox,
+) {
+  const B = box.size, L = box.length;
+  fCtr.copy(fwd).normalize().multiplyScalar(box.ahead).add(eye);
+  const swirl = OLYMPE_UNIFORMS.uFeatherSwirl.value;
+  const wrap = (x: number, o: number) => x - o - B * Math.floor((x - o) / B) + o;
+  const out = u.uFeathers.value as THREE.Vector4[];
+  FEATHER_H.forEach((h, i) => {
+    const mx = Math.sin(time * (0.5 + 0.3 * h[1]) + i) * L * 1.5;
+    const my = -time * box.fall * (0.7 + 0.6 * h[2]);
+    const mz = Math.cos(time * (0.4 + 0.3 * h[0]) + i * 2) * L;
+    fP.set(
+      wrap(h[0] * B + mx, fCtr.x - B / 2) - fCtr.x,
+      wrap(h[1] * B + my, fCtr.y - B / 2) - fCtr.y,
+      wrap(h[2] * B + mz, fCtr.z - B / 2) - fCtr.z,
+    );
+    // the drop's whirl round the middle of the box
+    const a = swirl * (0.6 + 0.8 * h[0]), c = Math.cos(a), s = Math.sin(a);
+    out[i].set(fCtr.x + fP.x * c - fP.z * s, fCtr.y + fP.y, fCtr.z + fP.x * s + fP.z * c, h[3]);
+  });
+  u.uFeatherL.value = L;
 }
 
 // ---- the doves (sky.glsl.ts: dovesO)

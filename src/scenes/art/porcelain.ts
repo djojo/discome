@@ -7,7 +7,7 @@ import { CAMERA_GLSL, type Framing } from "./camera";
 import { HEAD_GLSL, headGrid, headParam, headsOf, headUniforms, setHead, TITLE_HEAD, type HeadId } from "./heads";
 import { DETAIL_GLSL } from "./detail.glsl";
 import { SKY_GLSL } from "./sky.glsl";
-import { flockStep, olympeUniforms, olympeWarp } from "./olympe";
+import { featherStep, flockStep, olympeUniforms, olympeWarp } from "./olympe";
 import { Casting, pick } from "./casting";
 import type { ParamDef } from "../types";
 
@@ -68,6 +68,8 @@ const headChoice: ParamDef =
  * pours out through the seam; it closes again through the breakdown. The bust only turns, very slowly: the music
  * drives the light (the seam, the sun, the shafts, the gold dust).
  */
+/** (the direction the camera looks, for the feathers) */
+const FWD = new THREE.Vector3();
 const smoothstep01 = (x: number) => {
   const t = Math.min(1, Math.max(0, x));
   return t * t * (3 - 2 * t);
@@ -170,6 +172,10 @@ export const porcelain = defineShaderScene({
           })()
         : { a: [-dside * 16, 2.5, -14], b: [dside * 16, 4, -20], r: 2, size: 0.45, dur: 12 },
     burst);
+    if (ctx.camera) {
+      const look = FWD.subVectors(ctx.camera.target, ctx.camera.pos);
+      featherStep(u, ctx.time, ctx.camera.pos, look, { size: 8, length: 0.24, fall: 0.12, ahead: 4 });
+    }
     const o = u.uOpen.value as number;
     // Critically damped: ~2 bars to open, ~4 bars to close
     const w = target > o ? 4 / (bar * 2) : 4 / (bar * 4);
@@ -603,6 +609,9 @@ void main() {
   col += (uAccent * 1.2 + uInk * .4) * glow * sunLight * (uOpen + .03);
   vec4 dv = dovesO(ro, rd, tt > 0. ? tt : 1e4);
   col = mix(col, dv.rgb, dv.a);
+  // feathers falling through the light round the bust
+  vec4 fe = feathersO(ro, rd, tt > 0. ? tt : 1e4);
+  col = mix(col, fe.rgb, fe.a);
 
   // Sheets of light pouring out of the seam (build, open)
   if (uLeak > .01) {

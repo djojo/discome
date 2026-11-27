@@ -7,7 +7,7 @@ import { FLIGHT_GLSL, flightParams } from "./flight";
 import { HEAD_GLSL, headSlotGLSL, headsOf, headUniforms, setHead, type HeadId } from "./heads";
 import { SKY_GLSL } from "./sky.glsl";
 import { TEMPLE_GLSL } from "./temple.glsl";
-import { flockStep, olympeUniforms, olympeWarp } from "./olympe";
+import { featherStep, flockStep, olympeUniforms, olympeWarp } from "./olympe";
 import { Casting, pick, Procession } from "./casting";
 
 /**
@@ -34,6 +34,9 @@ const faceCasting = new Casting(["hera"], (avoid) => pick(FACES, 1, avoid));
 type Face = { on: boolean; form: number; gone: number; x: number; z: number; cool: number; head: HeadId };
 const faces = new WeakMap<object, Face>();
 /** Its scale, the height of its centre, how far ahead it forms and how close it may come. */
+/** (where the eye is, roughly, and where it looks: for the feathers) */
+const EYE = new THREE.Vector3();
+const LOOK = new THREE.Vector3(0, -0.06, -1);
 const FACE_S = 110;
 const FACE_Y = 42;
 const FACE_FAR = 460;
@@ -134,6 +137,7 @@ export const cloudSea = defineShaderScene({
     u.uFaceS.value = face.on ? FACE_S : 0;
     u.uFaceForm.value = face.form;
     u.uFaceGone.value = face.gone;
+    featherStep(u, ctx.time, EYE.set(0, 1.5, -travel), LOOK, { size: 60, length: 2.2, fall: 1.2, ahead: 28 });
     // now and then a flight of doves across the sky, far ahead
     flockStep(u, f, ctx.dt, () => {
       const sd = Math.random() < 0.5 ? -1 : 1;
@@ -388,6 +392,8 @@ void main() {
   }
   vec4 dv = dovesO(ro, rd, tBest < 1e3 ? tBest : 1e4);
   col = mix(col, dv.rgb, dv.a);
+  vec4 fe = feathersO(ro, rd, tBest < 1e3 ? tBest : 1e4);
+  col = mix(col, fe.rgb, fe.a);
   col += uAccent * sunRays(rd, 4.) * (.15 + .4 * uRise + .25 * uBeat);
   // the sun's rays over the sea, swelling as it climbs, pulsing on the kick, blazing on the drop
   float rays = (.45 + .8 * uRise + .4 * uBeat + 1. * uDrop) * (tBest < 1e3 ? .55 : 1.);

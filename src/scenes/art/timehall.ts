@@ -1,10 +1,11 @@
+import * as THREE from "three";
 import { defineShaderScene } from "../shader/defineShaderScene";
 import { paletteParam } from "../palettes";
 import { ART_LIB } from "./lib.glsl";
 import { HEAD_GLSL, headsOf, headUniforms, setHead, type HeadId } from "./heads";
 import { SKY_GLSL } from "./sky.glsl";
 import { TEMPLE_GLSL } from "./temple.glsl";
-import { flockStep, olympeUniforms, olympeWarp } from "./olympe";
+import { featherStep, flockStep, olympeUniforms, olympeWarp } from "./olympe";
 import { Procession } from "./casting";
 
 /**
@@ -20,6 +21,10 @@ const STEP = 9;
 const AHEAD = 5;
 const MEMORY = 8;
 const procession = new Procession(POOL, SLOTS.length, MEMORY, FIRST);
+
+/** (where the eye is, roughly, and where it looks: for the feathers) */
+const EYE = new THREE.Vector3();
+const LOOK = new THREE.Vector3(0, 0.1, -1);
 
 const smooth = (x: number) => {
   const t = Math.min(1, Math.max(0, x));
@@ -63,6 +68,9 @@ export const timeHall = defineShaderScene({
     // the walk: slow, its own pace
     u.uWalk.value = (u.uWalk.value as number) + ctx.dt * 0.55;
     const walk = u.uWalk.value as number;
+    const seed = u.uSeed.value as number;
+    EYE.set(1.2 * Math.sin(walk * 0.045 + seed), 1.6, -walk);
+    featherStep(u, ctx.time, EYE, LOOK, { size: 18, length: 0.5, fall: 0.3, ahead: 8 });
     flockStep(u, f, ctx.dt, () => {
       const sd = Math.random() < 0.5 ? -1 : 1;
       return { a: [sd * 26, 6, -walk - 30], b: [-sd * 26, 8, -walk - 42], r: 3, size: 1, dur: 11 };
@@ -376,6 +384,8 @@ void main() {
   float tBest = tHit, tCol = tHit;
   vec4 dv = dovesO(ro, rd, tBest);
   col = mix(col, dv.rgb, dv.a);
+  vec4 fe = feathersO(ro, rd, min(tBest, tFloor));
+  col = mix(col, nightO(fe.rgb, rd, false), fe.a);
   // rays wheeling with the sun
   col = withShafts(col, ro, rd, min(min(min(tBest, tFloor), tCol), 40.), (.45 + .3 * exp(-uKickT * 3.)) * (1. - uNight));
   // dusk: the light warms as the day goes, between the day and the night

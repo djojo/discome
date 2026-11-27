@@ -1,10 +1,11 @@
+import * as THREE from "three";
 import { defineShaderScene } from "../shader/defineShaderScene";
 import { paletteParam } from "../palettes";
 import { ART_LIB } from "./lib.glsl";
 import { HEAD_GLSL, headUniforms, setHead, type HeadId } from "./heads";
 import { SKY_GLSL } from "./sky.glsl";
 import { TEMPLE_GLSL } from "./temple.glsl";
-import { flockStep, olympeUniforms, olympeWarp } from "./olympe";
+import { featherStep, flockStep, olympeUniforms, olympeWarp } from "./olympe";
 
 /**
  * The gods of the assembly, round the ring: Hera, Athena, Dionysos, Homer (the bearded one, as Zeus), the Emperor
@@ -12,6 +13,10 @@ import { flockStep, olympeUniforms, olympeWarp } from "./olympe";
  */
 const GODS: HeadId[] = ["hera", "athena", "dionysos", "homere", "empereur", "imperatrice"];
 const SLOTS = ["", "B", "C", "D", "E", "F"];
+
+/** (where the eye is and where it looks: for the feathers) */
+const EYE = new THREE.Vector3();
+const LOOK = new THREE.Vector3();
 
 const smooth = (x: number) => {
   const t = Math.min(1, Math.max(0, x));
@@ -70,6 +75,11 @@ export const assembly = defineShaderScene({
     u.uSwirl.value = (u.uSwirl.value as number) + ctx.dt * (0.04 + 0.6 * (u.uBeam.value as number));
     // the camera turns slowly round the ring
     u.uTurn.value = (u.uTurn.value as number) + ctx.dt * 0.035;
+    // the feathers: the eye near the middle of the ring, looking up at the god we face
+    const az0 = (u.uTurn.value as number) + (u.uSeed.value as number);
+    EYE.set(0.8 * Math.cos(az0 + Math.PI), 2.2, 0.8 * Math.sin(az0 + Math.PI));
+    LOOK.set(13 * Math.cos(az0), 5.4, 13 * Math.sin(az0)).sub(EYE);
+    featherStep(u, ctx.time, EYE, LOOK, { size: 24, length: 0.8, fall: 0.45, ahead: 10 });
     // now and then a flight of doves behind the god we face
     flockStep(u, f, ctx.dt, () => {
       const az = (u.uTurn.value as number) + (u.uSeed.value as number);
@@ -279,6 +289,8 @@ void main() {
   }
   vec4 dv = dovesO(ro, rd, tt > 0. ? tt : 1e4);
   col = mix(col, dv.rgb, dv.a);
+  vec4 fe = feathersO(ro, rd, tt > 0. ? tt : 1e4);
+  col = mix(col, fe.rgb, fe.a);
   float rays = .3 + .4 * uCharge + .3 * uBeat + .8 * uDrop;
   col = withShafts(col, ro, rd, tt > 0. ? tt : 50., rays);
   gl_FragColor = vec4(hdrOut(col), 1.);
