@@ -11,7 +11,8 @@ import { Procession } from "./casting";
  * The colossal heads met on the way: the portraits of Rome and Greece and their archetypes, one after another, never
  * the same one twice in view nor back before MEMORY others have passed. The first ones load with the world.
  */
-const FIRST: HeadId[] = ["homere", "hera", "antinous"];
+// (portraits the Assembly's gods already load: the world downloads nothing more for them)
+const FIRST: HeadId[] = ["homere", "dame", "memnon"];
 const POOL: HeadId[] = [...headsOf("visage"), ...headsOf("archetype")].filter((h) => h !== "humain" && h !== "patron");
 /** Their head slots: the ones on the way, and the next ones loading. */
 const SLOTS = ["", "B", "C", "D", "E", "F", "G", "H"];

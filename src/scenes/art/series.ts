@@ -9,7 +9,8 @@ import { Casting, pick } from "./casting";
  * The portrait every cast is taken from: one of Rome and Greece (or an archetype), a different one on each passage,
  * never the one just shown. The first loads with the world.
  */
-const FIRST: HeadId[] = ["romaine"];
+// (portraits the Assembly's gods already load: the world downloads nothing more for them)
+const FIRST: HeadId[] = ["dame"];
 const POOL: HeadId[] = [...headsOf("visage"), ...headsOf("archetype")].filter((h) => h !== "humain" && h !== "patron");
 const casting = new Casting(FIRST, (avoid) => pick(POOL, 1, avoid));
 /** Each instance's passage: its seed (redrawn when it comes back on screen), its portrait. */

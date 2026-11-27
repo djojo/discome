@@ -9,7 +9,8 @@ import { Procession } from "./casting";
  * The statues of the hall: the portraits of Rome and Greece and their archetypes, one after another along the walk,
  * never the same one twice in view nor back before MEMORY others have passed. The first ones load with the world.
  */
-const FIRST: HeadId[] = ["socrate", "giulia", "marcaurele", "minatia"];
+// (portraits the Assembly's gods already load: the world downloads nothing more for them)
+const FIRST: HeadId[] = ["marcaurele", "minatia", "hera"];
 const POOL: HeadId[] = [...headsOf("visage"), ...headsOf("archetype")].filter((h) => h !== "humain" && h !== "patron");
 const SLOTS = ["", "B", "C", "D", "E", "F", "G", "H"];
 /** One statue every STEP along the walk, on alternate sides, far apart; AHEAD of them in view. */

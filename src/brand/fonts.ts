@@ -41,7 +41,7 @@ export interface TitleFont {
 }
 
 export const TITLE_FONTS = {
-  /** Porcelaine: an elegant display serif. */
+  /** An elegant display serif (the old Porcelaine world). */
   didone: { family: playfair.style.fontFamily, weight: "800", second: 0.5 },
   /** Monolithe: a heavy, narrow grotesque, spaced like an inscription. */
   monument: { family: anton.style.fontFamily, weight: "400", upper: true, spacing: 0.06, second: 0.42 },

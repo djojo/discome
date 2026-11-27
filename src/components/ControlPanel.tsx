@@ -31,7 +31,7 @@ export const SOURCE_LABELS: Record<SourceKind, string> = {
 
 interface Props {
   scene: SceneDef;
-  /** Name of what is on screen: « Porcelaine · Éclats » for a world plan, the scene's name otherwise. */
+  /** Name of what is on screen: « Olympe · Éclats » for a world plan, the scene's name otherwise. */
   planLabel: string;
   params: ParamValues;
   settings: Settings;

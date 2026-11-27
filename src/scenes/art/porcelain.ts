@@ -38,7 +38,8 @@ const FRAMINGS: Framing[] = [
  */
 const ANTIQUE = "antique";
 const BUSTS: HeadId[] = [...headsOf("visage"), ...headsOf("archetype")].filter((h) => h !== "humain" && h !== "patron");
-const FIRST: HeadId[] = ["antinous"];
+// (portraits the Assembly's gods already load: the world downloads nothing more for them)
+const FIRST: HeadId[] = ["hera"];
 const recent: HeadId[] = [];
 const busts = new Casting(FIRST, (avoid) => pick(BUSTS, 1, [...avoid, ...recent]), 1);
 /** Each instance's passage: its seed (redrawn when it comes back on screen), its bust. */

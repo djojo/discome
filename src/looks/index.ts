@@ -17,14 +17,14 @@ export type Role = "calm" | "build" | "drop" | "after" | "arc";
 
 /**
  * A plan ("shot"): a scene of the catalogue with its settings for this world. The same scene may appear
- * several times in a world under different keys (Porcelaine « Coquille » and « Éclats »).
+ * several times in a world under different keys (Olympe « Ciel intérieur » and « Éclats »).
  */
 export interface Shot {
   /** Scene id. */
   id: string;
   /** Unique within the world (defaults to the scene id). */
   key?: string;
-  /** Shown after the scene name: « Porcelaine · Éclats ». */
+  /** Shown after the scene name: « Olympe · Éclats ». */
   label?: string;
   weight?: number;
   params?: ParamValues;
