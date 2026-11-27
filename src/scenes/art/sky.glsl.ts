@@ -11,8 +11,10 @@ export const SKY_GLSL = /* glsl */ `
 /** The world's sun (art/olympe.ts): how high it stands (0..1), how warm its light is (0..1). */
 uniform float uSunEl;
 uniform float uSunWarm;
-/** The world's whirl of feathers on the drop (radians turned). */
+/** The world's whirl of feathers on the drop (radians turned), the canon drawn in the sky (how far, how visible). */
 uniform float uFeatherSwirl;
+uniform float uSkyCanon;
+uniform float uSkyCanonA;
 /** The height of the sun toward which a scene sets gSun (its bearing stays the scene's own). */
 float sunY() { return mix(.05, .62, uSunEl); }
 /** The colour of the sun's light: pale gold, warmer through the breakdown and over the night. */
@@ -277,11 +279,17 @@ float cloudShadow(vec3 p) {
   return exp(-cloudDensity(p + gSun * ((ym - p.y) / gSun.y), true) * gCloudThick * .45);
 }
 
-/** The sky toward rd with the clouds before tmax (the old sea of clouds while the noise is still cooking). */
+float skyCanonO(vec3 rd);
+/**
+ * The sky toward rd with the clouds before tmax (the old sea of clouds while the noise is still cooking); through a
+ * build the canon drawn in pencil across the sky, behind the clouds.
+ */
 vec3 heavenV(vec3 ro, vec3 rd, float tmax) {
   if (uCloudReady < .5) return heavenO(ro, rd, tmax);
   vec4 c = cloudsO(ro, rd, tmax);
-  return skyO(rd) * c.a + c.rgb;
+  vec3 sky = skyO(rd);
+  if (uSkyCanonA > .001) sky = mix(sky, uBase * .6 + uInk * .3, skyCanonO(rd));
+  return sky * c.a + c.rgb;
 }
 
 // ---- a face in the clouds: for a while, a heap of cloud takes the shape of a head, then the wind carries it off. A
@@ -643,5 +651,70 @@ float canonInk(vec3 q, float k, float px) {
   d = min(d, strokeArc(p, vec2(0., .12), .24, clamp(s - 10., 0., 1.)));
   float w = .0035 + px * .6;
   return (1. - smoothstep(w, w + px * 1.2, d)) * .75;
+}
+
+/** Distance to the part of an arc round c (radius r) from angle a0 toward a1 (from the top, clockwise) drawn so far. */
+float strokeArcPart(vec2 p, vec2 c, float r, float a0, float a1, float f) {
+  if (f <= 0.) return 1e3;
+  vec2 d = p - c;
+  float span = abs(a1 - a0) * f, dir = sign(a1 - a0);
+  float rel = mod((atan(d.x, d.y) - a0) * dir, 6.2831853);
+  if (rel <= span) return abs(length(d) - r);
+  float ae = a0 + dir * span;
+  return min(length(p - c - r * vec2(sin(a0), cos(a0))), length(p - c - r * vec2(sin(ae), cos(ae))));
+}
+
+/**
+ * The canon drawn across the sky through a build, at the scale of the landscape: a golden rectangle, its squares and
+ * the golden spiral winding in low over the horizon toward the sun, then a circle and two diagonals, in pencil,
+ * stroke after stroke (uSkyCanon); it fades after the drop (uSkyCanonA). How much graphite covers the sky toward rd.
+ */
+float skyCanonO(vec3 rd) {
+  // (low over the horizon, toward the sun: where the views look; the sun itself climbs out of them through a build)
+  vec3 c = normalize(normalize(vec3(gSun.x, 0., gSun.z)) + vec3(0., .2, 0.));
+  float cd = dot(rd, c);
+  if (cd < .25) return 0.;
+  vec3 right = normalize(cross(c, vec3(0., 1., 0.)));
+  vec3 up = cross(right, c);
+  // in the plane of the sky round that point, in heights of the rectangle; the spiral's eye on it, its rectangle
+  // reaching toward the middle of the view
+  const float HS = .5;
+  vec2 p = vec2(dot(rd, right), dot(rd, up)) / cd / HS;
+  if (gSun.x < 0.) p.x = -p.x;
+  p += vec2(1.1708, .2765);
+  float px = 1.3 / (uRes.y * 1.6 * HS * cd);
+  float k = uSkyCanon * 21., d = 1e3;
+  const float W = 1.618034;
+  d = min(d, strokeSeg(p, vec2(0., 0.), vec2(W, 0.), clamp(k, 0., 1.)));
+  d = min(d, strokeSeg(p, vec2(W, 0.), vec2(W, 1.), clamp(k - 1., 0., 1.)));
+  d = min(d, strokeSeg(p, vec2(W, 1.), vec2(0., 1.), clamp(k - 2., 0., 1.)));
+  d = min(d, strokeSeg(p, vec2(0., 1.), vec2(0., 0.), clamp(k - 3., 0., 1.)));
+  // the squares cut off one after another, each with its quarter of the spiral
+  float x = 0., y = 0., w = W, h = 1.;
+  for (int i = 0; i < 7; i++) {
+    float fi = float(i), m = mod(fi, 4.);
+    float f1 = clamp(k - 4. - fi * 2., 0., 1.), f2 = clamp(k - 5. - fi * 2., 0., 1.);
+    if (m < .5) {
+      d = min(d, strokeSeg(p, vec2(x + h, y), vec2(x + h, y + h), f1));
+      d = min(d, strokeArcPart(p, vec2(x + h, y), h, -1.5708, 0., f2));
+      x += h; w -= h;
+    } else if (m < 1.5) {
+      d = min(d, strokeSeg(p, vec2(x, y + h - w), vec2(x + w, y + h - w), f1));
+      d = min(d, strokeArcPart(p, vec2(x, y + h - w), w, 0., 1.5708, f2));
+      h -= w;
+    } else if (m < 2.5) {
+      d = min(d, strokeSeg(p, vec2(x + w - h, y), vec2(x + w - h, y + h), f1));
+      d = min(d, strokeArcPart(p, vec2(x + w - h, y + h), h, 1.5708, 3.1416, f2));
+      w -= h;
+    } else {
+      d = min(d, strokeSeg(p, vec2(x, y + w), vec2(x + w, y + w), f1));
+      d = min(d, strokeArcPart(p, vec2(x + w, y + w), w, 3.1416, 4.7124, f2));
+      y += w; h -= w;
+    }
+  }
+  d = min(d, strokeArc(p, vec2(W * .5, .5), .5, clamp(k - 18., 0., 1.)));
+  d = min(d, strokeSeg(p, vec2(0., 0.), vec2(W, 1.), clamp(k - 19., 0., 1.)));
+  d = min(d, strokeSeg(p, vec2(0., 1.), vec2(W, 0.), clamp(k - 20., 0., 1.)));
+  return (1. - smoothstep(px * .5, px * 1.5, d)) * .4 * uSkyCanonA * smoothstep(.25, .45, cd);
 }
 `;

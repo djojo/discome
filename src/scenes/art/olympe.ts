@@ -9,7 +9,7 @@ import { wantCloudNoise } from "./cloudnoise";
  * - its sun: how high it stands and how warm it is, following the track (low and golden in the intro, rising through
  *   the build, at its highest on the drop, sinking warm through the breakdown; the night warms it a little more). Each
  *   scene keeps its own bearing (the sun behind its subject);
- * - its feathers' whirl on the drop.
+ * - its feathers' whirl on the drop, and the canon drawn across its sky through a build.
  * Advanced once a frame, whichever scene draws first (two scenes draw during a transition).
  */
 export const OLYMPE_UNIFORMS = {
@@ -21,6 +21,9 @@ export const OLYMPE_UNIFORMS = {
   uSlow: { value: 1 },
   /** How far the feathers have whirled round (a burst on each drop). */
   uFeatherSwirl: { value: 0 },
+  /** The canon drawn across the sky through a build: how far (0..1), how visible (it fades after the drop). */
+  uSkyCanon: { value: 0 },
+  uSkyCanonA: { value: 0 },
 };
 
 let lastTime = Number.NaN;
@@ -53,6 +56,15 @@ function step(f: AudioFrame, dt: number) {
   OLYMPE_UNIFORMS.uSlow.value = scale;
   // the feathers whirl round on the drop, and settle back to their slow fall
   OLYMPE_UNIFORMS.uFeatherSwirl.value += dt * scale * (0.03 + 1.6 * Math.exp(-dropT / (bar * 1.2)));
+  // the canon drawn across the sky through the build, stroke after stroke; fading over four bars after it
+  const sc = OLYMPE_UNIFORMS.uSkyCanon, sa = OLYMPE_UNIFORMS.uSkyCanonA;
+  if (f.section === "build") {
+    sc.value = Math.max(sc.value, sc.value + (f.buildProgress - sc.value) * (1 - Math.exp(-dt * 2)));
+    sa.value = Math.min(1, sa.value + dt * 0.8);
+  } else {
+    sa.value = Math.max(0, sa.value - dt / (bar * 4));
+    if (sa.value <= 0) sc.value = 0;
+  }
   // the sun follows the track
   const el = f.section === "build" ? 0.25 + 0.5 * f.buildProgress : f.section === "drop" ? 0.85 : f.section === "breakdown" ? 0.08 : 0.25;
   const e = OLYMPE_UNIFORMS.uSunEl.value;
