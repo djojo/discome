@@ -18,9 +18,10 @@ const smooth = (x: number) => {
 
 /**
  * Le Voile: the colossal head of a god floats above the clouds, its back to a low sun; a vast white veil drifts before
- * it in the wind, translucent, the light coming through it, its folds rolling slowly; it hides the face and uncovers
- * it as it drifts. On the kick a ripple runs across it. On the drop the wind carries it off and the face appears in
- * the light; through the breakdown it comes back.
+ * it in the wind, translucent, the light coming through it, its folds rolling slowly, and a lighter one nearer slides
+ * over it the other way; they hide the face and uncover it as they drift. On the kick a ripple runs across them. On
+ * the drop the wind tears them into ribbons that fly off, and the face appears in the light; through the breakdown
+ * the ribbons come back together.
  */
 export const veil = defineShaderScene({
   id: "olympe-veil",
@@ -31,7 +32,7 @@ export const veil = defineShaderScene({
   renderScale: 0.75,
   heads: ["athena"],
   description:
-    "La tête colossale d'un dieu au-dessus des nuages ; devant elle, un immense voile blanc translucide dérive dans le vent, la lumière le traverse, il cache puis découvre le visage. Au drop, le vent l'emporte et le visage apparaît dans la lumière ; il revient pendant le break.",
+    "La tête colossale d'un dieu au-dessus des nuages ; devant elle, un immense voile blanc translucide dérive dans le vent, un second plus léger glisse devant lui en sens inverse, la lumière les traverse, ils cachent puis découvrent le visage. Au drop, le vent les déchire en rubans qui s'envolent et le visage apparaît dans la lumière ; les rubans se rassemblent pendant le break.",
   params: [paletteParam("olympe")],
   uniforms: () => ({
     ...olympeUniforms(),
@@ -54,11 +55,12 @@ export const veil = defineShaderScene({
       const sd = Math.random() < 0.5 ? -1 : 1;
       return { a: [sd * 30, 3, -10], b: [-sd * 30, 5, -16], r: 3.5, size: 1.1, dur: 11 };
     });
-    // the drop: the wind carries it off over a bar; it comes back through the breakdown, over four
+    // the drop: the wind tears it into ribbons and carries them off over two bars (in the world's slow motion); they
+    // come back together through the breakdown, over four
     const g = u.uGone.value as number;
     const goal = f.section === "drop" ? 1 : f.section === "breakdown" || f.section === "build" ? 0 : g;
-    const rate = goal > g ? 1 / bar : 1 / (bar * 4);
-    u.uGone.value = goal > g ? Math.min(goal, g + rate * dt) : Math.max(goal, g - rate * dt);
+    const rate = goal > g ? 1 / (bar * 2) : 1 / (bar * 4);
+    u.uGone.value = goal > g ? Math.min(goal, g + rate * ctx.dt) : Math.max(goal, g - rate * ctx.dt);
     if (f.drop) u.uGone.value = Math.max(g, 0.01);
     // the face lit as it is uncovered
     u.uReveal.value = smooth(u.uGone.value as number);
@@ -84,23 +86,100 @@ float godD(vec3 p) {
   return max(headD(h), -.75 - h.y) * GS;
 }
 
-/** Where the veil is (its centre in its plane), and how it folds: z off its plane at (x, y), its own coordinates. */
-vec2 veilCentre() {
-  vec2 c = vec2(7.5 * sin(uWander * 1.9 + uSeed) , 2.5 + 1.2 * sin(uWander * 1.3 + uSeed * 2.));
-  // the wind carries it off, up and away
-  return c + vec2(uGone * uGone * 34., uGone * uGone * 18.);
-}
+// ---- the veils: two of them, one before the other, sliding over each other in the wind. The one being drawn: its
+// plane (z), half size, centre, its own time, how far the wind has torn it (0 whole, 1 its ribbons gone)
+float gZV = ZV;
+vec2 gVS = VS;
+vec2 gVC = vec2(0.);
+float gPh = 0.;
+float gTear = 0.;
+const int NR = 7;  // the ribbons it tears into
+
+/** How it folds: z off its plane at (x, y), its own coordinates. */
 float veilW(vec2 q) {
-  float t = uTime;
+  float t = uTime + gPh;
   // the edge away from the wind flutters most
-  float free = smoothstep(-VS.x, VS.x, q.x) * .7 + .3;
+  float free = smoothstep(-gVS.x, gVS.x, q.x) * .7 + .3;
   float w = 1.3 * sin(q.x * .5 + t * .7) * sin(q.y * .42 + t * .45)
     + .7 * sin(q.x * 1.15 - t * 1.1 + q.y * .45)
     + .3 * sin(q.y * 2. + t * 1.6 + q.x * .6);
   // a ripple running across it on the kick
-  float r = uKickT * 9. - VS.x;
+  float r = uKickT * 9. - gVS.x;
   w += .5 * exp(-pow(q.x - r, 2.) * .15) * exp(-uKickT * 1.5);
-  return w * free * (1. + 1.5 * uGone);
+  return w * free * (1. + 1.5 * gTear);
+}
+
+/** How torn ribbon j is (each in its own turn), and where the wind has taken it: offset (xy), turn, z. */
+float ribbonTear(float j) { return clamp((gTear - .3 * hash12(vec2(j, gPh + 1.))) / .7, 0., 1.); }
+vec3 ribbonMove(float j, out float ang) {
+  float tj = ribbonTear(j);
+  vec3 h = vec3(hash12(vec2(j, gPh + 2.)), hash12(vec2(j, gPh + 3.)), hash12(vec2(j, gPh + 4.)));
+  ang = tj * (h.z - .5) * 2.2;
+  return vec3(tj * tj * (17. + 12. * h.x), tj * tj * (7. + 12. * h.y) + sin(tj * 5. + j) * 1.5 * tj, tj * (h.x - .5) * 5.);
+}
+/** Which ribbon is at xy (in the plane), and the veil's own coordinates there; -1: none. Whole: one piece. */
+float ribbonAt(vec2 xy, out vec2 q, out float zo) {
+  zo = 0.;
+  q = xy - gVC;
+  if (gTear <= 0.) return 0.;
+  float w = 2. * gVS.x / float(NR);
+  for (int j = 0; j < NR; j++) {
+    float fj = float(j), ang;
+    vec3 o = ribbonMove(fj, ang);
+    float cx = -gVS.x + (fj + .5) * w;
+    vec2 r = (xy - gVC - o.xy - vec2(cx, 0.)) * rot(ang);
+    if (abs(r.x) < w * .5 + .45) { q = r + vec2(cx, 0.); zo = o.z; return fj; }
+  }
+  return -1.;
+}
+
+/** A veil between the eye and tEnd: its cloth (rgb), how much it hides (a); opacity: the layer's own. */
+vec4 veilO(vec3 ro, vec3 rd, float tEnd, float opacity) {
+  if (rd.z > -1e-3) return vec4(0.);
+  float ta = (gZV + 4. - ro.z) / rd.z, tb = (gZV - 4. - ro.z) / rd.z;
+  float tv = -1., tp = ta, zo;
+  vec2 q;
+  vec3 pp = ro + rd * ta;
+  float j = ribbonAt(pp.xy, q, zo);
+  float fp = j < 0. ? 1. : pp.z - gZV - zo - veilW(q);
+  for (int i = 1; i <= 24; i++) {
+    float tc = mix(ta, tb, float(i) / 24.);
+    vec3 pc = ro + rd * tc;
+    j = ribbonAt(pc.xy, q, zo);
+    float fc = j < 0. ? 1. : pc.z - gZV - zo - veilW(q);
+    if (fp > 0. && fc <= 0.) { tv = mix(tp, tc, fp / (fp - fc)); break; }
+    tp = tc;
+    fp = fc;
+  }
+  if (tv <= 0. || tv >= tEnd) return vec4(0.);
+  vec3 p = ro + rd * tv;
+  j = ribbonAt(p.xy, q, zo);
+  if (j < 0.) return vec4(0.);
+  // its ragged edges; torn, the ribbon's own frayed edges
+  vec2 eq = abs(q) - gVS + (vnoise(vec3(q * .35, uTime * .1 + gPh)) - .5) * 2.2;
+  float edge = max(eq.x, eq.y);
+  float tj = ribbonTear(j);
+  if (gTear > 0.) {
+    float w = 2. * gVS.x / float(NR);
+    float rx = abs(q.x - (-gVS.x + (j + .5) * w)) - w * .5 + .35 * tj - .3 * (1. - smoothstep(0., .1, tj));
+    edge = max(edge, rx + (vnoise(vec3(q.y * 1.7, j * 3., gPh)) - .5) * .6 * tj);
+  }
+  float inside = 1. - smoothstep(-.15, .15, edge);
+  if (inside <= .01) return vec4(0.);
+  const float e = .05;
+  float w0 = veilW(q);
+  vec3 n = normalize(vec3(-(veilW(q + vec2(e, 0.)) - w0) / e, -(veilW(q + vec2(0., e)) - w0) / e, 1.));
+  if (dot(n, rd) > 0.) n = -n;
+  // lit from the front by the white sky, from behind by the sun through the cloth; the folds hold a little shade
+  float front = clamp(dot(n, gKey) * .8 + .35, 0., 1.);
+  float through = pow(max(dot(rd, gSun), 0.), 3.) * .8 + .2;
+  vec3 cloth = uPal1 * .5 + uInk * 1.6 * front + (uAccent * .55 + uInk * .35) * through;
+  float fold = clamp(.5 + 3. * (veilW(q + vec2(e * 6., 0.)) + veilW(q - vec2(e * 6., 0.)) - 2. * w0), 0., 1.);
+  cloth *= .78 + .3 * fold;
+  // the hem: a little denser where the cloth turns on itself
+  float hem = 1. - smoothstep(-1.2, -.3, edge);
+  float alpha = (.55 + .3 * (1. - front) + .15 * (1. - hem)) * inside * (1. - .5 * tj) * opacity;
+  return vec4(cloth, alpha);
 }
 
 void main() {
@@ -149,47 +228,23 @@ void main() {
   // (the doves fly behind the god, and the veil)
   vec4 dv = dovesO(ro, rd, tt > 0. ? tt : 1e4);
   col = mix(col, dv.rgb, dv.a);
-  // ---- the veil: where the ray crosses its folded surface (a height field along z), before the god
+  // ---- the veils: the great one before the face, and a lighter one nearer, sliding the other way; on the drop the
+  // wind tears them into ribbons that fly off, and the ribbons come back together through the breakdown
   float tEnd = tt > 0. ? tt : 200.;
-  vec2 vc = veilCentre();
-  if (rd.z < -1e-3) {
-    float ta = (ZV + 2.5 - ro.z) / rd.z, tb = (ZV - 2.5 - ro.z) / rd.z;
-    float tv = -1.;
-    float tp = ta;
-    vec3 pp = ro + rd * ta;
-    float fp = pp.z - ZV - veilW(pp.xy - vc);
-    for (int i = 1; i <= 20; i++) {
-      float tc = mix(ta, tb, float(i) / 20.);
-      vec3 pc = ro + rd * tc;
-      float fc = pc.z - ZV - veilW(pc.xy - vc);
-      if (fp > 0. && fc <= 0.) { tv = mix(tp, tc, fp / (fp - fc)); break; }
-      tp = tc;
-      fp = fc;
-    }
-    if (tv > 0. && tv < tEnd) {
-      vec3 p = ro + rd * tv;
-      vec2 q = p.xy - vc;
-      // its ragged edges
-      vec2 eq = abs(q) - VS + (vnoise(vec3(q * .35, uTime * .1)) - .5) * 2.2;
-      float inside = 1. - smoothstep(-.15, .15, max(eq.x, eq.y));
-      if (inside > .01) {
-        const float e = .05;
-        float w0 = veilW(q);
-        vec3 n = normalize(vec3(-(veilW(q + vec2(e, 0.)) - w0) / e, -(veilW(q + vec2(0., e)) - w0) / e, 1.));
-        if (dot(n, rd) > 0.) n = -n;
-        // lit from the front by the white sky, from behind by the sun through the cloth; the folds hold a little shade
-        float front = clamp(dot(n, gKey) * .8 + .35, 0., 1.);
-        float through = pow(max(dot(rd, gSun), 0.), 3.) * .8 + .2;
-        vec3 cloth = uPal1 * .5 + uInk * 1.6 * front + (uAccent * .55 + uInk * .35) * through;
-        float fold = clamp(.5 + 3. * (veilW(q + vec2(e * 6., 0.)) + veilW(q - vec2(e * 6., 0.)) - 2. * w0), 0., 1.);
-        cloth *= .78 + .3 * fold;
-        // the hem: a little denser where the cloth turns on itself
-        float hem = 1. - smoothstep(-1.2, -.3, max(eq.x, eq.y));
-        float alpha = (.55 + .3 * (1. - front) + .15 * (1. - hem)) * inside * (1. - .6 * uGone);
-        col = mix(col, cloth, alpha);
-      }
-    }
-  }
+  gZV = ZV;
+  gVS = VS;
+  gVC = vec2(7.5 * sin(uWander * 1.9 + uSeed), 2.5 + 1.2 * sin(uWander * 1.3 + uSeed * 2.));
+  gPh = 0.;
+  gTear = uGone;
+  vec4 v = veilO(ro, rd, tEnd, 1.);
+  col = mix(col, v.rgb, v.a);
+  gZV = ZV + 4.5;
+  gVS = VS * vec2(.72, .78);
+  gVC = vec2(-6.5 * sin(uWander * 1.55 + uSeed * 1.7), 1.6 + 1.1 * sin(uWander * 1.1 + uSeed));
+  gPh = 7.3;
+  gTear = clamp(uGone * 1.25 - .05, 0., 1.);
+  v = veilO(ro, rd, tEnd, .55);
+  col = mix(col, v.rgb, v.a);
   col = withShafts(col, ro, rd, tEnd, .5 + .4 * exp(-uKickT * 3.) + 1.2 * uDrop);
   gl_FragColor = vec4(hdrOut(col), 1.);
 }
