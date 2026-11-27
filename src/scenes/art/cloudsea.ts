@@ -246,7 +246,7 @@ void main() {
   float rays = .45 + .8 * uRise + .4 * uBeat + 1. * uDrop;
   col = withShafts(col, ro, rd, min(min(tBest, tSea > 0. ? tSea : 1e4), 60.), rays);
   // inside the clouds: nothing but white
-  float inside = smoothstep(.6, -1.2, ro.y - seaH(ro.xz));
+  float inside = 1. - smoothstep(-1.2, .6, ro.y - seaH(ro.xz));
   col = mix(col, uInk * 2.4, inside);
   gl_FragColor = vec4(hdrOut(col), 1.);
 }

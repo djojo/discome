@@ -17,10 +17,10 @@ import { faithful } from "./art/faithful";
 import { torrent } from "./art/torrent";
 import { rose } from "./art/rose";
 import { organ } from "./art/organ";
-import { kintsugi } from "./art/kintsugi";
 import { series } from "./art/series";
-import { wheel } from "./art/wheel";
 import { cloudSea } from "./art/cloudsea";
+import { timeHall } from "./art/timehall";
+import { assembly } from "./art/assembly";
 import { panopticon } from "./art/panopticon";
 import { collective } from "./art/collective";
 import { warehouse } from "./art/warehouse";
@@ -117,10 +117,10 @@ export const SCENES: SceneDef[] = [
   torrent,
   rose,
   organ,
-  kintsugi,
   series,
-  wheel,
   cloudSea,
+  timeHall,
+  assembly,
   // Mycélium
   forest,
   giants,

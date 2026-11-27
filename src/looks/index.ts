@@ -86,8 +86,9 @@ export const LOOKS: Look[] = [
       { id: "porcelain", key: "coquille", label: "Ciel intérieur", weight: 3, role: "calm", params: { style: "shell", head: "antique" } },
       { id: "porcelain", key: "eclats", label: "Éclats", weight: 2, role: "drop", params: { style: "shards", head: "antique" } },
       { id: "olympe-sea", key: "mer", label: "Mer de nuages", weight: 3, role: "calm" },
-      { id: "series", weight: 2, role: "drop", params: { palette: "porcelain" } },
-      { id: "wheel", weight: 2, role: "build", params: { palette: "porcelain" } },
+      { id: "series", key: "oeuvres", label: "Œuvres mortes", weight: 2, role: "after" },
+      { id: "olympe-time", key: "temps", label: "Salle du temps", weight: 3, role: "build" },
+      { id: "olympe-gods", key: "dieux", label: "Assemblée des dieux", weight: 3, role: "drop" },
     ],
     // the white paradise fills the frame: no background
     title: {
@@ -97,8 +98,9 @@ export const LOOKS: Look[] = [
       role: "calm",
       params: { head: "titre", titleFont: "roman", titleRelief: "cut", titleDepth: 0.1, style: "shards", sky: 0.5 },
     },
-    // white on white: almost no bloom (it would turn the whole sky milky), a light vignette
-    fx: { grain: 0.06, vignette: 0.05, saturation: 0.95, contrast: 1.02, bloom: 0.02, accents: 0.25 },
+    // white on white: no bloom and hardly a vignette (on a white field they make a bright ellipse in the middle of the
+    // frame, its centre burnt out)
+    fx: { grain: 0.06, vignette: 0.015, saturation: 0.95, contrast: 1.02, bloom: 0, accents: 0.25 },
     transitions: { calm: ["fade", "luma", "dive"], drop: ["flash", "fade"] },
     director: "chill",
   },
@@ -601,7 +603,7 @@ export const LOOKS: Look[] = [
     description: "Les premières scènes et leurs couleurs vives, hors rotation des mondes.",
     swatch: ["#ff3cac", "#a855f7", "#22d3ee"],
     palettes: ["acid", "neon", "sunset", "ocean", "ice", "fire", "chrome", "vhs"],
-    scenes: SCENES.filter((s) => !["porcelain", "metamorphosis", "faithful", "torrent", "panopticon", "collective", "warehouse", "downpour", "pilgrimage", "mercury-beads", "mercury-wave", "mercury-blend", "mercury-flow", "mercury-melt", "flesh-morph", "flesh-radiolaria", "flesh-jelly", "canyon-cactus", "canyon-spirit", "canyon-ancestors", "canyon-vision", "topo-head", "profile-head", "halftone-head", "mercury", "cathedral", "monolith", "canyon-gorge", "canyon-mesas", "arcane-architect", "arcane-nomad", "arcane-prism", "arcane-portal", "arcane-road", "grimoire", "flesh", "flesh-skin", "signal", "museum", "rose", "organ", "kintsugi", "series", "wheel", "olympe-sea", "swirl", "myc-forest", "myc-grotto", "myc-giants", "myc-fall", "myc-maze", "myc-den", "myc-mirror", "myc-visions"].includes(s.id) && !s.id.startsWith("circuit-")).map((s) => ({ id: s.id, weight: 1 })),
+    scenes: SCENES.filter((s) => !["porcelain", "metamorphosis", "faithful", "torrent", "panopticon", "collective", "warehouse", "downpour", "pilgrimage", "mercury-beads", "mercury-wave", "mercury-blend", "mercury-flow", "mercury-melt", "flesh-morph", "flesh-radiolaria", "flesh-jelly", "canyon-cactus", "canyon-spirit", "canyon-ancestors", "canyon-vision", "topo-head", "profile-head", "halftone-head", "mercury", "cathedral", "monolith", "canyon-gorge", "canyon-mesas", "arcane-architect", "arcane-nomad", "arcane-prism", "arcane-portal", "arcane-road", "grimoire", "flesh", "flesh-skin", "signal", "museum", "rose", "organ", "series", "olympe-sea", "olympe-time", "olympe-gods", "swirl", "myc-forest", "myc-grotto", "myc-giants", "myc-fall", "myc-maze", "myc-den", "myc-mirror", "myc-visions"].includes(s.id) && !s.id.startsWith("circuit-")).map((s) => ({ id: s.id, weight: 1 })),
     fx: {},
     classic: true,
   },
