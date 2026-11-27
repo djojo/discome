@@ -22,7 +22,8 @@ const smooth = (x: number) => {
  * L'Assemblée des dieux: we stand inside a ring of colossal Olympian heads, each on a column of cloud, every one of
  * them looking down at us; the camera turns slowly, looking up at them. Below, the sea of clouds. On the kick a ring of
  * light runs round under their chins; on the drop a column of light falls from the zenith in the middle of the ring,
- * the clouds of the columns whirl and the gods light up from within.
+ * the clouds of the columns whirl and the gods light up from within; together they raise their eyes to it, slowly,
+ * and lower them back to us as it fades.
  */
 export const assembly = defineShaderScene({
   id: "olympe-gods",
@@ -33,7 +34,7 @@ export const assembly = defineShaderScene({
   renderScale: 0.75,
   heads: GODS,
   description:
-    "Au centre d'un cercle de têtes olympiennes colossales (Héra, Athéna, Dionysos, Homère en Zeus, l'Empereur, l'Impératrice) posées sur des colonnes de nuages, qui baissent les yeux vers nous. Au kick, un anneau de lumière fait le tour ; au drop, une colonne de lumière tombe du zénith, les nuages tourbillonnent et les dieux s'éclairent de l'intérieur.",
+    "Au centre d'un cercle de têtes olympiennes colossales (Héra, Athéna, Dionysos, Homère en Zeus, l'Empereur, l'Impératrice) posées sur des colonnes de nuages, qui baissent les yeux vers nous. Au kick, un anneau de lumière fait le tour ; au drop, une colonne de lumière tombe du zénith, les nuages tourbillonnent, les dieux s'éclairent de l'intérieur et lèvent ensemble les yeux vers elle, puis les rabaissent vers nous.",
   params: [paletteParam("olympe")],
   uniforms: () => ({
     ...olympeUniforms(),
@@ -45,6 +46,7 @@ export const assembly = defineShaderScene({
     uSwirl: { value: 0 },
     uTurn: { value: 0 },
     uCharge: { value: 0 },
+    uGaze: { value: 0 },
     // CPU side only
     uDropT: { value: 99 },
   }),
@@ -58,6 +60,8 @@ export const assembly = defineShaderScene({
     u.uDropT.value = t;
     // the column of light: it falls in half a bar, holds two, fades over two
     u.uBeam.value = (t < bar * 2.5 ? smooth(t / (bar * 0.5)) : 1 - smooth((t - bar * 2.5) / (bar * 2))) * (f.safeFlash ? 0.6 : 1);
+    // the gods raise their eyes to it together, slowly, and lower them back to us as it fades
+    u.uGaze.value = t < bar * 3 ? smooth(t / (bar * 1.5)) : 1 - smooth((t - bar * 3) / (bar * 2));
     const charge = f.section === "build" ? f.buildProgress : 0;
     u.uCharge.value = (u.uCharge.value as number) + (charge - (u.uCharge.value as number)) * (1 - Math.exp(-dt * 2));
     // the gods light up from within with the column, and a little through the build
@@ -82,6 +86,7 @@ uniform float uInner;
 uniform float uSwirl;
 uniform float uTurn;
 uniform float uCharge;
+uniform float uGaze;
 ${SLOTS.slice(1)
   .map(
     (s) => `uniform highp sampler3D uHeadTex${s};
@@ -121,10 +126,10 @@ ${SLOTS.slice(1)
   .join("\n")}
 }
 
-/** A god's own frame: facing the middle of the ring, bowed toward it. */
+/** A god's own frame: facing the middle of the ring, bowed toward it; on the drop raised to the column of light. */
 vec3 godFrame(vec3 p, float k) {
   vec3 c = godPos(k);
-  vec3 dv = EYE - c;
+  vec3 dv = mix(EYE, vec3(0., 20., 0.), uGaze) - c;
   vec3 h = (p - c) / GS;
   h.xz *= rot(atan(dv.x, dv.z));
   h.yz *= rot(asin(dv.y / length(dv)) * .8);
