@@ -3,7 +3,7 @@ import { paletteParam } from "../palettes";
 import { ART_LIB } from "./lib.glsl";
 import { HEAD_GLSL, headUniforms, setHead, type HeadId } from "./heads";
 import { SKY_GLSL } from "./sky.glsl";
-import { olympeUniforms, olympeWarp } from "./olympe";
+import { flockStep, olympeUniforms, olympeWarp } from "./olympe";
 import { Casting, pick } from "./casting";
 
 /** The god behind the veil: one of the assembly's (already loaded with the world), another on each passage. */
@@ -50,6 +50,10 @@ export const veil = defineShaderScene({
     u.uKickT.value = f.beat ? 0 : (u.uKickT.value as number) + dt;
     // the veil drifts back and forth before the face at its own pace
     u.uWander.value = (u.uWander.value as number) + ctx.dt * 0.05;
+    flockStep(u, f, ctx.dt, () => {
+      const sd = Math.random() < 0.5 ? -1 : 1;
+      return { a: [sd * 30, 3, -10], b: [-sd * 30, 5, -16], r: 3.5, size: 1.1, dur: 11 };
+    });
     // the drop: the wind carries it off over a bar; it comes back through the breakdown, over four
     const g = u.uGone.value as number;
     const goal = f.section === "drop" ? 1 : f.section === "breakdown" || f.section === "build" ? 0 : g;
@@ -142,6 +146,9 @@ void main() {
     col += (uAccent * 1.1 + uInk * .3) * uReveal * (.25 + .6 * fre) * exp(-uGone * .2);
     col = mix(col, skyO(rd), 1. - exp(-tt * .004));
   }
+  // (the doves fly behind the god, and the veil)
+  vec4 dv = dovesO(ro, rd, tt > 0. ? tt : 1e4);
+  col = mix(col, dv.rgb, dv.a);
   // ---- the veil: where the ray crosses its folded surface (a height field along z), before the god
   float tEnd = tt > 0. ? tt : 200.;
   vec2 vc = veilCentre();

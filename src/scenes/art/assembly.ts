@@ -4,7 +4,7 @@ import { ART_LIB } from "./lib.glsl";
 import { HEAD_GLSL, headUniforms, setHead, type HeadId } from "./heads";
 import { SKY_GLSL } from "./sky.glsl";
 import { TEMPLE_GLSL } from "./temple.glsl";
-import { olympeUniforms, olympeWarp } from "./olympe";
+import { flockStep, olympeUniforms, olympeWarp } from "./olympe";
 
 /**
  * The gods of the assembly, round the ring: Hera, Athena, Dionysos, Homer (the bearded one, as Zeus), the Emperor
@@ -66,6 +66,13 @@ export const assembly = defineShaderScene({
     u.uSwirl.value = (u.uSwirl.value as number) + ctx.dt * (0.04 + 0.6 * (u.uBeam.value as number));
     // the camera turns slowly round the ring
     u.uTurn.value = (u.uTurn.value as number) + ctx.dt * 0.035;
+    // now and then a flight of doves behind the god we face
+    flockStep(u, f, ctx.dt, () => {
+      const az = (u.uTurn.value as number) + (u.uSeed.value as number);
+      const sd = Math.random() < 0.5 ? -1 : 1;
+      const at = (k: number, y: number): [number, number, number] => [28 * Math.cos(az + k * sd), y, 28 * Math.sin(az + k * sd)];
+      return { a: at(-0.75, 10), b: at(0.75, 13), r: 3.5, size: 1.2, dur: 11 };
+    });
   },
   fragment: /* glsl */ `
 uniform float uKickT;
@@ -265,6 +272,8 @@ void main() {
       col += (uAccent * 1.2 + uInk * .6) * beam * uBeam;
     }
   }
+  vec4 dv = dovesO(ro, rd, tt > 0. ? tt : 1e4);
+  col = mix(col, dv.rgb, dv.a);
   float rays = .3 + .4 * uCharge + .3 * uBeat + .8 * uDrop;
   col = withShafts(col, ro, rd, tt > 0. ? tt : 50., rays);
   gl_FragColor = vec4(hdrOut(col), 1.);

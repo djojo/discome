@@ -4,7 +4,7 @@ import { ART_LIB } from "./lib.glsl";
 import { HEAD_GLSL, headsOf, headUniforms, setHead, type HeadId } from "./heads";
 import { SKY_GLSL } from "./sky.glsl";
 import { TEMPLE_GLSL } from "./temple.glsl";
-import { olympeUniforms, olympeWarp } from "./olympe";
+import { flockStep, olympeUniforms, olympeWarp } from "./olympe";
 import { Procession } from "./casting";
 
 /**
@@ -60,6 +60,11 @@ export const timeHall = defineShaderScene({
   update(u, f, _p, dt, ctx) {
     // the walk: slow, its own pace
     u.uWalk.value = (u.uWalk.value as number) + ctx.dt * 0.55;
+    const walk = u.uWalk.value as number;
+    flockStep(u, f, ctx.dt, () => {
+      const sd = Math.random() < 0.5 ? -1 : 1;
+      return { a: [sd * 26, 6, -walk - 30], b: [-sd * 26, 8, -walk - 42], r: 3, size: 1, dur: 11 };
+    });
     const m0 = Math.floor((u.uWalk.value as number) / STEP);
     u.uM0.value = m0;
     const who = procession.view(u, m0 - 1, m0 + AHEAD);
@@ -322,6 +327,8 @@ void main() {
     tHit = tFloor;
   }
   float tBest = tHit, tCol = tHit;
+  vec4 dv = dovesO(ro, rd, tBest);
+  col = mix(col, dv.rgb, dv.a);
   // rays wheeling with the sun
   col = withShafts(col, ro, rd, min(min(min(tBest, tFloor), tCol), 40.), .45 + .3 * exp(-uKickT * 3.));
   // the drop: time stops in a white flash

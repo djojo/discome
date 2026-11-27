@@ -1,3 +1,4 @@
+import * as THREE from "three";
 import type { AudioFrame } from "@/lib/audio/AudioEngine";
 import { wantCloudNoise } from "./cloudnoise";
 
@@ -62,7 +63,53 @@ export function olympeWarp(f: AudioFrame, dt: number) {
   return { time: clock, dt: dt * scale };
 }
 
-/** The uniforms an Olympe scene needs from the world: the clouds' noise, and the shared sun. */
+/** The uniforms an Olympe scene needs: the clouds' noise and the shared sun, and its own flight of doves. */
 export function olympeUniforms() {
-  return { ...wantCloudNoise(), ...OLYMPE_UNIFORMS };
+  return { ...wantCloudNoise(), ...OLYMPE_UNIFORMS, ...flockUniforms() };
+}
+
+// ---- the doves (sky.glsl.ts: dovesO)
+
+function flockUniforms() {
+  return {
+    uFlockA: { value: new THREE.Vector3() },
+    uFlockB: { value: new THREE.Vector3() },
+    uFlockT: { value: -1 },
+    uFlockR: { value: 1 },
+    uFlockSize: { value: 1 },
+    uFlockBurst: { value: 0 },
+  };
+}
+
+/** Where a flight of doves goes in a scene: from a to b (its own world), the flock's spread, a wingspan, how long. */
+export type FlockRoute = { a: [number, number, number]; b: [number, number, number]; r: number; size: number; dur: number; burst?: boolean };
+
+const flocks = new WeakMap<object, { t: number; dur: number; phrase: number }>();
+
+/**
+ * The scene's flight of doves: one crosses the sky now and then (a phrase starting, one time in two), or right now
+ * (launch: the drop out of the opened head). dt: the world's slowed step (they slow down with the rest).
+ */
+export function flockStep(u: Record<string, THREE.IUniform>, f: AudioFrame, dt: number, route: () => FlockRoute, launch = false) {
+  // (without a tempo, a phrase every 16 seconds)
+  const phrase = f.bpm > 0 ? Math.floor(f.bar / 8) : Math.floor(f.time / 16);
+  let s = flocks.get(u);
+  if (!s) flocks.set(u, (s = { t: -1, dur: 1, phrase }));
+  const free = s.t < 0;
+  if (launch || (free && phrase !== s.phrase && Math.random() < 0.5)) {
+    const r = route();
+    (u.uFlockA.value as THREE.Vector3).set(...r.a);
+    (u.uFlockB.value as THREE.Vector3).set(...r.b);
+    u.uFlockR.value = r.r;
+    u.uFlockSize.value = r.size;
+    u.uFlockBurst.value = r.burst ? 1 : 0;
+    s.t = 0;
+    s.dur = r.dur;
+  }
+  s.phrase = phrase;
+  if (s.t >= 0) {
+    s.t += dt / s.dur;
+    if (s.t >= 1) s.t = -1;
+  }
+  u.uFlockT.value = s.t;
 }

@@ -7,7 +7,7 @@ import { CAMERA_GLSL, type Framing } from "./camera";
 import { HEAD_GLSL, headGrid, headParam, headsOf, headUniforms, setHead, TITLE_HEAD, type HeadId } from "./heads";
 import { DETAIL_GLSL } from "./detail.glsl";
 import { SKY_GLSL } from "./sky.glsl";
-import { olympeUniforms, olympeWarp } from "./olympe";
+import { flockStep, olympeUniforms, olympeWarp } from "./olympe";
 import { Casting, pick } from "./casting";
 import type { ParamDef } from "../types";
 
@@ -157,6 +157,19 @@ export const porcelain = defineShaderScene({
       target = 1;
       ctx.camera?.request(title ? "title-open" : "open");
     }
+    // the doves: on the drop they fly out of the opened head, past us; now and then a flight far behind the bust
+    const dside = (u.uSeed.value as number) < 50 ? -1 : 1;
+    const burst = f.drop && !title;
+    flockStep(u, f, ctx.dt, () =>
+      burst
+        ? (() => {
+            // out past us: toward the camera, on one side of it, a little above
+            const c = ctx.camera?.pos;
+            const b: [number, number, number] = c ? [c.x * 1.6 + dside * 1.5, c.y + 1.4, c.z * 1.6] : [dside * 3, 1.6, 10];
+            return { a: [0, 0.3, -0.1], b, r: 1.3, size: 0.2, dur: 6, burst: true };
+          })()
+        : { a: [-dside * 16, 2.5, -14], b: [dside * 16, 4, -20], r: 2, size: 0.45, dur: 12 },
+    burst);
     const o = u.uOpen.value as number;
     // Critically damped: ~2 bars to open, ~4 bars to close
     const w = target > o ? 4 / (bar * 2) : 4 / (bar * 4);
@@ -588,6 +601,8 @@ void main() {
   }
   // the glow of the sun inside, round it
   col += (uAccent * 1.2 + uInk * .4) * glow * sunLight * (uOpen + .03);
+  vec4 dv = dovesO(ro, rd, tt > 0. ? tt : 1e4);
+  col = mix(col, dv.rgb, dv.a);
 
   // Sheets of light pouring out of the seam (build, open)
   if (uLeak > .01) {

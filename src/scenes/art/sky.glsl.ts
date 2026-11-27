@@ -366,6 +366,73 @@ vec4 faceCloudO(vec3 ro, vec3 rd, float tmax, out float tHalf) {
 }
 #endif
 
+// ---- a flight of doves: white birds in a loose flock crossing the sky, their wings beating, the flock tightening and
+// spreading as it goes. Drawn like the dust (each bird where it comes nearest the ray): cheap. The scene sets the
+// flight (art/olympe.ts: flockStep): from uFlockA to uFlockB, how far along it is (uFlockT 0..1; out of that: none),
+// the flock's spread, a bird's wingspan; uFlockBurst: they start all from one point (out of the opened head).
+uniform vec3 uFlockA;
+uniform vec3 uFlockB;
+uniform float uFlockT;
+uniform float uFlockR;
+uniform float uFlockSize;
+uniform float uFlockBurst;
+
+vec3 flockPath(float s) {
+  vec3 ab = uFlockB - uFlockA;
+  // (a crossing rises in an arc; a burst out of the head flies straight out)
+  return uFlockA + ab * s + vec3(0., sin(3.1416 * s) * (uFlockBurst > .5 ? .02 : .05) * length(ab), 0.);
+}
+
+/** The doves before tEnd along the ray: their colour (rgb), how much of the pixel they cover (a). */
+vec4 dovesO(vec3 ro, vec3 rd, float tEnd) {
+  if (uFlockT < 0. || uFlockT >= 1.) return vec4(0.);
+  float s = uFlockT;
+  float spread = uFlockBurst > .5 ? smoothstep(0., .35, s) : 1.;
+  float R = uFlockR * spread * (.75 + .25 * sin(uTime * .5 + 1.3));
+  // (the whole flock's bounds first)
+  vec3 oc = flockPath(s) - ro;
+  float tc = dot(oc, rd);
+  float bound = uFlockR * 1.7 + uFlockSize + .06 * length(uFlockB - uFlockA);
+  if (dot(oc, oc) - tc * tc > bound * bound) return vec4(0.);
+  vec3 right = normalize(cross(rd, vec3(0., 1., 0.)));
+  vec3 upv = cross(right, rd);
+  float sz = uFlockSize * .5;
+  vec4 acc = vec4(0.);
+  float nearest = tEnd;
+  for (int i = 0; i < 22; i++) {
+    float fi = float(i);
+    vec3 hh = vec3(hash12(vec2(fi, 1.7)), hash12(vec2(fi, 5.3)), hash12(vec2(fi, 9.1)));
+    // its place in the flock, wandering about it; some trailing a little behind
+    vec3 o = (hh * 2. - 1.) * vec3(1., .45, 1.) * R;
+    o += R * .3 * vec3(sin(uTime * .9 + fi * 1.7), .5 * sin(uTime * 1.3 + fi * 2.3), cos(uTime * .8 + fi * 1.1));
+    vec3 v = flockPath(s - .05 * hh.z * spread) + o - ro;
+    float tb = dot(v, rd);
+    if (tb < .2 || tb > nearest) continue;
+    vec3 q = v - rd * tb;
+    if (dot(q, q) > sz * sz * 1.5) continue;
+    // in its own frame across the view: the wings beating, tips up and down, a little banking
+    vec2 l = vec2(-dot(q, right), -dot(q, upv)) / sz;
+    float flap = sin(uTime * 14. + hh.x * 6.28);
+    l *= rot(.3 * sin(uTime * .7 + fi));
+    float ax = abs(l.x);
+    float y = .55 * flap * ax + .35 * ax * (1. - ax) - .05;
+    float dy = .55 * flap + .35 * (1. - 2. * ax);
+    float dw = abs(l.y - y) / sqrt(1. + dy * dy);
+    float th = .1 * (1. - .65 * ax);
+    float pw = tb / (uRes.y * sz);
+    float wing = (1. - smoothstep(th - pw, th + pw, dw)) * (1. - smoothstep(1. - pw, 1. + pw, ax));
+    float body = 1. - smoothstep(1. - pw * 5., 1. + pw * 5., length(vec2(l.x / .12, (l.y + .03) / .2)));
+    float a = max(wing, body);
+    if (a <= 0.) continue;
+    // white, the undersides of the wings a pearl grey; hazy far away
+    vec3 c = mix(uPal1 * .62 + uInk * .15, uInk * 1.3 * warmLight(), .5 - .35 * flap);
+    c = mix(c, uInk * 2.2, 1. - exp(-tb * .004));
+    acc = vec4(c, a);
+    nearest = tb;
+  }
+  return acc;
+}
+
 // ---- the light shafts: the low sun's beams in the air, the statue's shadow cut out of them
 
 /** What casts its shadow into the beams: an ellipsoid (centre, radii; radii 0: nothing). */

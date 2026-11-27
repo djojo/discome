@@ -7,7 +7,7 @@ import { FLIGHT_GLSL, flightParams } from "./flight";
 import { HEAD_GLSL, headSlotGLSL, headsOf, headUniforms, setHead, type HeadId } from "./heads";
 import { SKY_GLSL } from "./sky.glsl";
 import { TEMPLE_GLSL } from "./temple.glsl";
-import { olympeUniforms, olympeWarp } from "./olympe";
+import { flockStep, olympeUniforms, olympeWarp } from "./olympe";
 import { Casting, pick, Procession } from "./casting";
 
 /**
@@ -134,6 +134,11 @@ export const cloudSea = defineShaderScene({
     u.uFaceS.value = face.on ? FACE_S : 0;
     u.uFaceForm.value = face.form;
     u.uFaceGone.value = face.gone;
+    // now and then a flight of doves across the sky, far ahead
+    flockStep(u, f, ctx.dt, () => {
+      const sd = Math.random() < 0.5 ? -1 : 1;
+      return { a: [sd * 110, 14, -travel - 200], b: [-sd * 110, 22, -travel - 260], r: 14, size: 4.5, dur: 14 };
+    });
     u.uSky.value = num(p.sky, 0.6);
   },
   fragment: /* glsl */ `
@@ -381,6 +386,8 @@ void main() {
     vec4 cl = cloudsO(ro, rd, tFace);
     col = col * cl.a + cl.rgb;
   }
+  vec4 dv = dovesO(ro, rd, tBest < 1e3 ? tBest : 1e4);
+  col = mix(col, dv.rgb, dv.a);
   col += uAccent * sunRays(rd, 4.) * (.15 + .4 * uRise + .25 * uBeat);
   // the sun's rays over the sea, swelling as it climbs, pulsing on the kick, blazing on the drop
   float rays = (.45 + .8 * uRise + .4 * uBeat + 1. * uDrop) * (tBest < 1e3 ? .55 : 1.);

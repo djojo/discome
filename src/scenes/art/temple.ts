@@ -4,7 +4,7 @@ import { ART_LIB } from "./lib.glsl";
 import { CAMERA_GLSL, type Framing } from "./camera";
 import { SKY_GLSL } from "./sky.glsl";
 import { TEMPLE_GLSL } from "./temple.glsl";
-import { olympeUniforms, olympeWarp } from "./olympe";
+import { flockStep, olympeUniforms, olympeWarp } from "./olympe";
 
 /** The temple: 6 by 11 Doric columns, s apart, H high, R in radius; its front faces +z. */
 const NX = 6;
@@ -52,7 +52,11 @@ export const temple = defineShaderScene({
     uBuilt: { value: 1 },
     uKickT: { value: 9 },
   }),
-  update(u, f, _p, dt) {
+  update(u, f, _p, dt, ctx) {
+    flockStep(u, f, ctx.dt, () => {
+      const sd = Math.random() < 0.5 ? -1 : 1;
+      return { a: [sd * 32, 8, 6], b: [-sd * 32, 10, -6], r: 3, size: 1, dur: 11 };
+    });
     const bar = f.bpm > 0 ? 240 / f.bpm : 2;
     u.uKickT.value = f.beat ? 0 : (u.uKickT.value as number) + dt;
     // the drawing: stroke after stroke through the build, whole otherwise
@@ -218,6 +222,8 @@ void main() {
   // the clouds before it, and the light streaming between the columns (pulsing on the kick, blazing on the drop)
   vec4 wv = wispsO(ro, rd, tt > 0. ? tt : 60., -3.5, 3., .3);
   col = col * wv.a + wv.rgb;
+  vec4 dv = dovesO(ro, rd, tt > 0. ? tt : 1e4);
+  col = mix(col, dv.rgb, dv.a);
   col = withShafts(col, ro, rd, tt > 0. ? tt : 60., .7 + .5 * exp(-uKickT * 3.) + 1.2 * uDrop);
   gl_FragColor = vec4(hdrOut(col), 1.);
 }
