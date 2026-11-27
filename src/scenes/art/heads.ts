@@ -234,6 +234,57 @@ export function headGrid(id: unknown): HeadGrid | undefined {
   return g;
 }
 
+/** Where a bust stands, in its head frame: its bottom (y), the centre (x, z) and radius of its lowest section. */
+export interface HeadBase {
+  x: number;
+  y: number;
+  z: number;
+  r: number;
+}
+const bases = new Map<string, HeadBase>();
+
+/**
+ * Where a bust stands (see HeadBase), read once from its grid; a headdress stands where its portrait does. Null while
+ * the grid is loading, and for the heads with no grid on the CPU (sculpted live, or cooked from code alone).
+ */
+export function headBase(id: unknown): HeadBase | null {
+  const own = (RECIPES[id as string]?.base ?? id) as string;
+  const known = bases.get(own);
+  if (known) return known;
+  const g = loaded.get(own);
+  const img = g && !g.dispose ? (g.tex.image as { data: Uint16Array; width: number; height: number; depth: number }) : null;
+  if (!g || !img?.data) return null;
+  const { data, width: nx, height: ny, depth: nz } = img;
+  const inside = (h: number) => (h & 0x8000) !== 0 && (h & 0x7fff) !== 0;
+  const cell = [g.size.x / nx, g.size.y / ny, g.size.z / nz];
+  for (let j = 0; j < ny; j++) {
+    // the lowest row with some bust in it; its section measured a few voxels higher, past the bevel of the cut
+    let n = 0;
+    for (let k = 0; k < nz && n < 30; k++) for (let i = 0; i < nx; i++) if (inside(data[i + nx * (j + ny * k)])) n++;
+    if (n < 30) continue;
+    const js = Math.min(ny - 1, j + 3);
+    let m = 0;
+    let sx = 0;
+    let sz = 0;
+    for (let k = 0; k < nz; k++)
+      for (let i = 0; i < nx; i++)
+        if (inside(data[i + nx * (js + ny * k)])) {
+          m++;
+          sx += i;
+          sz += k;
+        }
+    const base = {
+      x: g.min.x + (sx / m + 0.5) * cell[0],
+      y: g.min.y + j * cell[1],
+      z: g.min.z + (sz / m + 0.5) * cell[2],
+      r: Math.sqrt((m * cell[0] * cell[2]) / Math.PI),
+    };
+    bases.set(own, base);
+    return base;
+  }
+  return null;
+}
+
 let placeholder: THREE.Data3DTexture | null = null;
 function emptyTexture() {
   if (!placeholder) {

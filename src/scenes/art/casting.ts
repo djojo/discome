@@ -12,28 +12,32 @@ export const who = (id: HeadId): string => RECIPES[id]?.base ?? id;
  * comes back on screen), without loading the whole pool: the next cast loads while this one plays, and the one before
  * is let go. The first cast is the scene's own (its SceneMeta.heads, loaded with its world): it stands in whenever the
  * next one is not ready yet, so that no head ever pops in late. `draw` is handed the cast on show: the next one keeps
- * clear of it.
+ * clear of it. `linger`: how many casts already played stay loaded (several scenes sharing a casting: the one leaving
+ * the screen through a transition still shows its own).
  */
 export class Casting {
   private current: readonly HeadId[];
   private next: readonly HeadId[] | null = null;
+  private past: (readonly HeadId[])[] = [];
 
   constructor(
     private readonly first: readonly HeadId[],
     private readonly draw: (avoid: readonly HeadId[]) => HeadId[],
+    private readonly linger = 0,
   ) {
     this.current = first;
   }
 
   /** A new passage: the cast to show (the next one if it is ready, else the first); the one after starts loading. */
   pass(): readonly HeadId[] {
-    const prev = this.current;
+    this.past.push(this.current);
     const next = this.next;
     this.current = next && next.every(headReady) ? next : this.first;
     if (!next || this.current === next) this.next = this.draw(this.current);
     const coming = this.next!;
     preloadHeads(coming);
-    letGo(prev, [...this.current, ...coming, ...this.first]);
+    while (this.past.length > this.linger)
+      letGo(this.past.shift()!, [...this.current, ...coming, ...this.first, ...this.past.flat()]);
     return this.current;
   }
 }

@@ -76,54 +76,30 @@ export interface Look {
 export const LOOKS: Look[] = [
   {
     id: "porcelaine",
-    name: "Porcelaine",
-    description: "Le seul monde blanc : porcelaine émaillée dans un studio blanc, une fente vermillon, l'or du kintsugi. Calme et sculptural.",
-    swatch: ["#121110", "#ECE7DF", "#E5482D"],
-    palettes: ["porcelain", "bone"],
+    name: "Olympe",
+    description:
+      "Le paradis blanc : des bustes antiques au-dessus d'une mer de nuages, un ciel qui passe dans le marbre, le canon tracé au crayon, la lumière d'or pâle des dieux. Lent et contemplatif.",
+    swatch: ["#F3F0EA", "#C3CEDA", "#E9CB8E"],
+    palettes: ["olympe", "aube"],
     scenes: [
-      // the human head, and on its returns a bust of Antiquity in porcelain
-      {
-        id: "porcelain",
-        key: "coquille",
-        label: "Coquille",
-        weight: 3,
-        role: "calm",
-        params: { style: "shell" },
-        vary: { choices: { head: ["humain", "hera", "vestale", "antinous"] } },
-      },
-      {
-        id: "porcelain",
-        key: "eclats",
-        label: "Éclats",
-        weight: 2,
-        role: "drop",
-        params: { style: "shards" },
-        vary: { choices: { head: ["humain", "athena", "hera", "socrate"] } },
-      },
-      {
-        id: "porcelain",
-        key: "selfie",
-        label: "Selfie",
-        weight: 2,
-        role: "build",
-        params: { style: "shell", frame: "selfie" },
-        vary: { choices: { head: ["humain", "antinous", "imperatrice", "athena"] } },
-      },
+      // a bust of Antiquity, another on each return (the plans share the draw)
+      { id: "porcelain", key: "coquille", label: "Ciel intérieur", weight: 3, role: "calm", params: { style: "shell", head: "antique" } },
+      { id: "porcelain", key: "eclats", label: "Éclats", weight: 2, role: "drop", params: { style: "shards", head: "antique" } },
       { id: "kintsugi", weight: 2, role: "calm", params: { palette: "porcelain" } },
       { id: "series", weight: 2, role: "drop", params: { palette: "porcelain" } },
       { id: "wheel", weight: 2, role: "build", params: { palette: "porcelain" } },
     ],
-    // the only white world: its studio fills the frame, no background
+    // the white paradise fills the frame: no background
     title: {
       id: "porcelain",
       key: "titre",
       label: "Titre",
       role: "calm",
-      params: { head: "titre", titleFont: "didone", titleRelief: "puffy", style: "shards", kintsugi: 0.6 },
+      params: { head: "titre", titleFont: "roman", titleRelief: "cut", titleDepth: 0.1, style: "shards", sky: 0.5 },
     },
-    // white on white: almost no bloom (it would turn the whole studio milky), a light vignette
-    fx: { grain: 0.1, vignette: 0.18, saturation: 0.95, contrast: 1.05, bloom: 0.04, accents: 0.3 },
-    transitions: { calm: ["fade", "luma", "dive", "screen"], drop: ["flash", "fade"] },
+    // white on white: almost no bloom (it would turn the whole sky milky), a light vignette
+    fx: { grain: 0.06, vignette: 0.05, saturation: 0.95, contrast: 1.02, bloom: 0.02, accents: 0.25 },
+    transitions: { calm: ["fade", "luma", "dive"], drop: ["flash", "fade"] },
     director: "chill",
   },
   {

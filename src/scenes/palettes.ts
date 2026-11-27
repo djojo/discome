@@ -32,6 +32,10 @@ const P = (label: string, base: string, ramp: string[], family: Palette["family"
 export const PALETTES: Record<string, Palette> = {
   // ---- art direction
   porcelain: P("Porcelaine", "#121110", ["#ECE7DF", "#CFC7BA", "#E5482D"]),
+  // Olympe: white marble, the pale sky, graphite for the canon's lines, a pale gold for the light of the gods
+  olympe: P("Olympe", "#4A505A", ["#F3F0EA", "#C3CEDA", "#E9CB8E"]),
+  // the same paradise at dawn: a warmer white, a blush of rose in the sky, a deeper gold
+  aube: P("Aube", "#55505A", ["#F6EEE6", "#E2CDCB", "#F0BE78"]),
   mono: P("Noir & blanc", "#000000", ["#FFFFFF", "#9A9A9A"]),
   mercury: P("Mercure", "#07080B", ["#C9CDD3", "#3E6BFF", "#FF8A3D"]),
   signalRed: P("Rouge signal", "#050404", ["#FF2B1C", "#FF6A4D", "#FFE9E0"]),
