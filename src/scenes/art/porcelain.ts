@@ -209,7 +209,8 @@ float bustD(vec3 h) {
   if (uTitle > .5) return d;
   // the head, above a cut that follows the jaw down to the chin, and the tab under it
   float head = (NECK + .3 * pow(min(abs(h.x) / .42, 1.6), 2.) - h.y) * .6;
-  float tab = length(vec2(h.x, h.y - clamp(h.y, NECK - .05, NECK))) - TAB;
+  // (as deep as a neck: a bust's chest and back do not hang under it)
+  float tab = max(length(vec2(h.x, h.y - clamp(h.y, NECK - .05, NECK))) - TAB, abs(h.z + .05) - .3);
   return max(d, min(head, tab));
 }
 
@@ -393,7 +394,7 @@ void main() {
   // the white sky and the sea of clouds far below; the sun's shafts, stronger as the build lifts the light. Behind the
   // night's title the sky turns a paler grey round it, so that its marble stands out
   vec3 col = heavenO(ro, rd, 130.);
-  col += uAccent * sunRays(rd, 4.) * (.1 + .4 * uLeak);
+  col += uAccent * sunRays(rd, 3.) * (.3 + .5 * uLeak + .3 * uBeat);
   col *= 1. - .4 * uTitle * (1. - .35 * smoothstep(.2, .9, length(uv)));
   // March, gathering the glow of the inner sun
   float t = .05, tt = -1., glow = 0.;
@@ -451,8 +452,8 @@ void main() {
         vec3 nm = bumpNoise(n, q, 34., .035, pix);
         // (a photograph of the sky laid over the stone: the marble's shading only tempers it, so the clouds read)
         col = lightO(marbleO(q), nm, rd, ao);
-        vec3 sk = skinSky(q, 1.25) * (.55 + .32 * dot(col, vec3(.3, .5, .2))) * 1.25;
-        col = mix(col, sk, uSky * (uTitle > .5 ? .5 : skinMask(q)));
+        float skin = uSky * (uTitle > .5 ? .5 : skinMask(q));
+        if (skin > .01) col = mix(col, skinSky(q, 1.25) * (.55 + .32 * dot(col, vec3(.3, .5, .2))) * 1.25, skin);
         // (on the face only, fading out toward the hair)
         float front = smoothstep(.05, .35, nh.z) * step(0., q.z) * (1. - uTitle);
         front *= 1. - smoothstep(.8, 1.1, length(vec2(q.x / .5, (q.y + .02) / .78)));
@@ -505,6 +506,13 @@ void main() {
     float glint = .08 + 2.2 * uHat * pow(hash12(vec2(fi, floor(uTime * 8.))), 4.) + uDrop * 1.2;
     col += uAccent * exp(-d * 420.) * glint;
   }
+
+  // Light shafts in the air, the bust's shadow cut out of them: rays streaming round it when the sun is behind; they
+  // pulse on the kick, swell through the build and blaze on the drop (calmer behind the night's title)
+  gOccC = vec3(0., -.07 + gBob, -.05);
+  gOccR = uTitle > .5 ? vec3(0.) : vec3(.55, .78, .62);
+  float rays = (.55 + .9 * uLeak + .5 * uBeat + 1.4 * uDrop) * (1. - .6 * uTitle);
+  col = withShafts(col, ro, rd, tt > 0. ? tt : 40., rays);
 
   float lb = uCinema > .5 ? letterbox(fc) : 1.;
   // Letterbox bars stay opaque: the background never shows through them

@@ -126,6 +126,56 @@ vec3 heavenO(vec3 ro, vec3 rd, float tmax) {
   return t > 0. ? seaShade(ro + rd * t, rd, t) : skyO(rd);
 }
 
+// ---- the light shafts: the low sun's beams in the air, the statue's shadow cut out of them
+
+/** What casts its shadow into the beams: an ellipsoid (centre, radii; radii 0: nothing). */
+vec3 gOccC = vec3(0.);
+vec3 gOccR = vec3(0.);
+
+/** Whether the way from p toward the sun crosses the occluder (0 or 1). */
+float inShadow(vec3 p) {
+  if (gOccR.x <= 0.) return 0.;
+  vec3 o = (p - gOccC) / gOccR, d = gSun / gOccR;
+  float a = dot(d, d), b = dot(o, d), c = dot(o, o) - 1.;
+  float h = b * b - a * c;
+  return h > 0. && (c < 0. || -b - sqrt(h) > 0.) ? 1. : 0.;
+}
+
+/**
+ * Light shafts in the air between the eye and tEnd: rays fanning out round the low sun (bright rays and greyer gaps
+ * between them, drifting slowly), the occluder's shadow cut out of them, all seen toward the sun. Returns the rays'
+ * light (x), the occluder's shadow (y) and the gaps between rays (z), each weighted by the glare toward the sun and
+ * by how much air lies before tEnd.
+ */
+vec3 shaftsO(vec3 ro, vec3 rd, float tEnd) {
+  float c = dot(rd, gSun);
+  if (c < .05) return vec3(0.);
+  vec3 T = normalize(cross(gSun, vec3(0., 1., 0.)));
+  vec3 B = cross(T, gSun);
+  float a = atan(dot(rd, B), dot(rd, T));
+  vec2 ca = vec2(cos(a), sin(a));
+  float n = .65 * vnoise2(ca * 7. + uTime * .02) + .35 * vnoise2(ca * 19. - uTime * .03);
+  float ray = smoothstep(.42, .7, n);
+  float tMax = min(tEnd, 30.);
+  float shade = 0.;
+  if (gOccR.x > 0.) {
+    float j = hash12(gl_FragCoord.xy + fract(uTime) * 17.);
+    for (int i = 0; i < 8; i++) shade += inShadow(ro + rd * tMax * (float(i) + j) / 8.);
+    shade /= 8.;
+  }
+  float w = pow(c, 4.) * min(tMax / 10., 1.);
+  return vec3(ray * (1. - shade), shade, 1. - ray) * w;
+}
+
+/**
+ * The shafts laid over a colour: the rays add their pale gold, the gaps between them and the occluder's shadow grey
+ * the haze (that is what makes rays read in a white world). k: their strength (the music's pulse goes in it).
+ */
+vec3 withShafts(vec3 col, vec3 ro, vec3 rd, float tEnd, float k) {
+  vec3 s = shaftsO(ro, rd, tEnd);
+  return col * (1. - min(k, 1.6) * (.32 * s.y + .2 * s.z)) + (uAccent * 1.1 + uInk * .3) * s.x * k * .5;
+}
+
 // ---- the statues
 
 /** White marble: a faint grey veining; the night weathers it (q: the statue's own frame). */
@@ -139,7 +189,7 @@ vec3 marbleO(vec3 q) {
 /** Cumulus seen from the side, for the sky inside the stone: banks heaped with rounded puffs (0 the clear sky). */
 float cumulus(vec2 x) {
   float bank = smoothstep(.4, .68, fbm3(vec3(x * vec2(.45, .8), 1.3)));
-  return bank * (.7 * domes(x * vec2(1.6, 2.1)) + .4 * domes(x * 3.9 + 3.7) + .15 * domes(x * 8.3 + 1.1));
+  return bank * (.75 * domes(x * vec2(1.6, 2.1)) + .45 * domes(x * 3.9 + 3.7));
 }
 
 /**

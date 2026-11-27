@@ -85,7 +85,7 @@ export const LOOKS: Look[] = [
       // a bust of Antiquity, another on each return (the plans share the draw)
       { id: "porcelain", key: "coquille", label: "Ciel intérieur", weight: 3, role: "calm", params: { style: "shell", head: "antique" } },
       { id: "porcelain", key: "eclats", label: "Éclats", weight: 2, role: "drop", params: { style: "shards", head: "antique" } },
-      { id: "kintsugi", weight: 2, role: "calm", params: { palette: "porcelain" } },
+      { id: "olympe-sea", key: "mer", label: "Mer de nuages", weight: 3, role: "calm" },
       { id: "series", weight: 2, role: "drop", params: { palette: "porcelain" } },
       { id: "wheel", weight: 2, role: "build", params: { palette: "porcelain" } },
     ],
@@ -601,7 +601,7 @@ export const LOOKS: Look[] = [
     description: "Les premières scènes et leurs couleurs vives, hors rotation des mondes.",
     swatch: ["#ff3cac", "#a855f7", "#22d3ee"],
     palettes: ["acid", "neon", "sunset", "ocean", "ice", "fire", "chrome", "vhs"],
-    scenes: SCENES.filter((s) => !["porcelain", "metamorphosis", "faithful", "torrent", "panopticon", "collective", "warehouse", "downpour", "pilgrimage", "mercury-beads", "mercury-wave", "mercury-blend", "mercury-flow", "mercury-melt", "flesh-morph", "flesh-radiolaria", "flesh-jelly", "canyon-cactus", "canyon-spirit", "canyon-ancestors", "canyon-vision", "topo-head", "profile-head", "halftone-head", "mercury", "cathedral", "monolith", "canyon-gorge", "canyon-mesas", "arcane-architect", "arcane-nomad", "arcane-prism", "arcane-portal", "arcane-road", "grimoire", "flesh", "flesh-skin", "signal", "museum", "rose", "organ", "kintsugi", "series", "wheel", "swirl", "myc-forest", "myc-grotto", "myc-giants", "myc-fall", "myc-maze", "myc-den", "myc-mirror", "myc-visions"].includes(s.id) && !s.id.startsWith("circuit-")).map((s) => ({ id: s.id, weight: 1 })),
+    scenes: SCENES.filter((s) => !["porcelain", "metamorphosis", "faithful", "torrent", "panopticon", "collective", "warehouse", "downpour", "pilgrimage", "mercury-beads", "mercury-wave", "mercury-blend", "mercury-flow", "mercury-melt", "flesh-morph", "flesh-radiolaria", "flesh-jelly", "canyon-cactus", "canyon-spirit", "canyon-ancestors", "canyon-vision", "topo-head", "profile-head", "halftone-head", "mercury", "cathedral", "monolith", "canyon-gorge", "canyon-mesas", "arcane-architect", "arcane-nomad", "arcane-prism", "arcane-portal", "arcane-road", "grimoire", "flesh", "flesh-skin", "signal", "museum", "rose", "organ", "kintsugi", "series", "wheel", "olympe-sea", "swirl", "myc-forest", "myc-grotto", "myc-giants", "myc-fall", "myc-maze", "myc-den", "myc-mirror", "myc-visions"].includes(s.id) && !s.id.startsWith("circuit-")).map((s) => ({ id: s.id, weight: 1 })),
     fx: {},
     classic: true,
   },

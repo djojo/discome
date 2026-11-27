@@ -20,6 +20,7 @@ import { organ } from "./art/organ";
 import { kintsugi } from "./art/kintsugi";
 import { series } from "./art/series";
 import { wheel } from "./art/wheel";
+import { cloudSea } from "./art/cloudsea";
 import { panopticon } from "./art/panopticon";
 import { collective } from "./art/collective";
 import { warehouse } from "./art/warehouse";
@@ -119,6 +120,7 @@ export const SCENES: SceneDef[] = [
   kintsugi,
   series,
   wheel,
+  cloudSea,
   // Mycélium
   forest,
   giants,
