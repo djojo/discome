@@ -165,9 +165,9 @@ void main() {
   gKey = normalize(vec3(0., .75, 0.) + gSun * .35);
   gSeaY = -10.;
   gSeaDrift = vec2(uTime * .003, uSeed * .1);
-  // the camera, a little off the middle, turning slowly, looking up across the ring at the gods
+  // the camera, near the middle, turning slowly, looking up at the gods across the ring
   float az = uTurn + uSeed;
-  vec3 ro = vec3(3. * cos(az + 3.1416), 2.2 + .3 * sin(uTime * .1), 3. * sin(az + 3.1416));
+  vec3 ro = vec3(.8 * cos(az + 3.1416), 2.2 + .3 * sin(uTime * .1), .8 * sin(az + 3.1416));
   vec3 ta = vec3(RR * cos(az), GY - .6 + .6 * sin(uTime * .07), RR * sin(az));
   vec3 rd = lookAt(ro, ta) * normalize(vec3(uv, 1.35));
 
@@ -197,7 +197,7 @@ void main() {
       float skin = .45 * skinMask(q);
       if (skin > .01) col = mix(col, skinSky(q, 1.25) * (.55 + .32 * dot(col, vec3(.3, .5, .2))) * 1.25, skin);
       float fre = pow(1. - clamp(dot(n, -rd), 0., 1.), 2.);
-      col += (uAccent * 1.6 + uInk * .5) * uInner * (.35 + .65 * fre) * (.6 + .4 * ao);
+      col += (uAccent * 1.2 + uInk * .3) * uInner * (.25 + .5 * fre) * (.6 + .4 * ao);
     } else {
       // ---- a column of cloud: white where the light falls, blue-grey in its folds, silver at its edges
       float key = clamp(dot(n, gKey) * .6 + .4, 0., 1.);
@@ -223,10 +223,10 @@ void main() {
       col += (uAccent * 1.4 + uInk * .4) * exp(-dr * (6. / (1. + .02 * tr))) * (.12 + .5 * uCharge + 2.5 * spot);
     }
   }
-  // ---- the column of light from the zenith, in the middle of the ring
+  // ---- the column of light from the zenith, in the ring, before the gods we face
   if (uBeam > .01) {
-    // distance from the ray to the vertical axis, and where along the ray it passes closest
-    vec2 o = ro.xz, d2 = rd.xz;
+    // distance from the ray to the column's vertical axis, and where along the ray it passes closest
+    vec2 o = ro.xz - 6. * vec2(cos(az), sin(az)), d2 = rd.xz;
     float tc = -dot(o, d2) / max(dot(d2, d2), 1e-5);
     float dc = length(o + d2 * tc);
     if (tc > 0. && (tt < 0. || tc < tt)) {

@@ -123,12 +123,12 @@ float veiledCell(vec2 c) { return step(hash12(c * vec2(1.7, 3.1) + 11.3), .33); 
  */
 float sheetD(vec3 h, float slide) {
   h.y += slide * 1.15;
-  float head = mix(headD(h) - .06, sdEllipsoid(h - vec3(0., .12, -.02), vec3(.62, .8, .7)), .68);
-  float hang = 1. - smoothstep(-.95, .05, h.y);
+  float head = sdEllipsoid(h - vec3(0., .12, .02), vec3(.64, .82, .74));
+  float hang = 1. - smoothstep(-.95, .1, h.y);
   float a = atan(h.z, h.x);
-  float r = .42 + .5 * hang + .05 * sin(a * 7. + 1.3) * hang;
-  float skirt = max((length(h.xz * vec2(1., 1.1)) - r) * .75, h.y - .1);
-  return smin(head, skirt, .25);
+  float r = .62 + .4 * hang + .05 * sin(a * 7. + 1.3) * hang;
+  float skirt = max((length(h.xz * vec2(1., 1.05)) - r) * .75, h.y - .1);
+  return smin(head, skirt, .3);
 }
 
 /** One cast from the mould, cut flat on its little block; or its sheet. Origin at the shelf's top. */
@@ -205,9 +205,9 @@ void main() {
   vec3 rd = lookAt(ro, ta) * normalize(vec3(uv, focal));
   vec3 col = heavenO(ro, rd, 150.);
   float t = .02, tt = -1.;
-  for (int i = 0; i < 110; i++) {
+  for (int i = 0; i < 90; i++) {
     float d = map(ro + rd * t);
-    if (d < .0006 * t) { tt = t; break; }
+    if (d < .0008 * t) { tt = t; break; }
     t += d;
     if (t > 30.) break;
   }
@@ -247,7 +247,7 @@ void main() {
   }
   // the shafts of light through the air, and the dust glinting in them on the hats
   col = withShafts(col, ro, rd, tt > 0. ? tt : 30., .7 + .3 * exp(-uKickT * 3.));
-  for (int i = 0; i < 40; i++) {
+  for (int i = 0; i < 28; i++) {
     float fi = float(i);
     vec3 dp = vec3(T + (hash12(vec2(fi, 1.)) - .3) * 5., hash12(vec2(fi, 2.)) * 2.4, hash12(vec2(fi, 3.)) * 1.8 - .3);
     dp.y += .12 * sin(uTime * .2 + fi);
