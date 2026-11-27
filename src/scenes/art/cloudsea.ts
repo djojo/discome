@@ -5,6 +5,7 @@ import { ART_LIB } from "./lib.glsl";
 import { FLIGHT_GLSL, flightParams } from "./flight";
 import { HEAD_GLSL, headsOf, headUniforms, setHead, type HeadId } from "./heads";
 import { SKY_GLSL } from "./sky.glsl";
+import { wantCloudNoise } from "./cloudnoise";
 import { Procession } from "./casting";
 
 /**
@@ -41,6 +42,7 @@ export const cloudSea = defineShaderScene({
     "Un vol très lent au ras d'une mer de nuages, vers un soleil bas : des têtes antiques colossales en émergent comme des îles, le visage tourné vers le ciel, toutes différentes. Au kick, une onde de lumière roule sur les nuages ; à la montée, le soleil se lève ; au drop, on plonge dans les nuages et on ressort au-dessus d'une autre mer.",
   params: [paletteParam("olympe"), { type: "range", key: "sky", label: "Ciel dans la pierre", min: 0, max: 1, step: 0.05, default: 0.6 }, ...flightParams()],
   uniforms: () => ({
+    ...wantCloudNoise(),
     ...Object.assign({}, ...SLOTS.map((s) => headUniforms(s))),
     uM0: { value: 0 },
     uWho: { value: new Array<number>(AHEAD + 2).fill(-1) },
@@ -161,6 +163,14 @@ void main() {
   gKey = normalize(vec3(.45 * side, .72, .5));
   gSeaY = -4.;
   gSeaDrift = vec2(uTime * .004 + uSeaShift * 3.7, uSeed * .1 + uSeaShift * 1.9);
+  // the clouds in volume: their tops just under the way, blown by the wind; another sea after each plunge
+  gCloudBase = -13.;
+  gCloudThick = 15.;
+  gCover = .55;
+  gWind = vec2(uTime * 1.4 + uSeaShift * 310. + uSeed * 40., uTime * .35 + uSeaShift * 170.);
+  // the kick: a glow running out through them; the build: a clearing opening ahead, under the climbing sun
+  gCloudGlow = .55 * exp(-uKickT * 1.4);
+  gGlowR = uKickT * 45.;
 
   // the flight: along the way (-z), swaying, banking; on the drop it plunges into the clouds
   float top = gSeaY + 3.4;
@@ -206,7 +216,9 @@ void main() {
       if (t > min(t1, tBest)) break;
     }
   }
-  float tSea = seaHit(ro, rd, min(tBest, 260.));
+  gClearing = vec3(ro.x + 30. * gSun.x, ro.z - 70., 40. * uRise);
+  bool vol = uCloudReady > .5;
+  float tSea = vol ? -1. : seaHit(ro, rd, min(tBest, 260.));
 
   vec3 col;
   if (tSea > 0. && tSea < tBest) {
@@ -234,21 +246,24 @@ void main() {
     col = lightO(marbleO(q), n, rd, ao);
     float skin = uSky * skinMask(q);
     if (skin > .01) col = mix(col, skinSky(q, 1.25) * (.55 + .32 * dot(col, vec3(.3, .5, .2))) * 1.25, skin);
-    // where it sinks into the clouds, the mist takes it
-    float lap = 1. - smoothstep(0., 2.5, p.y - seaH(p.xz));
-    col = mix(col, uInk * 2.1, lap * .85);
+    // where it sinks into the clouds, the mist takes it (the clouds in volume do it themselves)
+    if (!vol) col = mix(col, uInk * 2.1, (1. - smoothstep(0., 2.5, p.y - seaH(p.xz))) * .85);
     float fog = 1. - exp(-tBest * .0032);
     col = mix(col, skyO(rd), fog + (1. - bFar) * (1. - fog));
   } else {
     col = skyO(rd);
   }
+  // the clouds in front of all of it
+  if (vol) {
+    vec4 cl = cloudsO(ro, rd, tBest < 1e3 ? tBest : 400.);
+    col = col * cl.a + cl.rgb;
+  }
   col += uAccent * sunRays(rd, 4.) * (.15 + .4 * uRise + .25 * uBeat);
   // the sun's rays over the sea, swelling as it climbs, pulsing on the kick, blazing on the drop
-  float rays = .45 + .8 * uRise + .4 * uBeat + 1. * uDrop;
+  float rays = (.45 + .8 * uRise + .4 * uBeat + 1. * uDrop) * (tBest < 1e3 ? .55 : 1.);
   col = withShafts(col, ro, rd, min(min(tBest, tSea > 0. ? tSea : 1e4), 60.), rays);
-  // inside the clouds: nothing but white
-  float inside = 1. - smoothstep(-1.2, .6, ro.y - seaH(ro.xz));
-  col = mix(col, uInk * 2.4, inside);
+  // inside the clouds: nothing but white (the clouds in volume fill the view by themselves)
+  if (!vol) col = mix(col, uInk * 2.4, 1. - smoothstep(-1.2, .6, ro.y - seaH(ro.xz)));
   gl_FragColor = vec4(hdrOut(col), 1.);
 }
 `,

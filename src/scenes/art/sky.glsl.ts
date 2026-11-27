@@ -126,6 +126,110 @@ vec3 heavenO(vec3 ro, vec3 rd, float tmax) {
   return t > 0. ? seaShade(ro + rd * t, rd, t) : skyO(rd);
 }
 
+// ---- the clouds in volume: a layer of cumulus carved from the cloud noise (cloudnoise.ts), lit by the low sun
+
+uniform highp sampler3D uCloudTex;
+uniform float uCloudReady;
+/** The layer: its floor, its thickness; how much of the sky it covers, how dense; the wind (how far it has blown). */
+float gCloudBase = -8.;
+float gCloudThick = 6.;
+float gCover = .55;
+float gCloudDensity = 1.;
+vec2 gWind = vec2(0.);
+/**
+ * A glow running through the clouds (the kick): its strength, and how far from the eye its front has gone (-1: all of
+ * them at once); a clearing opening round a point of the ground plan (x, z, r).
+ */
+float gCloudGlow = 0.;
+float gGlowR = -1.;
+vec3 gClearing = vec3(0., 0., 0.);
+
+float cremap(float v, float a, float b, float c, float d) { return c + (v - a) * (d - c) / (b - a); }
+
+/** The clouds' density at p; cheap: without the fine fraying (far away, and toward the sun). */
+float cloudDensity(vec3 p, bool cheap) {
+  float h = (p.y - gCloudBase) / gCloudThick;
+  if (h <= 0. || h >= 1.) return 0.;
+  vec3 w = p + vec3(gWind.x, 0., gWind.y);
+  // where the masses are: clusters with clear gaps between them, and a clearing the music may open
+  float big = textureLod(uCloudTex, vec3(w.xz * .0026, .31), 0.).r;
+  float mid = textureLod(uCloudTex, vec3(w.xz * .009, .67), 0.).g;
+  float cov = clamp((smoothstep(.32, .7, big) * .65 + smoothstep(.35, .8, mid) * .55) * gCover * 1.5, 0., 1.);
+  if (gClearing.z > 0.) cov *= smoothstep(gClearing.z * .6, gClearing.z, length(p.xz - gClearing.xy));
+  if (cov < .03) return 0.;
+  vec4 n = textureLod(uCloudTex, w * .019 + vec3(0., uTime * .0025, 0.), 0.);
+  float shape = cremap(n.r, n.g - 1., 1., 0., 1.);
+  // flat-bottomed, heaped into towers where the cover is thick: the top rises with the cover and the billows
+  float topH = .25 + .75 * cov * (.55 + .45 * shape);
+  float prof = smoothstep(0., .08, h) * (1. - smoothstep(topH * .7, topH, h));
+  float d = cremap(shape * prof, 1. - cov, 1., 0., 1.) * cov;
+  if (d <= 0.) return 0.;
+  if (!cheap) {
+    // the billows rise and fray: wispy at the bottom, curled at the top
+    vec4 m = textureLod(uCloudTex, w * .07 + vec3(uTime * .004, -uTime * .03, 0.), 0.);
+    float det = mix(m.b, 1. - m.b, clamp(h * 3., 0., 1.));
+    d = cremap(d, det * .55, 1., 0., 1.);
+  }
+  return clamp(d, 0., 1.) * gCloudDensity;
+}
+
+float hgPhase(float c, float g) { return (1. - g * g) / pow(1. + g * g - 2. * g * c, 1.5) * .0796; }
+
+/**
+ * The clouds between the eye and tmax: their light (rgb) and what they let through (a). White where the sun reaches
+ * them, grey in their depth and underneath, a silver lining against the sun, melting into the white far away.
+ */
+vec4 cloudsO(vec3 ro, vec3 rd, float tmax) {
+  float top = gCloudBase + gCloudThick;
+  float t0 = 0., t1 = tmax;
+  if (abs(rd.y) > 1e-4) {
+    float ta = (gCloudBase - ro.y) / rd.y, tb = (top - ro.y) / rd.y;
+    t0 = max(min(ta, tb), 0.);
+    t1 = min(max(ta, tb), tmax);
+  } else if (ro.y < gCloudBase || ro.y > top) return vec4(0., 0., 0., 1.);
+  t1 = min(t1, t0 + 220.);
+  if (t1 <= t0) return vec4(0., 0., 0., 1.);
+  vec3 sky = skyO(rd);
+  float c = dot(rd, gSun);
+  float phase = mix(hgPhase(c, .65), hgPhase(c, -.2), .35) * 12.;
+  float T = 1.;
+  vec3 L = vec3(0.);
+  float t = t0 + .5 * hash12(gl_FragCoord.xy + fract(uTime) * 13.);
+  for (int i = 0; i < 64; i++) {
+    if (t > t1 || T < .03) break;
+    vec3 p = ro + rd * t;
+    bool far = t > 70.;
+    float d = cloudDensity(p, far);
+    float dt = mix(.4, 3.5, smoothstep(8., 140., t));
+    if (d > .001) {
+      // toward the sun: how much cloud the light crosses
+      float ld = 0.;
+      for (int k = 1; k <= 4; k++) ld += cloudDensity(p + gSun * float(k * k) * .55, true);
+      // (the powder: the edges turned away from the sun stay darker than a thin veil would)
+      float sunT = exp(-ld * 3.) * (1. - exp(-d * 4.));
+      float h = clamp((p.y - gCloudBase) / gCloudThick, 0., 1.);
+      vec3 amb = mix(uPal1 * .45, uInk * 1., smoothstep(.05, .9, h));
+      float glow = gCloudGlow * (gGlowR < 0. ? 1. : exp(-pow(t - gGlowR, 2.) * .006));
+      vec3 S = amb + (uInk * 1.9 + uAccent * .6) * sunT * (.45 + phase) + uAccent * glow * 1.6;
+      // far away the clouds melt into the white
+      S = mix(S, sky, 1. - exp(-t * .0045));
+      float a = exp(-d * dt * .95);
+      L += T * S * (1. - a);
+      T *= a;
+    } else dt *= 1.8;
+    t += dt;
+  }
+  L = mix(L, L * vec3(.84, .85, .88), tarnish());
+  return vec4(L, T);
+}
+
+/** The sky toward rd with the clouds before tmax (the old sea of clouds while the noise is still cooking). */
+vec3 heavenV(vec3 ro, vec3 rd, float tmax) {
+  if (uCloudReady < .5) return heavenO(ro, rd, tmax);
+  vec4 c = cloudsO(ro, rd, tmax);
+  return skyO(rd) * c.a + c.rgb;
+}
+
 // ---- the light shafts: the low sun's beams in the air, the statue's shadow cut out of them
 
 /** What casts its shadow into the beams: an ellipsoid (centre, radii; radii 0: nothing). */

@@ -7,6 +7,7 @@ import { CAMERA_GLSL, type Framing } from "./camera";
 import { HEAD_GLSL, headGrid, headParam, headsOf, headUniforms, setHead, TITLE_HEAD, type HeadId } from "./heads";
 import { DETAIL_GLSL } from "./detail.glsl";
 import { SKY_GLSL } from "./sky.glsl";
+import { wantCloudNoise } from "./cloudnoise";
 import { Casting, pick } from "./casting";
 import type { ParamDef } from "../types";
 
@@ -90,6 +91,7 @@ export const porcelain = defineShaderScene({
     { type: "toggle", key: "letterbox", label: "Format cinéma 2.39 (bandes noires)", default: false },
   ],
   uniforms: () => ({
+    ...wantCloudNoise(),
     ...headUniforms(),
     uOpen: { value: 0 },
     uOpenVel: { value: 0 },

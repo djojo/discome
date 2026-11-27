@@ -3,6 +3,7 @@ import { paletteParam } from "../palettes";
 import { ART_LIB } from "./lib.glsl";
 import { HEAD_GLSL, headUniforms, setHead, type HeadId } from "./heads";
 import { SKY_GLSL } from "./sky.glsl";
+import { wantCloudNoise } from "./cloudnoise";
 
 /**
  * The gods of the assembly, round the ring: Hera, Athena, Dionysos, Homer (the bearded one, as Zeus), the Emperor
@@ -33,6 +34,7 @@ export const assembly = defineShaderScene({
     "Au centre d'un cercle de têtes olympiennes colossales (Héra, Athéna, Dionysos, Homère en Zeus, l'Empereur, l'Impératrice) posées sur des colonnes de nuages, qui baissent les yeux vers nous. Au kick, un anneau de lumière fait le tour ; au drop, une colonne de lumière tombe du zénith, les nuages tourbillonnent et les dieux s'éclairent de l'intérieur.",
   params: [paletteParam("olympe")],
   uniforms: () => ({
+    ...wantCloudNoise(),
     ...Object.assign({}, ...SLOTS.map((s) => headUniforms(s))),
     uKickT: { value: 9 },
     uKicks: { value: 0 },

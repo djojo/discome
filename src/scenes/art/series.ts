@@ -3,6 +3,7 @@ import { paletteParam } from "../palettes";
 import { ART_LIB } from "./lib.glsl";
 import { HEAD_GLSL, headsOf, headUniforms, setHead, type HeadId } from "./heads";
 import { SKY_GLSL } from "./sky.glsl";
+import { wantCloudNoise } from "./cloudnoise";
 import { Casting, pick } from "./casting";
 
 /**
@@ -39,6 +40,7 @@ export const series = defineShaderScene({
     "Une réserve oubliée dans les nuages : des rangées de plâtres tirés du même moule, copies de copies d'un portrait antique, certains sous des draps blancs ; de la poussière dans les rais de lumière. Pendant un break, un drap glisse et découvre un visage ; au drop, un plâtre se fend et une lumière d'or pâle sort de la fêlure.",
   params: [paletteParam("olympe")],
   uniforms: () => ({
+    ...wantCloudNoise(),
     ...headUniforms(),
     uTravel: { value: 0 },
     uKickT: { value: 9 },

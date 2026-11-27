@@ -3,6 +3,7 @@ import { paletteParam } from "../palettes";
 import { ART_LIB } from "./lib.glsl";
 import { HEAD_GLSL, headsOf, headUniforms, setHead, type HeadId } from "./heads";
 import { SKY_GLSL } from "./sky.glsl";
+import { wantCloudNoise } from "./cloudnoise";
 import { Procession } from "./casting";
 
 /**
@@ -42,6 +43,7 @@ export const timeHall = defineShaderScene({
     "Un sol blanc infini qui se fond dans le ciel ; des bustes antiques sur de hauts socles, immobiles, très loin les uns des autres. Le temps passe en accéléré : leurs ombres tournent, de plus en plus vite à la montée, celles des nuages filent. Au drop, le temps s'arrête : les ombres se figent, un flash blanc, puis tout repart lentement.",
   params: [paletteParam("olympe")],
   uniforms: () => ({
+    ...wantCloudNoise(),
     ...Object.assign({}, ...SLOTS.map((s) => headUniforms(s))),
     uM0: { value: 0 },
     uWho: { value: new Array<number>(AHEAD + 2).fill(-1) },
