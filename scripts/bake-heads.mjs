@@ -61,9 +61,22 @@ function read3MF(buf, objectId) {
   const name = Object.keys(files).find((f) => f.endsWith(".model"));
   const xml = new TextDecoder().decode(files[name]);
   const objects = [...xml.matchAll(/<object\b[^>]*\bid="(\d+)"[^>]*>([\s\S]*?)<\/object>/g)];
-  const obj = objects.find((o) => o[1] === String(objectId ?? objects[0][1]));
+  const id = String(objectId ?? objects[0][1]);
+  const obj = objects.find((o) => o[1] === id);
   const verts = [...obj[2].matchAll(/<vertex\s+x="([^"]+)"\s+y="([^"]+)"\s+z="([^"]+)"/g)].map((m) => [+m[1], +m[2], +m[3]]);
-  const tris = [...obj[2].matchAll(/<triangle\s+v1="(\d+)"\s+v2="(\d+)"\s+v3="(\d+)"/g)];
+  let tris = [...obj[2].matchAll(/<triangle\s+v1="(\d+)"\s+v2="(\d+)"\s+v3="(\d+)"/g)];
+  // A slicer's helper volumes (support enforcer or blocker, modifier, negative volume) are stored in the same mesh as
+  // the model: PrusaSlicer's config gives each volume its range of triangles and its type. Only the model parts stay.
+  const config = files["Metadata/Slic3r_PE_model.config"];
+  if (config) {
+    const cxml = new TextDecoder().decode(config);
+    const cobj = [...cxml.matchAll(/<object\s+id="(\d+)"[^>]*>([\s\S]*?)<\/object>/g)].find((o) => o[1] === id);
+    const volumes = cobj ? [...cobj[2].matchAll(/<volume\s+firstid="(\d+)"\s+lastid="(\d+)"\s*>([\s\S]*?)<\/volume>/g)] : [];
+    const helpers = volumes
+      .filter((v) => (/key="volume_type"\s+value="([^"]+)"/.exec(v[3])?.[1] ?? "ModelPart") !== "ModelPart")
+      .map((v) => [+v[1], +v[2]]);
+    if (helpers.length) tris = tris.filter((_, t) => !helpers.some(([a, b]) => t >= a && t <= b));
+  }
   const pos = new Float32Array(tris.length * 9);
   tris.forEach((m, t) => {
     for (let k = 0; k < 3; k++) pos.set(verts[+m[k + 1]], t * 9 + k * 3);
