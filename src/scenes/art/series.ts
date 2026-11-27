@@ -129,7 +129,7 @@ float sheetD(vec3 h, float slide) {
   float head = sdEllipsoid(h - vec3(0., .12, .02), vec3(.64, .82, .74));
   float hang = 1. - smoothstep(-.95, .1, h.y);
   float a = atan(h.z, h.x);
-  float r = .62 + .4 * hang + .05 * sin(a * 7. + 1.3) * hang;
+  float r = .62 + .4 * hang + .03 * sin(a * 5. + 1.3) * hang;
   float skirt = max((length(h.xz * vec2(1., 1.05)) - r) * .75, h.y - .1);
   return smin(head, skirt, .3);
 }
