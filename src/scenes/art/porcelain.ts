@@ -174,10 +174,11 @@ export const porcelain = defineShaderScene({
           })()
         : { a: [-dside * 16, 2.5, -14], b: [dside * 16, 4, -20], r: 2, size: 0.45, dur: 12 },
     burst);
-    if (ctx.camera) {
+    // feathers falling round the bust (not round the fragments: the air is theirs, and they cost enough)
+    if (ctx.camera && p.fragments !== true) {
       const look = FWD.subVectors(ctx.camera.target, ctx.camera.pos);
       featherStep(u, ctx.time, ctx.camera.pos, look, { size: 8, length: 0.24, fall: 0.12, ahead: 4 });
-    }
+    } else u.uFeatherL.value = 0;
     const o = u.uOpen.value as number;
     // Critically damped: ~2 bars to open, ~4 bars to close
     const w = target > o ? 4 / (bar * 2) : 4 / (bar * 4);
