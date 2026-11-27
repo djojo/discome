@@ -277,14 +277,26 @@ vec3 heavenV(vec3 ro, vec3 rd, float tmax) {
 vec3 gOccC = vec3(0.);
 vec3 gOccR = vec3(0.);
 
-/** Whether the way from p toward the sun crosses the occluder (0 or 1). */
+/**
+ * Whether the way from p toward the sun crosses the occluder (0 or 1). A scene may add its own (a colonnade): it
+ * defines SHAFT_OCCLUDER(p) before SKY_GLSL.
+ */
 float inShadow(vec3 p) {
-  if (gOccR.x <= 0.) return 0.;
+  float s = 0.;
+#ifdef SHAFT_OCCLUDER
+  s = SHAFT_OCCLUDER(p);
+#endif
+  if (gOccR.x <= 0.) return s;
   vec3 o = (p - gOccC) / gOccR, d = gSun / gOccR;
   float a = dot(d, d), b = dot(o, d), c = dot(o, o) - 1.;
   float h = b * b - a * c;
-  return h > 0. && (c < 0. || -b - sqrt(h) > 0.) ? 1. : 0.;
+  return max(s, h > 0. && (c < 0. || -b - sqrt(h) > 0.) ? 1. : 0.);
 }
+#ifdef SHAFT_OCCLUDER
+const bool OCCLUDED = true;
+#else
+const bool OCCLUDED = false;
+#endif
 
 /**
  * Light shafts in the air between the eye and tEnd: rays fanning out round the low sun (bright rays and greyer gaps
@@ -303,7 +315,7 @@ vec3 shaftsO(vec3 ro, vec3 rd, float tEnd) {
   float ray = smoothstep(.42, .7, n);
   float tMax = min(tEnd, 30.);
   float shade = 0.;
-  if (gOccR.x > 0.) {
+  if (gOccR.x > 0. || OCCLUDED) {
     float j = hash12(gl_FragCoord.xy + fract(uTime) * 17.);
     for (int i = 0; i < 8; i++) shade += inShadow(ro + rd * tMax * (float(i) + j) / 8.);
     shade /= 8.;

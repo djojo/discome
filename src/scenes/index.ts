@@ -21,6 +21,7 @@ import { series } from "./art/series";
 import { cloudSea } from "./art/cloudsea";
 import { timeHall } from "./art/timehall";
 import { assembly } from "./art/assembly";
+import { temple } from "./art/temple";
 import { panopticon } from "./art/panopticon";
 import { collective } from "./art/collective";
 import { warehouse } from "./art/warehouse";
@@ -121,6 +122,7 @@ export const SCENES: SceneDef[] = [
   cloudSea,
   timeHall,
   assembly,
+  temple,
   // Mycélium
   forest,
   giants,
