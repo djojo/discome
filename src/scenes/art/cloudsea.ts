@@ -1,13 +1,14 @@
+import * as THREE from "three";
 import { defineShaderScene } from "../shader/defineShaderScene";
 import { paletteParam } from "../palettes";
 import { num } from "../utils";
 import { ART_LIB } from "./lib.glsl";
 import { FLIGHT_GLSL, flightParams } from "./flight";
-import { HEAD_GLSL, headsOf, headUniforms, setHead, type HeadId } from "./heads";
+import { HEAD_GLSL, headSlotGLSL, headsOf, headUniforms, setHead, type HeadId } from "./heads";
 import { SKY_GLSL } from "./sky.glsl";
 import { TEMPLE_GLSL } from "./temple.glsl";
 import { olympeUniforms, olympeWarp } from "./olympe";
-import { Procession } from "./casting";
+import { Casting, pick, Procession } from "./casting";
 
 /**
  * The colossal heads met on the way: the portraits of Rome and Greece and their archetypes, one after another, never
@@ -25,6 +26,20 @@ const MEMORY = 8;
 const procession = new Procession(POOL, SLOTS.length, MEMORY, FIRST);
 
 /**
+ * The face in the clouds: a god of the Assembly (already loaded with the world), another one each time. It forms far
+ * ahead through a build, out of a heap of cloud; it holds through the drop; then the wind carries it off.
+ */
+const FACES: HeadId[] = ["hera", "athena", "dionysos", "homere", "empereur", "imperatrice"];
+const faceCasting = new Casting(["hera"], (avoid) => pick(FACES, 1, avoid));
+type Face = { on: boolean; form: number; gone: number; x: number; z: number; cool: number; head: HeadId };
+const faces = new WeakMap<object, Face>();
+/** Its scale, the height of its centre, how far ahead it forms and how close it may come. */
+const FACE_S = 110;
+const FACE_Y = 42;
+const FACE_FAR = 460;
+const FACE_NEAR = 400;
+
+/**
  * La Mer de nuages: a very slow flight just above a sea of clouds, toward a low sun. Colossal heads of Antiquity rise
  * out of it like islands, their faces turned up to the sky, one after another on either side of the way, each a
  * different one; the clouds lap round their necks. The sun's rays fan out over the sea. On the kick a wave of light
@@ -38,14 +53,19 @@ export const cloudSea = defineShaderScene({
   hdr: true,
   timeWarp: olympeWarp,
   renderScale: 0.75,
-  flight: { cruise: 2.4, pump: 0.15 },
-  heads: FIRST,
+  flight: { cruise: 2.4, pump: 0.15, roll: false },
+  heads: [...FIRST, ...FACES],
   description:
     "Un vol très lent au ras d'une mer de nuages, vers un soleil bas : des têtes antiques colossales en émergent comme des îles, le visage tourné vers le ciel, toutes différentes. Au kick, une onde de lumière roule sur les nuages ; à la montée, le soleil se lève ; au drop, on plonge dans les nuages et on ressort au-dessus d'une autre mer.",
   params: [paletteParam("olympe"), { type: "range", key: "sky", label: "Ciel dans la pierre", min: 0, max: 1, step: 0.05, default: 0.6 }, ...flightParams()],
   uniforms: () => ({
     ...olympeUniforms(),
     ...Object.assign({}, ...SLOTS.map((s) => headUniforms(s))),
+    ...headUniforms("I"),
+    uFaceC: { value: new THREE.Vector3() },
+    uFaceS: { value: 0 },
+    uFaceForm: { value: 0 },
+    uFaceGone: { value: 0 },
     uM0: { value: 0 },
     uWho: { value: new Array<number>(AHEAD + 2).fill(-1) },
     uKickT: { value: 9 },
@@ -85,6 +105,28 @@ export const cloudSea = defineShaderScene({
     u.uPlunge.value = Math.sin(Math.PI * Math.min(1, t / (bar * 2))) * (f.safeFlash ? 0.7 : 1);
     // deep in the white: another sea
     if (t >= bar && t - dt < bar) u.uSeaShift.value = (u.uSeaShift.value as number) + 1;
+    // the face in the clouds: it forms through a build, holds through the drop, then the wind carries it off
+    const travel = ctx.flight?.travel ?? 0;
+    let face = faces.get(u);
+    if (!face) faces.set(u, (face = { on: false, form: 0, gone: 0, x: 0, z: 0, cool: 0, head: "hera" }));
+    face.cool -= dt;
+    if (!face.on && f.section === "build" && face.cool <= 0) {
+      const head = faceCasting.pass()[0];
+      Object.assign(face, { on: true, form: 0, gone: 0, x: (Math.random() - 0.5) * 24, z: -travel - FACE_FAR, head });
+    }
+    if (face.on) {
+      setHead(u, face.head, "I");
+      if (f.section === "build" || f.section === "drop") {
+        const goal = f.section === "drop" ? 1 : 0.2 + 0.7 * f.buildProgress;
+        face.form = Math.min(1, face.form + Math.max(0, goal - face.form) * (1 - Math.exp(-dt * 0.5)) + (f.drop ? 0.3 : 0));
+      } else if (face.form > 0) face.gone = Math.min(1, face.gone + dt / (bar * 4));
+      face.z = Math.min(face.z, -travel - FACE_NEAR);
+      if (face.gone >= 1) Object.assign(face, { on: false, cool: bar * 8 });
+    }
+    (u.uFaceC.value as THREE.Vector3).set(face.x, FACE_Y, face.z);
+    u.uFaceS.value = face.on ? FACE_S : 0;
+    u.uFaceForm.value = face.form;
+    u.uFaceGone.value = face.gone;
     u.uSky.value = num(p.sky, 0.6);
   },
   fragment: /* glsl */ `
@@ -96,6 +138,10 @@ uniform float uPlunge;
 uniform float uSeaShift;
 uniform float uAlt;
 uniform float uSky;
+uniform vec3 uFaceC;
+uniform float uFaceS;
+uniform float uFaceForm;
+uniform float uFaceGone;
 ${SLOTS.slice(1)
   .map(
     (s) => `uniform highp sampler3D uHeadTex${s};
@@ -108,6 +154,15 @@ uniform vec2 uHeadRelief${s};`,
 ${ART_LIB}
 ${HEAD_GLSL}
 ${FLIGHT_GLSL}
+${headSlotGLSL("I")}
+/** The face in the clouds: its head's field, a single fetch (the clouds blur it anyway). */
+float faceField(vec3 h) {
+  if (uHeadOnI < .5 || uHeadOnI > 1.5) return headDI(h);
+  vec3 uvw = (h - uHeadMinI) / uHeadSizeI;
+  vec3 c = clamp(uvw, 0., 1.);
+  return textureLod(uHeadTexI, c, 0.).r + length((uvw - c) * uHeadSizeI);
+}
+#define CLOUD_FACE(h) faceField(h)
 ${SKY_GLSL}
 ${TEMPLE_GLSL}
 const float STEP = ${STEP.toFixed(1)};
@@ -186,6 +241,11 @@ void main() {
   // the kick: a glow running out through them; the build: a clearing opening ahead, under the climbing sun
   gCloudGlow = .55 * exp(-uKickT * 1.4);
   gGlowR = uKickT * 45.;
+  gFaceC = uFaceC;
+  gFaceS = uFaceS;
+  gFaceForm = uFaceForm;
+  gFaceGone = uFaceGone;
+  gFaceL = normalize(vec3(.85 * side, .45, .4));
 
   // the flight: along the way (-z), swaying, banking; on the drop it plunges into the clouds
   float top = gSeaY + 3.4;
@@ -304,7 +364,12 @@ void main() {
   }
   // the clouds in front of all of it
   if (vol) {
-    vec4 cl = cloudsO(ro, rd, tBest < 1e3 ? tBest : 400.);
+    float tEnd = tBest < 1e3 ? tBest : 400.;
+    // the face in the clouds, far ahead, then the clouds before it
+    float tFace;
+    vec4 fc = faceCloudO(ro, rd, tEnd, tFace);
+    col = col * fc.a + fc.rgb;
+    vec4 cl = cloudsO(ro, rd, tFace);
     col = col * cl.a + cl.rgb;
   }
   col += uAccent * sunRays(rd, 4.) * (.15 + .4 * uRise + .25 * uBeat);

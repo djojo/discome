@@ -55,9 +55,9 @@ interface ShaderSceneOptions {
   /**
    * Travelling scene: a Flight (speed following the track's structure) drives uTravel, uSpeed, uAccel,
    * uBank, uSway and uDive. `cruise` is the distance per second at cruise speed; the scene's
-   * `speed` and `dynamics` params scale it (see flightParams).
+   * `speed` and `dynamics` params scale it (see flightParams); `roll: false` forbids the barrel roll.
    */
-  flight?: { cruise: number; pump?: number };
+  flight?: { cruise: number; pump?: number; roll?: boolean };
   /**
    * Scene built around a subject: a Cadrage draws a new framing on every phrase and writes
    * uCamPos, uCamTarget and uFocal (include CAMERA_GLSL in the fragment).
@@ -122,6 +122,7 @@ export function defineShaderScene(opts: ShaderSceneOptions): SceneGLDef {
         ...(opts.uniforms?.() ?? {}),
       };
       const flight = opts.flight ? new Flight() : null;
+      if (flight && opts.flight?.roll === false) flight.rolls = false;
       const cadrage = opts.camera ? new Cadrage(opts.camera.framings, opts.camera.glideBars) : null;
       const ctx: SceneCtx = { flight, camera: cadrage, time: 0, dt: 0 };
       let lastSeen = -1e9;

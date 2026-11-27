@@ -282,6 +282,90 @@ vec3 heavenV(vec3 ro, vec3 rd, float tmax) {
   return skyO(rd) * c.a + c.rgb;
 }
 
+// ---- a face in the clouds: for a while, a heap of cloud takes the shape of a head, then the wind carries it off. A
+// scene that has one defines CLOUD_FACE(h) before SKY_GLSL: the head's distance field in its own frame (about -1..1).
+
+/** Where the face stands (its centre), its scale (0: none), how far it has formed (0: a heap, 1: the face), gone. */
+vec3 gFaceC = vec3(0.);
+float gFaceS = 0.;
+float gFaceForm = 0.;
+float gFaceGone = 0.;
+/** The light that models it, raking from the side so that its features cast their shadows. */
+vec3 gFaceL = normalize(vec3(-.8, .5, .35));
+/** (how far the last sample was from it, in its own units: to leap over the empty air) */
+float gFaceFar = 0.;
+
+#ifdef CLOUD_FACE
+float faceDensity(vec3 p, bool cheap) {
+  vec3 h = (p - gFaceC) / gFaceS;
+  // the wind shears it as it carries it off, the top first
+  h.x -= gFaceGone * gFaceGone * (h.y + 1.2) * .7;
+  float form = smoothstep(.1, .85, gFaceForm);
+  float ero = mix(.1, .016, form) + .35 * gFaceGone;
+  float sd = sdEllipsoid(h - vec3(0., -.02, -.02), vec3(.68, 1.02, .84));
+  gFaceFar = sd - ero - .06;
+  if (gFaceFar > 0.) return 0.;
+  if (form > 0.) sd = mix(sd, CLOUD_FACE(h), form);
+  gFaceFar = sd - ero - .02;
+  // its billows: big ones while it is still a heap, fine ones on the face, torn apart as it goes
+  // (billows of a few units whatever its scale: puffed out, cauliflower-like, rising slowly)
+  float n = .5;
+  if (!cheap) {
+    vec3 w = p / gFaceS * mix(1.6, 4., form) + vec3(uTime * .004, -uTime * .012, 0.);
+    vec4 m = textureLod(uCloudTex, w, 0.);
+    vec4 m2 = textureLod(uCloudTex, w * 2.7 + .37, 0.);
+    n = .65 * m.r + .35 * m2.g;
+  }
+  // (soft as a cloud while it is a heap, crisper once it is a face)
+  float v = (-sd + (n - .5) * 2. * ero) / (mix(.07, .012, form) + .15 * gFaceGone);
+  // the neck melts into the sea of clouds
+  return clamp(v, 0., 1.) * (1. - gFaceGone) * smoothstep(0., .12, gFaceForm) * smoothstep(-1.1, -.55, h.y);
+}
+
+/**
+ * The face in the clouds between the eye and tmax: its light (rgb), what it lets through (a); tHalf: where it gets
+ * opaque (the clouds before it are drawn up to there). Modelled by the white sky's key light, which its own features
+ * shade (the brow over the eyes, the nose), a silver lining against the sun, the haze of the distance.
+ */
+vec4 faceCloudO(vec3 ro, vec3 rd, float tmax, out float tHalf) {
+  tHalf = tmax;
+  if (gFaceS <= 0. || gFaceForm <= 0. || gFaceGone >= 1. || uCloudReady < .5) return vec4(0., 0., 0., 1.);
+  vec3 oc = ro - gFaceC;
+  float R = 1.3 * gFaceS * (1. + .8 * gFaceGone);
+  float b = dot(oc, rd), hh = b * b - dot(oc, oc) + R * R;
+  if (hh < 0.) return vec4(0., 0., 0., 1.);
+  hh = sqrt(hh);
+  float t = max(-b - hh, 0.), t1 = min(-b + hh, tmax);
+  if (t1 <= t) return vec4(0., 0., 0., 1.);
+  float st = .008 * gFaceS;
+  t += st * hash12(gl_FragCoord.xy + fract(uTime) * 17.);
+  vec3 sky = skyO(rd);
+  float phase = hgPhase(dot(rd, gSun), .6) * 7.;
+  float T = 1.;
+  vec3 L = vec3(0.);
+  for (int i = 0; i < 72; i++) {
+    if (t > t1 || T < .03) break;
+    vec3 p = ro + rd * t;
+    float d = faceDensity(p, false);
+    if (d > .002) {
+      float ld = faceDensity(p + gFaceL * .02 * gFaceS, true) + faceDensity(p + gFaceL * .05 * gFaceS, true) + faceDensity(p + gFaceL * .12 * gFaceS, true);
+      float keyT = exp(-ld * 2.2);
+      float sunT = exp(-faceDensity(p + gSun * .1 * gFaceS, true) * 2.5);
+      float hy = clamp((p.y - gFaceC.y) / gFaceS * .5 + .5, 0., 1.);
+      // (a touch darker than the white sky behind it, so that it stands out in pearl grey)
+      vec3 S = mix(uPal1 * .4, uInk * .5, hy) + uInk * 1.3 * warmLight() * keyT + sunCol() * .45 * sunT * phase;
+      S = mix(S, sky, 1. - exp(-t * .0004));
+      float a = exp(-d * st * 1.5);
+      L += T * S * (1. - a);
+      T *= a;
+      if (T < .5 && tHalf >= tmax) tHalf = t;
+      t += st;
+    } else t += max(st, gFaceFar * gFaceS);
+  }
+  return vec4(L, T);
+}
+#endif
+
 // ---- the light shafts: the low sun's beams in the air, the statue's shadow cut out of them
 
 /** What casts its shadow into the beams: an ellipsoid (centre, radii; radii 0: nothing). */

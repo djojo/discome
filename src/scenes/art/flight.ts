@@ -48,6 +48,8 @@ export class Flight {
   /** Altitude, -1 (hugging the ground) .. 1.5 (above everything). */
   dive = 0;
   move: FlightMove = "cruise";
+  /** Whether it may barrel-roll (not in a contemplative world, where the slow motion would hold it upside down). */
+  rolls = true;
 
   private vel = 0;
   private pump = 0;
@@ -128,7 +130,7 @@ export class Flight {
           : f.section === "drop"
             ? ["roll", "slalom", "climb", "dive"]
           : ["cruise", "slalom", "dive", "climb"];
-    const pool = options.filter((m) => m !== this.move);
+    const pool = options.filter((m) => m !== this.move && (this.rolls || m !== "roll"));
     this.move = pool[Math.floor(Math.random() * pool.length)];
     this.moveTime = 0;
   }
