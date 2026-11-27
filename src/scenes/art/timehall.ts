@@ -3,6 +3,7 @@ import { paletteParam } from "../palettes";
 import { ART_LIB } from "./lib.glsl";
 import { HEAD_GLSL, headsOf, headUniforms, setHead, type HeadId } from "./heads";
 import { SKY_GLSL } from "./sky.glsl";
+import { TEMPLE_GLSL } from "./temple.glsl";
 import { wantCloudNoise } from "./cloudnoise";
 import { Procession } from "./casting";
 
@@ -93,7 +94,23 @@ uniform vec2 uHeadRelief${s};`,
 ${ART_LIB}
 ${HEAD_GLSL}
 ${SKY_GLSL}
+${TEMPLE_GLSL}
 const float STEP = ${STEP.toFixed(1)};
+
+// ---- two colonnades without end, on either side of the walk, far off: their shadows wheel over the floor
+const float CX = 15.;   // their distance from the way
+const float CS = 4.2;   // the spacing of their columns
+const float CH = 8.;
+const float CR = .55;
+float colonnadeD(vec3 p) {
+  vec3 q = vec3(abs(p.x) - CX, p.y, p.z);
+  vec3 c = vec3(q.x, q.y, q.z - floor(q.z / CS + .5) * CS);
+  float col = doricColumn(c, CH, CR);
+  float beam = sdBox(vec3(q.x, q.y - CH - .45, 0.), vec3(CR * 1.3, .45, 1.));
+  float cornice = sdBox(vec3(q.x, q.y - CH - .98, 0.), vec3(CR * 1.55, .08, 1.));
+  float stylo = sdBox(vec3(q.x, q.y - .12, 0.), vec3(CR * 2.1, .12, 1.));
+  return min(min(col, beam), min(cornice, stylo));
+}
 const float S = .8;       // the busts' scale
 const float CUT = -.82;   // cut flat under the neck, on the plinth
 
@@ -148,7 +165,7 @@ void place(float ci) {
 
 /** For the shadows on the floor: every statue in view, as boxes and an ellipsoid (cheap, soft enough). */
 float shadowD(vec3 p) {
-  float d = 1e3;
+  float d = colonnadeD(p);
   for (int k = ${AHEAD}; k >= -1; k--) {
     if (uWho[k + 1] < -.5) continue;
     place(uM0 + float(k));
@@ -212,6 +229,19 @@ void main() {
     }
   }
   float tFloor = rd.y < -1e-4 ? -ro.y / rd.y : 1e4;
+  // ---- the colonnades (only where the ray crosses their band of x)
+  float tCol = 1e4;
+  {
+    float t = .1;
+    gFlute = 1.;
+    for (int i = 0; i < 90; i++) {
+      vec3 q = ro + rd * t;
+      float d = colonnadeD(q);
+      if (d < .0015 * t) { tCol = t; break; }
+      t += d;
+      if (t > min(min(tBest, tFloor), 160.)) break;
+    }
+  }
 
   // high clouds racing over the hall with the time-lapse; their shadows run over the floor
   gCloudBase = 26.;
@@ -220,7 +250,21 @@ void main() {
   gCloudUnder = 1.25;
   gWind = vec2(uClock * 70. + uSeed * 30., uClock * 28.);
   vec3 col = heavenV(ro, rd, 500.);
-  if (tFloor < tBest && tFloor < 1e3) {
+  if (tCol < tBest && tCol < tFloor) {
+    // ---- a colonnade: marble, its own shadows, the clouds' shadows running over it
+    vec3 p = ro + rd * tCol;
+    gFlute = clamp(1.5 - tCol * .04, 0., 1.);
+    const vec2 e = vec2(1, -1);
+    float ee = .002 * tCol;
+    vec3 n = normalize(e.xyy * colonnadeD(p + e.xyy * ee) + e.yyx * colonnadeD(p + e.yyx * ee) + e.yxy * colonnadeD(p + e.yxy * ee) + e.xxx * colonnadeD(p + e.xxx * ee));
+    float ao = 1.;
+    for (int i = 0; i < 3; i++) {
+      float hd = .05 + .2 * float(i);
+      ao -= max(hd - colonnadeD(p + n * hd), 0.) * (.5 / (hd + .3));
+    }
+    col = lightO(marbleO(p * .3) * .97, n, rd, clamp(ao, 0., 1.)) * mix(.78, 1., cloudShadow(p));
+    col = mix(col, skyO(rd), 1. - exp(-tCol * .011));
+  } else if (tFloor < tBest && tFloor < 1e3) {
     vec3 p = ro + rd * tFloor;
     float sh = floorShadow(p);
     float lit = sh * mix(.25, 1., cloudShadow(p));
@@ -249,7 +293,7 @@ void main() {
     col = mix(col, skyO(rd), 1. - exp(-tBest * .011));
   }
   // rays wheeling with the sun
-  col = withShafts(col, ro, rd, min(min(tBest, tFloor), 40.), .45 + .3 * exp(-uKickT * 3.));
+  col = withShafts(col, ro, rd, min(min(min(tBest, tFloor), tCol), 40.), .45 + .3 * exp(-uKickT * 3.));
   // the drop: time stops in a white flash
   col = mix(col, uInk * 3., uFlash);
   gl_FragColor = vec4(hdrOut(col), 1.);

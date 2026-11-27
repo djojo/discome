@@ -3,6 +3,7 @@ import { paletteParam } from "../palettes";
 import { ART_LIB } from "./lib.glsl";
 import { HEAD_GLSL, headUniforms, setHead, type HeadId } from "./heads";
 import { SKY_GLSL } from "./sky.glsl";
+import { TEMPLE_GLSL } from "./temple.glsl";
 import { wantCloudNoise } from "./cloudnoise";
 
 /**
@@ -85,6 +86,7 @@ uniform vec2 uHeadRelief${s};`,
 ${ART_LIB}
 ${HEAD_GLSL}
 ${SKY_GLSL}
+${TEMPLE_GLSL}
 const float N = 6.;
 const float SEG = 6.2831853 / 6.;
 const float A0 = .3;
@@ -155,7 +157,10 @@ float map(vec3 p) {
   float nb = min(length(p - c2) - 1.4 * GS, length((p - c2).xz) - 4.);
   gK = k;
   gMat = g < c ? 0. : 1.;
-  return min(min(g, c), max(nb, .1));
+  // the tholos round the assembly, far behind the gods: a ring of tall columns under a ring of stone
+  float th = tholosD(p - vec3(0., -2., 0.), 24., 30., 14., 1.1, 0.);
+  if (th < min(g, c)) gMat = 2.;
+  return min(min(min(g, c), th), max(nb, .1));
 }
 vec3 calcN(vec3 p, float e) {
   const vec2 k = vec2(1, -1);
@@ -168,6 +173,8 @@ void main() {
   gKey = normalize(vec3(0., .75, 0.) + gSun * .35);
   gSeaY = -10.;
   gSeaDrift = vec2(uTime * .003, uSeed * .1);
+  // (the tholos is far: its fluting would be finer than a pixel)
+  gFlute = .3;
   // the columns of cloud in volume, under each god, churning slowly, fast while the light stands
   gColN = N;
   gColRing = RR;
@@ -204,7 +211,10 @@ void main() {
       ao -= max(hd - map(p + n * hd), 0.) * (.5 / (hd + .5));
     }
     ao = clamp(ao, 0., 1.);
-    if (mat < .5) {
+    if (mat > 1.5) {
+      // ---- the tholos: marble, the fluting fading with the distance
+      col = lightO(marbleO(p * .2) * .96, n, rd, ao);
+    } else if (mat < .5) {
       // ---- a god: marble, a little of the sky in its face, lit from within on the drop
       vec3 q = godFrame(p, k);
       col = lightO(marbleO(q), n, rd, ao);

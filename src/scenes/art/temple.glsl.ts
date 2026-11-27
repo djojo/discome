@@ -110,8 +110,11 @@ float templeD(vec3 p, float nx, float nz, float s, float H, float R, float ruin)
   return d;
 }
 
-/** A tholos: a ring of n columns of radius rr round a round floor, a ring entablature and a low conical roof. */
-float tholosD(vec3 p, float n, float rr, float H, float R) {
+/**
+ * A tholos: a ring of n columns of radius rr round a round floor, a ring entablature, and (roof > .5) a low conical
+ * roof; without it, an open ring of stone under the sky.
+ */
+float tholosD(vec3 p, float n, float rr, float H, float R, float roof) {
   float seg = 6.2831853 / n;
   float a = atan(p.z, p.x);
   float ca = (floor(a / seg) + .5) * seg;
@@ -120,7 +123,7 @@ float tholosD(vec3 p, float n, float rr, float H, float R) {
   float floorD = sdCapCyl(p - vec3(0., -.3 * R, 0.), .3 * R, rr + R * 1.6);
   float ring = max(abs(length(p.xz) - rr) - R * 1.2, abs(p.y - H - .55 * R) - .55 * R);
   vec3 r = p - vec3(0., H + 1.1 * R, 0.);
-  float cone = max(length(r.xz) * .35 + r.y - (rr + R * 1.3) * .35, -r.y);
+  float cone = roof > .5 ? max(length(r.xz) * .35 + r.y - (rr + R * 1.3) * .35, -r.y) : 1e3;
   float d = min(cols, floorD);
   gPart = cols < floorD ? 0. : 1.;
   float top = min(ring, cone);

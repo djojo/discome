@@ -5,6 +5,7 @@ import { ART_LIB } from "./lib.glsl";
 import { FLIGHT_GLSL, flightParams } from "./flight";
 import { HEAD_GLSL, headsOf, headUniforms, setHead, type HeadId } from "./heads";
 import { SKY_GLSL } from "./sky.glsl";
+import { TEMPLE_GLSL } from "./temple.glsl";
 import { wantCloudNoise } from "./cloudnoise";
 import { Procession } from "./casting";
 
@@ -107,7 +108,20 @@ ${ART_LIB}
 ${HEAD_GLSL}
 ${FLIGHT_GLSL}
 ${SKY_GLSL}
+${TEMPLE_GLSL}
 const float STEP = ${STEP.toFixed(1)};
+
+// ---- the ruins of temples standing on the clouds, far off the way, one now and then on either side
+const float RSTEP = 230.;
+vec3 ruinC(float i) {
+  float side = mod(i, 2.) < .5 ? 1. : -1.;
+  return vec3(side * (48. + 18. * hash12(vec2(i, 3.))), -1.4, -(i * RSTEP + 90.));
+}
+float ruinD(vec3 p, float i) {
+  vec3 q = p - ruinC(i);
+  q.xz *= rot(hash12(vec2(i, 5.)) * 6.2831853);
+  return templeD(q, 6., 9., 3.2, 9.5, .85, 1.);
+}
 
 // ---- the colossus being drawn: its centre, scale, turn (yaw, then pitch: the face up to the sky), slot, top
 vec3 gC;
@@ -216,12 +230,46 @@ void main() {
       if (t > min(t1, tBest)) break;
     }
   }
+  // ---- the ruins: the nearest two along the way (far: no fluting)
+  gFlute = 0.;
+  float tRuin = 1e4, iRuin = 0.;
+  float i0 = floor((-ro.z - 90.) / RSTEP);
+  for (int k = 0; k < 3; k++) {
+    float ri = i0 + float(k);
+    vec3 oc = ro - ruinC(ri) - vec3(0., 4., 0.);
+    const float RB = 24.;
+    float b = dot(oc, rd), hh = b * b - dot(oc, oc) + RB * RB;
+    if (hh < 0.) continue;
+    hh = sqrt(hh);
+    if (-b + hh < 0.) continue;
+    float t = max(-b - hh, .1);
+    for (int i = 0; i < 80; i++) {
+      float d = ruinD(ro + rd * t, ri);
+      if (d < .002 * t) { if (t < tRuin) { tRuin = t; iRuin = ri; } break; }
+      t += d;
+      if (t > min(-b + hh, tRuin)) break;
+    }
+  }
   gClearing = vec3(ro.x + 30. * gSun.x, ro.z - 70., 40. * uRise);
   bool vol = uCloudReady > .5;
   float tSea = vol ? -1. : seaHit(ro, rd, min(tBest, 260.));
 
   vec3 col;
-  if (tSea > 0. && tSea < tBest) {
+  if (tRuin < tBest && (tSea < 0. || tRuin < tSea)) {
+    // ---- a ruin: weathered marble, long shadows of its broken columns
+    vec3 p = ro + rd * tRuin;
+    const vec2 e = vec2(1, -1);
+    float ee = .002 * tRuin;
+    vec3 n = normalize(e.xyy * ruinD(p + e.xyy * ee, iRuin) + e.yyx * ruinD(p + e.yyx * ee, iRuin) + e.yxy * ruinD(p + e.yxy * ee, iRuin) + e.xxx * ruinD(p + e.xxx * ee, iRuin));
+    float ao = 1.;
+    for (int i = 0; i < 3; i++) {
+      float hd = .2 + .5 * float(i);
+      ao -= max(hd - ruinD(p + n * hd, iRuin), 0.) * (.4 / hd);
+    }
+    col = lightO(marbleO(p * .2) * .95, n, rd, clamp(ao, 0., 1.));
+    col = mix(col, skyO(rd), 1. - exp(-tRuin * .0032));
+    tBest = tRuin;
+  } else if (tSea > 0. && tSea < tBest) {
     vec3 p = ro + rd * tSea;
     col = seaShade(p, rd, tSea);
     // the kick: a wave of light rolling ahead over the tops
