@@ -30,8 +30,9 @@ const smooth = (x: number) => {
  * La Salle du temps: a white floor without end, melting into the white sky with no horizon; busts of Antiquity on tall
  * plinths stand far apart from one another, perfectly still, and we walk slowly among them. Time passes round them as
  * in a time-lapse: their shadows wheel round them with a sun we never see, faster and faster through the build, the
- * shadows of clouds race over the floor, the light sweeps over the marble. On the drop time stops: the shadows freeze,
- * a white flash, two bars of stillness, then it all slowly starts again.
+ * shadows of clouds race over the floor, the light sweeps over the marble. Through the build a whole day goes by: dusk,
+ * then the night, its stars wheeling and the moon, in the sky and in the water. On the drop noon bursts and time
+ * stops: the shadows freeze, a white flash, two bars of stillness, then it all slowly starts again.
  */
 export const timeHall = defineShaderScene({
   id: "olympe-time",
@@ -42,7 +43,7 @@ export const timeHall = defineShaderScene({
   renderScale: 0.75,
   heads: FIRST,
   description:
-    "Une eau immobile, un miroir infini qui se fond dans le ciel, entre deux colonnades sans fin ; des bustes antiques sur de hauts socles, immobiles. Le temps passe en accéléré : les ombres tournent, de plus en plus vite à la montée, les nuages filent ; au kick, des rides partent d'un socle. Au drop, le temps s'arrête : un flash blanc, l'eau devient un miroir parfait, puis tout repart lentement.",
+    "Une eau immobile, un miroir infini qui se fond dans le ciel, entre deux colonnades sans fin ; des bustes antiques sur de hauts socles, immobiles. Le temps passe en accéléré : les ombres tournent, de plus en plus vite à la montée, les nuages filent ; pendant la montée, une journée entière passe, le crépuscule puis la nuit, ses étoiles qui tournent et la lune, dans le ciel et dans l'eau ; au kick, des rides partent d'un socle. Au drop, midi éclate et le temps s'arrête : un flash blanc, l'eau devient un miroir parfait, puis tout repart lentement.",
   params: [paletteParam("olympe")],
   uniforms: () => ({
     ...olympeUniforms(),
@@ -54,6 +55,7 @@ export const timeHall = defineShaderScene({
     uFlash: { value: 0 },
     uStill: { value: 0 },
     uKickT: { value: 9 },
+    uNight: { value: 0 },
     // CPU side only
     uDropT: { value: 99 },
   }),
@@ -83,6 +85,10 @@ export const timeHall = defineShaderScene({
     u.uFlash.value = t < bar * 2 ? Math.exp(-t / (bar * 0.35)) * (f.safeFlash ? 0.4 : 1) : 0;
     // while time stands still the water is a perfect mirror
     u.uStill.value = 1 - held;
+    // a whole day through the build: dusk, then the night; noon bursts on the drop
+    const night = f.section === "build" ? smooth((f.buildProgress - 0.25) / 0.5) : 0;
+    const n = u.uNight.value as number;
+    u.uNight.value = f.drop ? 0 : n + (night - n) * (1 - Math.exp(-dt * (night > n ? 1.5 : 0.4)));
   },
   fragment: /* glsl */ `
 uniform float uM0;
@@ -92,6 +98,7 @@ uniform float uClock;
 uniform float uFlash;
 uniform float uStill;
 uniform float uKickT;
+uniform float uNight;
 ${SLOTS.slice(1)
   .map(
     (s) => `uniform highp sampler3D uHeadTex${s};
@@ -171,6 +178,45 @@ void place(float ci) {
   gH = 1.7 + .8 * h3;
   // it looks over the way, toward where we come from
   gYaw = -side * (.35 + .5 * h2);
+}
+
+// ---- the night: the stars wheeling round a pole with the time-lapse, the moon over the way
+float gPix = .001;
+vec3 moonDir() { float side = fract(uSeed * .37) < .5 ? -1. : 1.; return normalize(vec3(.38 * side, .3, -1.)); }
+float starLayer(vec3 r, float cells, float keep) {
+  vec2 sp = vec2(atan(r.z, r.x), asin(clamp(r.y, -1., 1.)));
+  vec2 g = sp * cells / 3.1416;
+  vec2 id = floor(g), f = fract(g) - .5;
+  float h = hash12(id + cells);
+  if (h > keep) return 0.;
+  vec2 off = (vec2(hash12(id + 7.1), hash12(id + 13.7)) - .5) * .6;
+  vec2 d = (f - off) * vec2(cos(sp.y), 1.);
+  float px = gPix * cells / 3.1416;
+  float b = .25 + .75 * pow(hash12(id + 3.3), 4.);
+  return exp(-dot(d, d) / (px * px * 1.3)) * b * (.8 + .2 * sin(uTime * 3. + h * 60.));
+}
+vec3 nightSkyO(vec3 rd) {
+  vec3 r = rd;
+  r.yz *= rot(.65);
+  r.xz *= rot(uClock * .35);
+  float st = starLayer(r, 70., .3) + starLayer(r.zxy, 140., .2) * .6;
+  vec3 c = vec3(.85, .9, 1.) * st * 1.6 * smoothstep(-.02, .12, rd.y + .02);
+  // the moon: a pale disc, faintly marked, in a halo
+  vec3 m = moonDir();
+  float a = acos(clamp(dot(rd, m), -1., 1.));
+  float disc = 1. - smoothstep(.028 - gPix, .028 + gPix, a);
+  vec2 mq = vec2(dot(rd, normalize(cross(m, vec3(0., 1., 0.)))), rd.y - m.y) * 40.;
+  float mare = vnoise(vec3(mq * 1.3, 4.)) * .5 + vnoise(vec3(mq * 3., 9.)) * .25;
+  c += vec3(1.05, 1.02, .96) * 1.8 * disc * (.8 - .3 * mare);
+  c += vec3(.6, .66, .8) * (exp(-a * 9.) * .25 + exp(-a * 40.) * .35) * (1. - disc);
+  return c;
+}
+/** The night laid over what a ray sees: its light gone silver-blue and dim; the stars and the moon in the sky. */
+vec3 nightO(vec3 col, vec3 rd, bool sky) {
+  if (uNight <= .001) return col;
+  vec3 g = dot(col, vec3(.3, .5, .2)) * vec3(.165, .19, .26);
+  if (sky) g += nightSkyO(rd);
+  return mix(col, g, uNight);
 }
 
 /** For the shadows on the floor: every statue in view, as boxes and an ellipsoid (cheap, soft enough). */
@@ -286,7 +332,7 @@ vec3 traceAbove(vec3 ro, vec3 rd, float tLimit, out float tHit, bool cheap) {
     col *= mix(.78, 1., cloudShadow(p));
     col = mix(col, skyO(rd), 1. - exp(-tBest * .011));
   }
-  return col;
+  return nightO(col, rd, tHit > 1e3);
 }
 
 void main() {
@@ -298,6 +344,7 @@ void main() {
   vec3 ro = vec3(1.2 * sin(uWalk * .045 + uSeed), 1.6, -uWalk);
   vec3 ta = ro + vec3(2.2 * sin(uWalk * .03 + uSeed * 2.), .9 + .4 * sin(uWalk * .021), -8.);
   vec3 rd = lookAt(ro, ta) * normalize(vec3(uv, 1.7));
+  gPix = 1. / (uRes.y * 1.7);
 
   // high clouds racing over the hall with the time-lapse; their shadows run over the floor
   gCloudBase = 26.;
@@ -321,7 +368,7 @@ void main() {
     float th;
     vec3 refl = traceAbove(p + vec3(0., .003, 0.), reflect(rd, n), 1e4, th, true);
     float sh = floorShadow(p) * mix(.35, 1., cloudShadow(p));
-    vec3 c = mix(uPal1 * .55, refl * .93, .88) * mix(.62, 1., sh);
+    vec3 c = mix(uPal1 * .55 * (1. - .85 * uNight), refl * .93, .88) * mix(.62, 1., mix(sh, 1., uNight));
     // far away, and toward the horizon, the water melts into the sky: no line where they meet
     col = mix(c, col, max(1. - exp(-tFloor * .011), smoothstep(-.09, -.01, rd.y)) * .5);
     tHit = tFloor;
@@ -330,7 +377,9 @@ void main() {
   vec4 dv = dovesO(ro, rd, tBest);
   col = mix(col, dv.rgb, dv.a);
   // rays wheeling with the sun
-  col = withShafts(col, ro, rd, min(min(min(tBest, tFloor), tCol), 40.), .45 + .3 * exp(-uKickT * 3.));
+  col = withShafts(col, ro, rd, min(min(min(tBest, tFloor), tCol), 40.), (.45 + .3 * exp(-uKickT * 3.)) * (1. - uNight));
+  // dusk: the light warms as the day goes, between the day and the night
+  col *= mix(vec3(1.), vec3(1.1, .84, .64), 2.8 * uNight * (1. - uNight) * (1. - .5 * uNight));
   // the drop: time stops in a white flash
   col = mix(col, uInk * 3., uFlash);
   gl_FragColor = vec4(hdrOut(col), 1.);
