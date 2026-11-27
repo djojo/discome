@@ -86,6 +86,29 @@ float vnoise2(vec2 p) {
   return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
 }
 
+/** Billowing cloud for the clouds transition: a warped fbm, its tops lit from above, its folds pale grey. */
+float cloudFbm(vec2 q) {
+  float s = 0.0, a = 0.5;
+  for (int i = 0; i < 5; i++) {
+    s += a * vnoise2(q);
+    q = q * 2.03 + vec2(1.7, 9.2);
+    a *= 0.5;
+  }
+  return s;
+}
+/** A bank of cloud: its colour, and how much it covers (thr: the density it starts at; low, it covers all). */
+vec4 cloudBank(vec2 q, float thr) {
+  vec2 wq = q + 0.45 * vec2(cloudFbm(q * 0.6 + 3.1), cloudFbm(q * 0.6 + 8.3));
+  float n = cloudFbm(wq);
+  float a = smoothstep(thr - 0.06, thr + 0.1, n);
+  if (a <= 0.0) return vec4(0.0);
+  float lit = clamp(0.55 + (n - cloudFbm(wq + vec2(-0.03, 0.05))) * 10.0, 0.0, 1.0);
+  float core = smoothstep(thr, thr + 0.3, n);
+  vec3 c = mix(vec3(0.8, 0.82, 0.85), vec3(1.0, 0.99, 0.965), lit);
+  c *= 0.93 + 0.07 * core;
+  return vec4(c, a);
+}
+
 /** Zoom blur toward the centre, jittered per pixel so the 8 taps read as streaks, not copies. */
 vec3 zoomTap(sampler2D t, vec2 uv, float amount) {
   vec3 acc = vec3(0.0);
@@ -200,6 +223,19 @@ vec3 transition(vec2 uv) {
     vec3 b = B(0.5 + (uv - 0.5) * (0.5 / hs.y));
     float glow = (exp(-abs(box) * 120.0) + exp(-max(box, 0.0) * 18.0) * 0.25) * (1.0 - g) * smoothstep(0.0, 0.12, p);
     return mix(a * (1.0 - 0.6 * smoothstep(0.0, 0.4, p)), b, inside) + vec3(0.85, 0.92, 1.0) * glow;
+  }
+
+  if (uTransition == 10) {
+    // Through the clouds: billows of white cloud roll in over A, fill the frame, and part on B (Olympe). Two banks,
+    // the near one larger and faster, both zooming forward, as if flying through them
+    float aspect = uRes.x / uRes.y;
+    float w = 1.0 - abs(p * 2.0 - 1.0);
+    vec2 q = (uv - 0.5) * vec2(aspect, 1.0);
+    vec3 base = p < 0.5 ? A(0.5 + (uv - 0.5) / (1.0 + 0.15 * p)) : B(0.5 + (uv - 0.5) / (1.15 - 0.15 * p));
+    vec4 far = cloudBank(q * 2.6 / (1.0 + 0.5 * p) + vec2(p * 0.9, -p * 0.3), 1.02 - 1.25 * w);
+    vec4 near = cloudBank(q * 1.3 / (1.0 + 1.3 * p) + vec2(-p * 1.6, 4.0 + p * 0.2), 1.12 - 1.3 * w);
+    base = mix(base, far.rgb, far.a);
+    return mix(base, near.rgb * 1.01, near.a);
   }
 
   float w = 1.0 - abs(p * 2.0 - 1.0);

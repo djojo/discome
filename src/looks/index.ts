@@ -104,7 +104,7 @@ export const LOOKS: Look[] = [
     // white on white: no bloom and hardly a vignette (on a white field they make a bright ellipse in the middle of the
     // frame, its centre burnt out)
     fx: { grain: 0.06, vignette: 0.015, saturation: 0.95, contrast: 1.02, bloom: 0, accents: 0.25 },
-    transitions: { calm: ["fade", "luma", "dive"], drop: ["flash", "fade"] },
+    transitions: { calm: ["clouds", "fade", "clouds"], drop: ["flash", "clouds"] },
     director: "chill",
   },
   {

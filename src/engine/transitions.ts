@@ -10,6 +10,7 @@ export const TRANSITIONS = [
   { id: "dip", label: "Passage au noir" },
   { id: "dive", label: "Plongée dans la fissure" },
   { id: "screen", label: "Plongée dans l'écran" },
+  { id: "clouds", label: "À travers les nuages" },
 ] as const;
 
 export type TransitionId = (typeof TRANSITIONS)[number]["id"];
