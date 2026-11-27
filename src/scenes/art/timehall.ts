@@ -47,6 +47,7 @@ export const timeHall = defineShaderScene({
   timeWarp: olympeWarp,
   renderScale: 0.75,
   heads: FIRST,
+  dof: (u) => ({ focus: u.uFocusD.value as number, amount: 0.008 }),
   description:
     "Une eau immobile, un miroir infini qui se fond dans le ciel, entre deux colonnades sans fin ; des bustes antiques sur de hauts socles, immobiles. Le temps passe en accéléré : les ombres tournent, de plus en plus vite à la montée, les nuages filent ; pendant la montée, une journée entière passe, le crépuscule puis la nuit, ses étoiles qui tournent et la lune, dans le ciel et dans l'eau ; au kick, des rides partent d'un socle. Au drop, midi éclate et le temps s'arrête : un flash blanc, l'eau devient un miroir parfait, puis tout repart lentement.",
   params: [paletteParam("olympe")],
@@ -63,6 +64,7 @@ export const timeHall = defineShaderScene({
     uNight: { value: 0 },
     // CPU side only
     uDropT: { value: 99 },
+    uFocusD: { value: 9 },
   }),
   update(u, f, _p, dt, ctx) {
     // the walk: slow, its own pace
@@ -75,6 +77,10 @@ export const timeHall = defineShaderScene({
       const sd = Math.random() < 0.5 ? -1 : 1;
       return { a: [sd * 26, 6, -walk - 30], b: [-sd * 26, 8, -walk - 42], r: 3, size: 1, dur: 11 };
     });
+    // the focus on the next statue ahead, gliding from one to the next
+    const dzs = (Math.floor(walk / STEP) + 1.25) * STEP - walk;
+    const fd = u.uFocusD.value as number;
+    u.uFocusD.value = fd + (Math.hypot(dzs, 4.5) - fd) * (1 - Math.exp(-dt * 0.8));
     const m0 = Math.floor((u.uWalk.value as number) / STEP);
     u.uM0.value = m0;
     const who = procession.view(u, m0 - 1, m0 + AHEAD);
@@ -392,7 +398,7 @@ void main() {
   col *= mix(vec3(1.), vec3(1.1, .84, .64), 2.8 * uNight * (1. - uNight) * (1. - .5 * uNight));
   // the drop: time stops in a white flash
   col = mix(col, uInk * 3., uFlash);
-  gl_FragColor = vec4(hdrOut(col), 1.);
+  gl_FragColor = vec4(hdrOut(col), depthOut(min(tBest, tFloor)));
 }
 `,
 });

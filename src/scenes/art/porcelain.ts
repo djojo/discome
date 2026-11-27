@@ -86,6 +86,8 @@ export const porcelain = defineShaderScene({
   mask: true,
   heads: (p) => (p.head === ANTIQUE ? FIRST : []),
   camera: { framings: FRAMINGS, glideBars: 2 },
+  // the focus on the bust: the fragments and the doves passing near us go soft
+  dof: (_u, ctx) => ({ focus: ctx.camera ? ctx.camera.pos.distanceTo(ctx.camera.target) : 6, amount: 0.011 }),
   description:
     "Un buste antique flotte au-dessus d'une mer de nuages ; des nuages passent dans sa peau de marbre. À la montée, le canon des proportions se trace sur son visage ; au drop, il s'ouvre en coquille ou en éclats sur le ciel qu'il contient et le soleil qui brille dedans.",
   params: [
@@ -653,7 +655,7 @@ void main() {
 
   float lb = uCinema > .5 ? letterbox(fc) : 1.;
   // Letterbox bars stay opaque: the background never shows through them
-  gl_FragColor = vec4(hdrOut(col) * lb, 1.);
+  gl_FragColor = vec4(hdrOut(col) * lb, depthOut(tt > 0. ? tt : 1e4));
 }
 `,
 });

@@ -66,6 +66,11 @@ interface ShaderSceneOptions {
   /** A scene moving on its own (not a Flight): how much radial speed blur the compositor applies, 0..1. */
   motion?: (u: Uniforms) => number;
   /**
+   * Depth of field (see SceneInstance.dof): the fragment writes its depth in the alpha (t / (t + 10)); this says
+   * where the focus is and how much the far distance blurs (a fraction of the height).
+   */
+  dof?: (u: Uniforms, ctx: SceneCtx) => { focus: number; amount: number };
+  /**
    * A time of its own (a world's slow motion, see art/olympe.ts): uTime, the flight and the camera follow it; update
    * still gets the frame's real dt (the lights of the kick keep the tempo), and the warped time and step in ctx.
    */
@@ -193,6 +198,7 @@ export function defineShaderScene(opts: ShaderSceneOptions): SceneGLDef {
           renderer.render(scene, camera);
         },
         motion: opts.motion ? () => opts.motion!(uniforms) : flight ? () => flight.motion : undefined,
+        dof: opts.dof ? () => opts.dof!(uniforms, ctx) : undefined,
         describe: flight ? () => flight.describe() : undefined,
         dispose() {
           geometry.dispose();

@@ -41,6 +41,12 @@ export interface SceneInstance {
   output?(): THREE.Texture;
   /** Travelling scenes: 0..1, how fast it feels right now (the compositor adds a radial speed blur). */
   motion?(): number;
+  /**
+   * Depth of field: the scene writes its depth in the alpha (t / (t + 10)) and says where the focus is (a distance,
+   * its units) and how much the far distance blurs (a fraction of the height); the compositor blurs it as it develops
+   * it. Its alpha is then no silhouette.
+   */
+  dof?(): { focus: number; amount: number };
   /** One line for the debug panel (D). */
   describe?(): string;
   dispose?(): void;

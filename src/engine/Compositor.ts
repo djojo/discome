@@ -43,8 +43,12 @@ void main() { gl_FragColor = vec4(texture2D(tMap, vUv).rgb, 1.0); }
  * Developing a scene, at its own resolution, before it is enlarged to the screen:
  * - a photographic scene's light goes through the tone curve every such scene shares (uHdr);
  * - FXAA (the classic Lottes version) smooths the stair-steps of a shader scene's edges (uAA), on the developed
- *   values, as the eye sees them (a highlight's edge is smoothed like any other).
- * The alpha (the scene's silhouette mask) is kept untouched.
+ *   values, as the eye sees them (a highlight's edge is smoothed like any other);
+ * - a scene with a depth of field (uDofOn: its alpha holds its depth, t / (t + 10)) is blurred by its distance from
+ *   the focus (uFocus) beyond a zone of sharpness, up to uDof pixels far away: a single-pass gather on a golden-angle
+ *   spiral (after Dennis Gustafsson) read from the scene's mipmaps, a sample counting where its own blur reaches this
+ *   pixel, the background never spilling over a sharper subject before it. Its alpha is handed on as 1.
+ * Otherwise the alpha (the scene's silhouette mask) is kept untouched.
  */
 const DEVELOP_FRAG = /* glsl */ `
 precision highp float;
@@ -52,15 +56,16 @@ uniform sampler2D tMap;
 uniform vec2 uTexel;
 uniform float uHdr;
 uniform float uAA;
+uniform float uDofOn;
+uniform float uDof;
+uniform float uFocus;
 varying vec2 vUv;
 ${TONE_GLSL}
 vec3 tone(vec3 c) { return uHdr > 0.5 ? aces(c) : c; }
 vec3 tap(vec2 uv) { return tone(texture2D(tMap, uv).rgb); }
 float lum(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
-void main() {
-  vec4 cM = texture2D(tMap, vUv);
-  vec3 m = tone(cM.rgb);
-  if (uAA < 0.5) { gl_FragColor = vec4(m, cM.a); return; }
+vec3 fxaa(vec3 m) {
+  if (uAA < 0.5) return m;
   float lM = lum(m);
   float lNW = lum(tap(vUv + vec2(-1.0, -1.0) * uTexel));
   float lNE = lum(tap(vUv + vec2(1.0, -1.0) * uTexel));
@@ -68,14 +73,60 @@ void main() {
   float lSE = lum(tap(vUv + vec2(1.0, 1.0) * uTexel));
   float lMin = min(lM, min(min(lNW, lNE), min(lSW, lSE)));
   float lMax = max(lM, max(max(lNW, lNE), max(lSW, lSE)));
-  if (lMax - lMin < max(0.0312, lMax * 0.125)) { gl_FragColor = vec4(m, cM.a); return; }
+  if (lMax - lMin < max(0.0312, lMax * 0.125)) return m;
   vec2 dir = vec2(-((lNW + lNE) - (lSW + lSE)), (lNW + lSW) - (lNE + lSE));
   float reduce = max((lNW + lNE + lSW + lSE) * 0.03125, 1.0 / 128.0);
   dir = clamp(dir / (min(abs(dir.x), abs(dir.y)) + reduce), -8.0, 8.0) * uTexel;
   vec3 a = 0.5 * (tap(vUv - dir / 6.0) + tap(vUv + dir / 6.0));
   vec3 b = a * 0.5 + 0.25 * (tap(vUv - dir * 0.5) + tap(vUv + dir * 0.5));
   float lB = lum(b);
-  gl_FragColor = vec4((lB < lMin || lB > lMax) ? a : b, cM.a);
+  return (lB < lMin || lB > lMax) ? a : b;
+}
+float depthOf(float a) { return 10.0 * a / max(1.0 - a, 1e-4); }
+// (a zone of sharpness round the focus, an eighth of its distance either way, as through a lens: the whole subject
+// stays sharp, not only its nearest point)
+float cocOf(float z) { return uDof * clamp((abs(1.0 - uFocus / max(z, 1e-3)) - 0.12) / 0.88, 0.0, 1.5); }
+/**
+ * The blurred colour at uv (zc: its depth, cc: its own blur); spill: how much a nearer, blurred subject spills over
+ * it. Sixteen samples over the largest blur, each read from the mipmaps already a little blurred, so that sixteen
+ * are enough.
+ */
+vec3 dofAt(vec2 uv, float zc, float cc, vec3 c0, out float spill) {
+  float R = uDof * 1.5;
+  float lod = log2(max(R / 6.0, 1.0));
+  float soft = 0.25 * R;
+  vec3 col = c0;
+  float tot = 1.0;
+  spill = 0.0;
+  for (int i = 0; i < 16; i++) {
+    float fi = float(i) + 0.5;
+    float r = R * sqrt(fi / 16.0);
+    float ang = fi * 2.39996;
+    vec4 s = texture2D(tMap, uv + vec2(cos(ang), sin(ang)) * uTexel * r, lod);
+    float zs = depthOf(s.a);
+    float cs = cocOf(zs);
+    // (what lies behind this pixel blurs over it no more than this pixel's own blur allows)
+    if (zs > zc) cs = clamp(cs, 0.0, cc * 2.0);
+    float m = smoothstep(r - soft, r + soft, cs);
+    col += mix(col / tot, tone(s.rgb), m);
+    tot += 1.0;
+    if (zs < zc) spill = max(spill, m);
+  }
+  return col / tot;
+}
+void main() {
+  vec4 cM = texture2D(tMap, vUv);
+  vec3 m = tone(cM.rgb);
+  vec3 c = fxaa(m);
+  if (uDofOn < 0.5) { gl_FragColor = vec4(c, cM.a); return; }
+  if (uDof > 0.05) {
+    float zc = depthOf(cM.a);
+    float cc = cocOf(zc);
+    float spill;
+    vec3 d = dofAt(vUv, zc, cc, m, spill);
+    c = mix(c, d, clamp(max(cc - 0.5, spill), 0.0, 1.0));
+  }
+  gl_FragColor = vec4(c, 1.0);
 }
 `;
 
@@ -279,6 +330,9 @@ export class Compositor {
         uTexel: { value: new THREE.Vector2(1, 1) },
         uHdr: { value: 0 },
         uAA: { value: 1 },
+        uDofOn: { value: 0 },
+        uDof: { value: 0 },
+        uFocus: { value: 1 },
       },
       vertexShader: COMPOSITOR_VERT,
       fragmentShader: DEVELOP_FRAG,
@@ -712,6 +766,11 @@ export class Compositor {
     const developed =
       !is3D && (scale === 1 || hdr) ? new THREE.WebGLRenderTarget(tw, th, { depthBuffer: false, type: this.targetType }) : undefined;
     const instance = def.create({ renderer: this.renderer, viewport, target });
+    // a depth of field reads the scene's mipmaps (made after every render, before the target is first used)
+    if (instance.dof && developed) {
+      target.texture.generateMipmaps = true;
+      target.texture.minFilter = THREE.LinearMipmapLinearFilter;
+    }
     return { key, def, instance, target, hdr, developed, scale, lastUsed: 0 };
   }
 
@@ -745,6 +804,11 @@ export class Compositor {
     (m.uTexel.value as THREE.Vector2).set(1 / s.developed.width, 1 / s.developed.height);
     m.uHdr.value = s.hdr ? 1 : 0;
     m.uAA.value = s.scale === 1 ? 1 : 0;
+    // the depth of field, its largest blur in pixels of the developed image
+    const dof = s.instance.dof?.();
+    m.uDofOn.value = dof ? 1 : 0;
+    m.uDof.value = dof ? dof.amount * s.developed.height : 0;
+    m.uFocus.value = dof ? Math.max(dof.focus, 1e-3) : 1;
     this.renderer.setRenderTarget(s.developed);
     this.renderer.render(this.developScene, this.quadCamera);
     return s.developed.texture;

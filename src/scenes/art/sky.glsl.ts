@@ -19,6 +19,8 @@ uniform float uSkyCanonA;
 float sunY() { return mix(.05, .62, uSunEl); }
 /** The colour of the sun's light: pale gold, warmer through the breakdown and over the night. */
 vec3 sunCol() { return mix(uAccent, vec3(1., .74, .46), uSunWarm * .85); }
+/** The depth a scene with a depth of field writes in its alpha (defineShaderScene: dof). */
+float depthOut(float t) { return t / (t + 10.); }
 /** The tint the warm sun lays on the white light (the key on the statues, the lit sides of the clouds). */
 vec3 warmLight() { return mix(vec3(1.), vec3(1.07, .95, .8), uSunWarm); }
 /** The low sun (toward it), and the key light that models the statues (the white sky's brightest side). */

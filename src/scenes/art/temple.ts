@@ -48,6 +48,8 @@ export const temple = defineShaderScene({
   timeWarp: olympeWarp,
   renderScale: 0.75,
   camera: { framings: FRAMINGS, glideBars: 4 },
+  // the focus on what the camera looks at, gliding with it from one framing to the next
+  dof: (_u, ctx) => ({ focus: ctx.camera ? ctx.camera.pos.distanceTo(ctx.camera.target) : 34, amount: 0.008 }),
   description:
     "Un temple dorique flotte au-dessus des nuages, la lumière d'un soleil bas passant entre ses colonnes. À la montée, il n'est qu'un dessin d'architecte au crayon, tracé trait après trait, la mine éclairée, puis mesuré au compas ; au drop, le marbre le remplit d'un bord à l'autre et laisse derrière lui une poussière d'or qui retombe ; pendant le break, il redevient dessin.",
   params: [paletteParam("olympe")],
@@ -324,7 +326,7 @@ void main() {
   vec4 fe = feathersO(ro, rd, tt > 0. ? tt : 1e4);
   col = mix(col, fe.rgb, fe.a);
   col = withShafts(col, ro, rd, tt > 0. ? tt : 60., .7 + .5 * exp(-uKickT * 3.) + 1.2 * uDrop);
-  gl_FragColor = vec4(hdrOut(col), 1.);
+  gl_FragColor = vec4(hdrOut(col), depthOut(tt > 0. ? tt : 1e4));
 }
 `,
 });

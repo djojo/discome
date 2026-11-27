@@ -38,6 +38,8 @@ export const assembly = defineShaderScene({
   timeWarp: olympeWarp,
   renderScale: 0.75,
   heads: GODS,
+  // the focus on the god we face, across the ring
+  dof: () => ({ focus: 13.8, amount: 0.009 }),
   description:
     "Au centre d'un cercle de têtes olympiennes colossales (Héra, Athéna, Dionysos, Homère en Zeus, l'Empereur, l'Impératrice) posées sur des colonnes de nuages, qui baissent les yeux vers nous. Au kick, un anneau de lumière fait le tour ; au drop, une colonne de lumière tombe du zénith, les nuages tourbillonnent, les dieux s'éclairent de l'intérieur et lèvent ensemble les yeux vers elle, puis les rabaissent vers nous.",
   params: [paletteParam("olympe")],
@@ -293,7 +295,7 @@ void main() {
   col = mix(col, fe.rgb, fe.a);
   float rays = .3 + .4 * uCharge + .3 * uBeat + .8 * uDrop;
   col = withShafts(col, ro, rd, tt > 0. ? tt : 50., rays);
-  gl_FragColor = vec4(hdrOut(col), 1.);
+  gl_FragColor = vec4(hdrOut(col), depthOut(tt > 0. ? tt : 1e4));
 }
 `,
 });

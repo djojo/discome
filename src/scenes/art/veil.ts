@@ -36,6 +36,8 @@ export const veil = defineShaderScene({
   timeWarp: olympeWarp,
   renderScale: 0.75,
   heads: ["athena"],
+  // the focus on the veil, gliding to the face as the wind tears it away
+  dof: (u) => ({ focus: 23.5 + 6.5 * (u.uReveal.value as number), amount: 0.011 }),
   description:
     "La tête colossale d'un dieu au-dessus des nuages ; devant elle, un immense voile blanc translucide dérive dans le vent, un second plus léger glisse devant lui en sens inverse, la lumière les traverse, ils cachent puis découvrent le visage. Au drop, le vent les déchire en rubans qui s'envolent et le visage apparaît dans la lumière ; les rubans se rassemblent pendant le break.",
   params: [paletteParam("olympe")],
@@ -237,6 +239,7 @@ void main() {
   // ---- the veils: the great one before the face, and a lighter one nearer, sliding the other way; on the drop the
   // wind tears them into ribbons that fly off, and the ribbons come back together through the breakdown
   float tEnd = tt > 0. ? tt : 200.;
+  float depth = tt > 0. ? tt : 1e4;
   gZV = ZV;
   gVS = VS;
   gVC = vec2(7.5 * sin(uWander * 1.9 + uSeed), 2.5 + 1.2 * sin(uWander * 1.3 + uSeed * 2.));
@@ -244,6 +247,8 @@ void main() {
   gTear = uGone;
   vec4 v = veilO(ro, rd, tEnd, 1.);
   col = mix(col, v.rgb, v.a);
+  // (where the veil hides what is behind it, the depth is the veil's)
+  if (v.a > .5 && rd.z < 0.) depth = min(depth, (ro.z - ZV) / -rd.z);
   gZV = ZV + 4.5;
   gVS = VS * vec2(.72, .78);
   gVC = vec2(-6.5 * sin(uWander * 1.55 + uSeed * 1.7), 1.6 + 1.1 * sin(uWander * 1.1 + uSeed));
@@ -255,7 +260,7 @@ void main() {
   vec4 fe = feathersO(ro, rd, tEnd);
   col = mix(col, fe.rgb, fe.a);
   col = withShafts(col, ro, rd, tEnd, .5 + .4 * exp(-uKickT * 3.) + 1.2 * uDrop);
-  gl_FragColor = vec4(hdrOut(col), 1.);
+  gl_FragColor = vec4(hdrOut(col), depthOut(depth));
 }
 `,
 });

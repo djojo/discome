@@ -43,6 +43,8 @@ export const series = defineShaderScene({
   timeWarp: olympeWarp,
   renderScale: 0.8,
   heads: FIRST,
+  // the focus on the casts in front of us, for each way of looking
+  dof: (u) => ({ focus: [2.5, 1.25, 3][u.uView.value as number] ?? 2.5, amount: 0.014 }),
   description:
     "Une réserve oubliée dans les nuages : des rangées de plâtres tirés du même moule, copies de copies d'un portrait antique, certains sous des draps blancs qui respirent dans un courant d'air ; de la poussière dans les rais de lumière. Une fois par passage, un plâtre tourne lentement la tête vers nous, puis revient. Pendant un break, un drap glisse et découvre un visage ; au drop, un plâtre se fend et une lumière d'or pâle sort de la fêlure.",
   params: [paletteParam("olympe")],
@@ -314,7 +316,7 @@ void main() {
     float glint = .1 + 2.2 * uHat * pow(hash12(vec2(fi, floor(uTime * 8.))), 4.);
     col += (uAccent * .8 + uInk * .4) * exp(-d * 900. / (1. + s * .5)) * glint;
   }
-  gl_FragColor = vec4(hdrOut(col), 1.);
+  gl_FragColor = vec4(hdrOut(col), depthOut(tt > 0. ? tt : 1e4));
 }
 `,
 });

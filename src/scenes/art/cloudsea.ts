@@ -57,6 +57,7 @@ export const cloudSea = defineShaderScene({
   timeWarp: olympeWarp,
   renderScale: 0.75,
   flight: { cruise: 2.4, pump: 0.15, roll: false },
+  dof: (u) => ({ focus: u.uFocusD.value as number, amount: 0.008 }),
   heads: [...FIRST, ...FACES],
   description:
     "Un vol très lent au ras d'une mer de nuages, vers un soleil bas : des têtes antiques colossales en émergent comme des îles, le visage tourné vers le ciel, toutes différentes. Au kick, une onde de lumière roule sur les nuages ; à la montée, le soleil se lève ; au drop, on plonge dans les nuages et on ressort au-dessus d'une autre mer.",
@@ -82,6 +83,7 @@ export const cloudSea = defineShaderScene({
     uAltGoal: { value: 3 },
     uDropT: { value: 99 },
     uLastPhrase: { value: -1 },
+    uFocusD: { value: 40 },
   }),
   update(u, f, p, dt, ctx) {
     const m0 = Math.floor((ctx.flight?.travel ?? 0) / STEP);
@@ -137,6 +139,11 @@ export const cloudSea = defineShaderScene({
     u.uFaceS.value = face.on ? FACE_S : 0;
     u.uFaceForm.value = face.form;
     u.uFaceGone.value = face.gone;
+    // the focus: on the next colossus ahead, gliding from one to the next; on the face in the clouds while it holds
+    const dz = (Math.floor(travel / STEP) + 1.2) * STEP - travel;
+    const focusGoal = face.on && face.form > 0.6 && face.gone < 0.5 ? -travel - face.z : Math.hypot(dz, 19);
+    const fd = u.uFocusD.value as number;
+    u.uFocusD.value = fd + (focusGoal - fd) * (1 - Math.exp(-dt * 0.8));
     featherStep(u, ctx.time, EYE.set(0, 1.5, -travel), LOOK, { size: 60, length: 2.2, fall: 1.2, ahead: 28 });
     // now and then a flight of doves across the sky, far ahead
     flockStep(u, f, ctx.dt, () => {
@@ -400,7 +407,7 @@ void main() {
   col = withShafts(col, ro, rd, min(min(tBest, tSea > 0. ? tSea : 1e4), 60.), rays);
   // inside the clouds: nothing but white (the clouds in volume fill the view by themselves)
   if (!vol) col = mix(col, uInk * 2.4, 1. - smoothstep(-1.2, .6, ro.y - seaH(ro.xz)));
-  gl_FragColor = vec4(hdrOut(col), 1.);
+  gl_FragColor = vec4(hdrOut(col), depthOut(tBest < 1e3 ? tBest : 1e4));
 }
 `,
 });
