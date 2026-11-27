@@ -41,7 +41,7 @@ export const timeHall = defineShaderScene({
   renderScale: 0.75,
   heads: FIRST,
   description:
-    "Un sol blanc infini qui se fond dans le ciel ; des bustes antiques sur de hauts socles, immobiles, très loin les uns des autres. Le temps passe en accéléré : leurs ombres tournent, de plus en plus vite à la montée, celles des nuages filent. Au drop, le temps s'arrête : les ombres se figent, un flash blanc, puis tout repart lentement.",
+    "Une eau immobile, un miroir infini qui se fond dans le ciel, entre deux colonnades sans fin ; des bustes antiques sur de hauts socles, immobiles. Le temps passe en accéléré : les ombres tournent, de plus en plus vite à la montée, les nuages filent ; au kick, des rides partent d'un socle. Au drop, le temps s'arrête : un flash blanc, l'eau devient un miroir parfait, puis tout repart lentement.",
   params: [paletteParam("olympe")],
   uniforms: () => ({
     ...wantCloudNoise(),
@@ -51,6 +51,7 @@ export const timeHall = defineShaderScene({
     uWalk: { value: 0 },
     uClock: { value: 1.3 },
     uFlash: { value: 0 },
+    uStill: { value: 0 },
     uKickT: { value: 9 },
     // CPU side only
     uDropT: { value: 99 },
@@ -74,6 +75,8 @@ export const timeHall = defineShaderScene({
     const held = t < bar * 2 ? 0 : smooth((t - bar * 2) / (bar * 4));
     u.uClock.value = (u.uClock.value as number) + dt * speed * held;
     u.uFlash.value = t < bar * 2 ? Math.exp(-t / (bar * 0.35)) * (f.safeFlash ? 0.4 : 1) : 0;
+    // while time stands still the water is a perfect mirror
+    u.uStill.value = 1 - held;
   },
   fragment: /* glsl */ `
 uniform float uM0;
@@ -81,6 +84,7 @@ uniform float uWho[${AHEAD + 2}];
 uniform float uWalk;
 uniform float uClock;
 uniform float uFlash;
+uniform float uStill;
 uniform float uKickT;
 ${SLOTS.slice(1)
   .map(
@@ -188,20 +192,15 @@ float floorShadow(vec3 p) {
   return clamp(res, 0., 1.);
 }
 
-void main() {
-  vec2 uv = (gl_FragCoord.xy - .5 * uRes) / uRes.y;
-  // the sun we never see: it wheels round, low, with the time-lapse
-  gSun = normalize(vec3(cos(uClock), .32 + .08 * sin(uClock * .37), sin(uClock)));
-  gKey = normalize(gSun + vec3(0., .5, 0.));
-  // the walk: slowly forward, a little sway, the gaze lifting toward the statues
-  vec3 ro = vec3(1.2 * sin(uWalk * .045 + uSeed), 1.6, -uWalk);
-  vec3 ta = ro + vec3(2.2 * sin(uWalk * .03 + uSeed * 2.), .9 + .4 * sin(uWalk * .021), -8.);
-  vec3 rd = lookAt(ro, ta) * normalize(vec3(uv, 1.7));
-
-  // ---- the statues: the nearest hit among those in view
+/**
+ * What a ray meets above the floor: the statues, the colonnades, the sky and its clouds. tLimit: where the floor stops
+ * it; tHit: how far it went (1e4: the sky). cheap: for the water's reflection (fewer steps).
+ */
+vec3 traceAbove(vec3 ro, vec3 rd, float tLimit, out float tHit, bool cheap) {
   float tBest = 1e4, mBest = 0.;
   vec2 bP = vec2(0.);
   float bH = 2., bYaw = 0., bSlot = 0.;
+  int steps = cheap ? 40 : 72;
   for (int k = ${AHEAD}; k >= -1; k--) {
     float slot = uWho[k + 1];
     if (slot < -.5) continue;
@@ -218,6 +217,7 @@ void main() {
     if (t1 < 0.) continue;
     float t = max(-b - hh, .05);
     for (int i = 0; i < 72; i++) {
+      if (i >= steps) break;
       float m;
       float d = statueD(ro + rd * t, m);
       if (d < .0012 * t) {
@@ -228,32 +228,27 @@ void main() {
       if (t > min(t1, tBest)) break;
     }
   }
-  float tFloor = rd.y < -1e-4 ? -ro.y / rd.y : 1e4;
-  // ---- the colonnades (only where the ray crosses their band of x)
+  // the colonnades
   float tCol = 1e4;
   {
     float t = .1;
-    gFlute = 1.;
+    gFlute = cheap ? 0. : 1.;
     for (int i = 0; i < 90; i++) {
+      if (cheap && i >= 50) break;
       vec3 q = ro + rd * t;
       float d = colonnadeD(q);
       if (d < .0015 * t) { tCol = t; break; }
       t += d;
-      if (t > min(min(tBest, tFloor), 160.)) break;
+      if (t > min(min(tBest, tLimit), 160.)) break;
     }
   }
-
-  // high clouds racing over the hall with the time-lapse; their shadows run over the floor
-  gCloudBase = 26.;
-  gCloudThick = 7.;
-  gCover = .34;
-  gCloudUnder = 1.25;
-  gWind = vec2(uClock * 70. + uSeed * 30., uClock * 28.);
   vec3 col = heavenV(ro, rd, 500.);
-  if (tCol < tBest && tCol < tFloor) {
-    // ---- a colonnade: marble, its own shadows, the clouds' shadows running over it
+  tHit = 1e4;
+  if (tCol < tBest && tCol < tLimit) {
+    // ---- a colonnade: marble, the clouds' shadows running over it
+    tHit = tCol;
     vec3 p = ro + rd * tCol;
-    gFlute = clamp(1.5 - tCol * .04, 0., 1.);
+    gFlute = cheap ? 0. : clamp(1.5 - tCol * .04, 0., 1.);
     const vec2 e = vec2(1, -1);
     float ee = .002 * tCol;
     vec3 n = normalize(e.xyy * colonnadeD(p + e.xyy * ee) + e.yyx * colonnadeD(p + e.yyx * ee) + e.yxy * colonnadeD(p + e.yxy * ee) + e.xxx * colonnadeD(p + e.xxx * ee));
@@ -264,15 +259,9 @@ void main() {
     }
     col = lightO(marbleO(p * .3) * .97, n, rd, clamp(ao, 0., 1.)) * mix(.78, 1., cloudShadow(p));
     col = mix(col, skyO(rd), 1. - exp(-tCol * .011));
-  } else if (tFloor < tBest && tFloor < 1e3) {
-    vec3 p = ro + rd * tFloor;
-    float sh = floorShadow(p);
-    float lit = sh * mix(.25, 1., cloudShadow(p));
-    vec3 shade = uPal1 * .62;
-    vec3 c = mix(shade, uInk * (2.15 + .18 * exp(-uKickT * 3.)), lit);
-    // far away, and toward the horizon, the floor melts into the sky: no line where they meet
-    col = mix(c, col, max(1. - exp(-tFloor * .011), smoothstep(-.09, -.01, rd.y)));
-  } else if (tBest < 1e3) {
+  } else if (tBest < tLimit && tBest < 1e3) {
+    // ---- a statue on its plinth
+    tHit = tBest;
     gP = bP; gH = bH; gYaw = bYaw; gSlot = bSlot;
     vec3 p = ro + rd * tBest;
     const vec2 e = vec2(1, -1);
@@ -286,12 +275,52 @@ void main() {
       sca *= .8;
     }
     float ao = clamp(1. - 3. * occ, 0., 1.);
-    // the sun's own light on it, cut where its body hides it (a cheap self-shadow: the floor's caster test)
     vec3 q = bustFrame(p);
     col = lightO(mBest < .5 ? marbleO(q) : marbleO(p * .7) * .96, n, rd, ao);
     col *= mix(.78, 1., cloudShadow(p));
     col = mix(col, skyO(rd), 1. - exp(-tBest * .011));
   }
+  return col;
+}
+
+void main() {
+  vec2 uv = (gl_FragCoord.xy - .5 * uRes) / uRes.y;
+  // the sun we never see: it wheels round, low, with the time-lapse
+  gSun = normalize(vec3(cos(uClock), .32 + .08 * sin(uClock * .37), sin(uClock)));
+  gKey = normalize(gSun + vec3(0., .5, 0.));
+  // the walk: slowly forward, a little sway, the gaze lifting toward the statues
+  vec3 ro = vec3(1.2 * sin(uWalk * .045 + uSeed), 1.6, -uWalk);
+  vec3 ta = ro + vec3(2.2 * sin(uWalk * .03 + uSeed * 2.), .9 + .4 * sin(uWalk * .021), -8.);
+  vec3 rd = lookAt(ro, ta) * normalize(vec3(uv, 1.7));
+
+  // high clouds racing over the hall with the time-lapse; their shadows run over the floor
+  gCloudBase = 26.;
+  gCloudThick = 7.;
+  gCover = .34;
+  gCloudUnder = 1.25;
+  gWind = vec2(uClock * 70. + uSeed * 30., uClock * 28.);
+  float tFloor = rd.y < -1e-4 ? -ro.y / rd.y : 1e4;
+  float tHit;
+  vec3 col = traceAbove(ro, rd, tFloor, tHit, false);
+  if (tFloor < tHit && tFloor < 1e3) {
+    // ---- the floor is still water, a mirror: statues, colonnades and sky in it, the long shadows dimming it; on the
+    // kick a ring of ripples runs out from a plinth (none while time stands still)
+    vec3 p = ro + rd * tFloor;
+    place(uM0 + 1.);
+    vec2 src = gP;
+    float dr = length(p.xz - src), rr = uKickT * 2.8;
+    float amp = .05 * exp(-uKickT * 1.1) * (1. - uStill) * exp(-pow(dr - rr, 2.) * 1.2);
+    vec2 g = (p.xz - src) / max(dr, 1e-3) * cos((dr - rr) * 9.) * amp;
+    vec3 n = normalize(vec3(-g.x, 1., -g.y));
+    float th;
+    vec3 refl = traceAbove(p + vec3(0., .003, 0.), reflect(rd, n), 1e4, th, true);
+    float sh = floorShadow(p) * mix(.35, 1., cloudShadow(p));
+    vec3 c = mix(uPal1 * .55, refl * .93, .88) * mix(.62, 1., sh);
+    // far away, and toward the horizon, the water melts into the sky: no line where they meet
+    col = mix(c, col, max(1. - exp(-tFloor * .011), smoothstep(-.09, -.01, rd.y)) * .5);
+    tHit = tFloor;
+  }
+  float tBest = tHit, tCol = tHit;
   // rays wheeling with the sun
   col = withShafts(col, ro, rd, min(min(min(tBest, tFloor), tCol), 40.), .45 + .3 * exp(-uKickT * 3.));
   // the drop: time stops in a white flash

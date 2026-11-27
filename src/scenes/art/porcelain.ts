@@ -45,6 +45,15 @@ const recent: HeadId[] = [];
 const busts = new Casting(FIRST, (avoid) => pick(BUSTS, 1, [...avoid, ...recent]), 1);
 /** Each instance's passage: its seed (redrawn when it comes back on screen), its bust. */
 const passes = new WeakMap<object, { seed: number; head: HeadId }>();
+/** The fragments of marble floating round the bust: drums, capitals, shards. */
+const NF = 10;
+const frag = Array.from({ length: NF }, (_, i) => {
+  const h = (k: number) => {
+    const x = Math.sin(i * 12.9898 + k * 78.233) * 43758.5453;
+    return x - Math.floor(x);
+  };
+  return { a: h(1) * 6.283, r: 1.85 + 1.1 * h(2), y: (h(3) - 0.5) * 1.6, w: (0.05 + 0.06 * h(4)) * (h(5) < 0.5 ? -1 : 1), s: 0.75 + 0.5 * h(6), ax: [h(7) - 0.5, h(8) - 0.5, h(9) - 0.5], spin: 0.15 + 0.3 * h(10) };
+});
 const head = headParam();
 const headChoice: ParamDef =
   head.type === "select"
@@ -59,6 +68,11 @@ const headChoice: ParamDef =
  * pours out through the seam; it closes again through the breakdown. The bust only turns, very slowly: the music
  * drives the light (the seam, the sun, the shafts, the gold dust).
  */
+const smoothstep01 = (x: number) => {
+  const t = Math.min(1, Math.max(0, x));
+  return t * t * (3 - 2 * t);
+};
+
 export const porcelain = defineShaderScene({
   id: "porcelain",
   name: "Le Ciel intérieur",
@@ -88,6 +102,7 @@ export const porcelain = defineShaderScene({
     { type: "range", key: "open", label: "Amplitude", min: 0, max: 1.5, step: 0.05, default: 1 },
     { type: "range", key: "sky", label: "Ciel dans la pierre", min: 0, max: 1, step: 0.05, default: 0.85 },
     { type: "range", key: "canon", label: "Canon (lignes)", min: 0, max: 1, step: 0.05, default: 1 },
+    { type: "toggle", key: "fragments", label: "Fragments en apesanteur", default: false },
     { type: "toggle", key: "letterbox", label: "Format cinéma 2.39 (bandes noires)", default: false },
   ],
   uniforms: () => ({
@@ -107,6 +122,12 @@ export const porcelain = defineShaderScene({
     uTitle: { value: 0 },
     // the framing's fit to a tall headdress: zoom, lift
     uFit: { value: new THREE.Vector2(1, 0) },
+    // the fragments: on or not, each one's centre and size, its turn (a quaternion); CPU: their alignment on the drop
+    uFragOn: { value: 0 },
+    uFragP: { value: Array.from({ length: NF }, () => new THREE.Vector4()) },
+    uFragQ: { value: Array.from({ length: NF }, () => new THREE.Vector4(0, 0, 0, 1)) },
+    uAlign: { value: 0 },
+    uAlignT: { value: 99 },
   }),
   update(u, f, p, dt, ctx) {
     // The night's title instead of a head: in bands about a letter wide, which drift apart on the drop
@@ -168,6 +189,34 @@ export const porcelain = defineShaderScene({
     u.uWave.value = f.beat ? 0 : (u.uWave.value as number) + dt;
     u.uAmp.value = num(p.open, 1);
     u.uCinema.value = p.letterbox === true ? 1 : 0;
+    // The fragments drift round the bust; on the drop they line up into a column for a moment, then scatter
+    u.uFragOn.value = p.fragments === true && !title ? 1 : 0;
+    if (u.uFragOn.value === 1) {
+      if (f.drop) u.uAlignT.value = 0;
+      const at = (u.uAlignT.value as number) + dt;
+      u.uAlignT.value = at;
+      const align = at < bar * 0.5 ? smoothstep01(at / (bar * 0.5)) : at < bar * 1.5 ? 1 : 1 - smoothstep01((at - bar * 1.5) / (bar * 2));
+      const burst = at > bar * 1.5 && at < bar * 3.5 ? Math.sin(Math.PI * ((at - bar * 1.5) / (bar * 2))) * 0.8 : 0;
+      u.uAlign.value = align;
+      const time = f.time;
+      const side = u.uSeed.value < 50 ? -1 : 1;
+      frag.forEach((g, i) => {
+        const a = g.a + time * g.w;
+        const r = g.r + burst;
+        const ox = Math.cos(a) * r;
+        const oz = Math.sin(a) * r;
+        const oy = g.y + 0.12 * Math.sin(time * 0.3 + i);
+        // the column they line up into, beside the bust
+        const cx = 1.9 * side;
+        const cy = -1.25 + i * 0.27;
+        (u.uFragP.value as THREE.Vector4[])[i].set(ox + (cx - ox) * align, oy + (cy - oy) * align, oz + (-0.2 - oz) * align, 0.22 * g.s);
+        // its own slow turn, upright while in the column
+        const ang = time * g.spin * (1 - align);
+        const n = Math.hypot(g.ax[0], g.ax[1], g.ax[2]) || 1;
+        const sn = Math.sin(ang / 2);
+        (u.uFragQ.value as THREE.Vector4[])[i].set((g.ax[0] / n) * sn, (g.ax[1] / n) * sn, (g.ax[2] / n) * sn, Math.cos(ang / 2));
+      });
+    }
   },
   fragment: /* glsl */ `
 uniform float uOpen;
@@ -181,6 +230,10 @@ uniform float uCinema;
 uniform float uMode;   // 0: opens like a shell, 1: breaks into floating shards
 uniform float uTitle;  // the night's title instead of a head
 uniform vec2 uFit;
+uniform float uFragOn;
+uniform vec4 uFragP[${NF}];
+uniform vec4 uFragQ[${NF}];
+uniform float uAlign;
 ${ART_LIB}
 ${HEAD_GLSL}
 ${CAMERA_GLSL}
@@ -336,7 +389,44 @@ float bandsD(vec3 h, out float best, out vec3 bq) {
 /** Distance to the nearest line between two bands (the light pouring out). */
 float bandGap(vec3 h) { return abs(fract(h.x / TB + .5) - .5) * TB; }
 
+// ---- the fragments of marble floating round the bust (world space)
+float gFragD = 1e3;
+float gFragI = 0.;
+vec3 qrot(vec4 q, vec3 v) { return v + 2. * cross(q.xyz, cross(q.xyz, v) + q.w * v); }
+/** Fragment i in its own frame (unit size): a fluted drum, a capital, or a shard. */
+float fragShape(vec3 q, float i) {
+  float k = mod(i, 3.);
+  if (k < .5) {
+    float a = atan(q.z, q.x);
+    float r = length(q.xz) - .9 + .05 * (1. - abs(cos(a * 10.)));
+    return max(r * .8, abs(q.y) - .55);
+  }
+  if (k < 1.5) {
+    float ab = sdBox(q - vec3(0., .35, 0.), vec3(1.05, .18, 1.05));
+    float ech = max(length(q.xz) - .7 - .3 * clamp(q.y + .3, 0., .6), abs(q.y + .05) - .22);
+    return min(ab, ech * .85);
+  }
+  float b = sdBox(q, vec3(.9, .4, .6));
+  b = max(b, dot(q, normalize(vec3(.6, .7, .3))) - .45);
+  return max(b, dot(q, normalize(vec3(-.5, -.4, .7))) - .35);
+}
+float fragsD(vec3 p) {
+  gFragD = 1e3;
+  if (uFragOn < .5) return 1e3;
+  for (int i = 0; i < ${NF}; i++) {
+    vec4 c = uFragP[i];
+    vec3 q = p - c.xyz;
+    float b = length(q) - c.w * 1.5;
+    if (b > .15) { gFragD = min(gFragD, b); continue; }
+    vec4 qq = uFragQ[i];
+    float d = fragShape(qrot(vec4(-qq.xyz, qq.w), q) / c.w, float(i)) * c.w;
+    if (d < gFragD) { gFragD = d; gFragI = float(i); }
+  }
+  return gFragD;
+}
+
 float map(vec3 p) {
+  float fr = fragsD(p);
   vec3 h = toHead(p);
   gCoreD = 1e3;
   if (uTitle > .5) {
@@ -354,7 +444,7 @@ float map(vec3 p) {
   }
   // Cheap bound: far from the bust (and its drifting shards), no need to evaluate anything
   float bound = sdCapsule(h, vec3(0., -.9, -.1), vec3(0., .4, -.1), .85 + .3 * uHeadOn + (.6 + 1.1 * uAmp) * uOpen);
-  if (bound > .3) return bound;
+  if (bound > .3) return min(bound, fr);
   float d;
   if (uMode > .5) {
     float si;
@@ -370,7 +460,7 @@ float map(vec3 p) {
     gCoreD = length(h - CORE) - SUN_R;
     d = min(d, gCoreD);
   }
-  return d;
+  return min(d, fr);
 }
 ${MARCH}
 
@@ -428,7 +518,15 @@ void main() {
     vec3 nh = n;
     nh.xz *= rot(gYaw);
 
-    if (onSun) {
+    float fr = fragsD(p);
+    if (fr < .004 && uFragOn > .5) {
+      // ---- a fragment: marble, glinting on the hats
+      vec3 q = p * 3.;
+      col = lightO(marbleO(q), n, rd, ao);
+      float gl = pow(hash12(vec2(gFragI, floor(uTime * 8.))), 4.) * uHat;
+      col += (uAccent * 1.2 + uInk * .5) * pow(clamp(dot(reflect(-gKey, n), -rd), 0., 1.), 18.) * (.3 + 3. * gl);
+      col = mix(col, (uAccent * 1.4 + uInk * .6), .15 * uAlign);
+    } else if (onSun) {
       // ---- the sun inside: white gold, a ring of light running out of it on every kick
       float r = length(h - gCore) / gCoreR;
       col = (uAccent * 2.4 + uInk * 1.6) * sunLight * (1. + .5 * exp(-pow(r - 1. + waveR * .1, 2.) * 20.) * exp(-uWave * 2.));
