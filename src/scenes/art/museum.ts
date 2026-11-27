@@ -37,7 +37,7 @@ const ANIMALS: HeadId[] = ["tigre", "loup", "faucon", "lion", "hibou", "panthere
  */
 const ANTIQUES: HeadId[] = [...headsOf("visage"), ...headsOf("archetype")].filter((h) => h !== "humain" && h !== "patron");
 const FIRST_ANTIQUES: HeadId[] = ["hera", "marcaurele", "socrate", "dame"];
-const antiques = new Casting(FIRST_ANTIQUES, () => pick(ANTIQUES, 4));
+const antiques = new Casting(FIRST_ANTIQUES, (avoid) => pick(ANTIQUES, 4, avoid));
 
 const caseX = (j: number) => (j >= N ? 0 : j % 2 === 0 ? -XC : XC);
 const caseZ = (j: number) => (j >= N ? ZH : Z0 - Math.floor(j / 2) * SP);
