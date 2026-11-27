@@ -14,8 +14,12 @@ import { Casting, pick } from "./casting";
 const FIRST: HeadId[] = ["dame"];
 const POOL: HeadId[] = [...headsOf("visage"), ...headsOf("archetype")].filter((h) => h !== "humain" && h !== "patron");
 const casting = new Casting(FIRST, (avoid) => pick(POOL, 1, avoid));
-/** Each instance's passage: its seed (redrawn when it comes back on screen), its portrait. */
-const passes = new WeakMap<object, { seed: number; head: HeadId }>();
+/**
+ * Each instance's passage: its seed (redrawn when it comes back on screen), its portrait, its age, and when one cast
+ * turns its head toward us (once per passage).
+ */
+type Pass = { seed: number; head: HeadId; age: number; turnAt: number; turnT: number };
+const passes = new WeakMap<object, Pass>();
 
 const smooth = (x: number) => {
   const t = Math.min(1, Math.max(0, x));
@@ -26,8 +30,10 @@ const smooth = (x: number) => {
  * Les Œuvres mortes: a forgotten storeroom in the clouds. Rows of shelves carry plaster casts all taken from the same
  * mould, copies of copies of one portrait of Antiquity (a different one on each passage); some lie under white dust
  * sheets. Shafts of light fall through the air and the dust glints in them on the hats. The camera glides slowly along
- * the shelves. Through a breakdown a sheet slowly slides off one of them and uncovers a face; on the drop one cast
- * cracks and a pale gold light comes out of the crack. Over the night the rows grow longer: more shelves.
+ * the shelves. The sheets breathe in a draught running along the shelves; once in a passage, one cast slowly turns its
+ * head toward us, follows us a moment, and turns back. Through a breakdown a sheet slowly slides off one of them and
+ * uncovers a face; on the drop one cast cracks and a pale gold light comes out of the crack. Over the night the rows
+ * grow longer: more shelves.
  */
 export const series = defineShaderScene({
   id: "series",
@@ -38,7 +44,7 @@ export const series = defineShaderScene({
   renderScale: 0.8,
   heads: FIRST,
   description:
-    "Une réserve oubliée dans les nuages : des rangées de plâtres tirés du même moule, copies de copies d'un portrait antique, certains sous des draps blancs ; de la poussière dans les rais de lumière. Pendant un break, un drap glisse et découvre un visage ; au drop, un plâtre se fend et une lumière d'or pâle sort de la fêlure.",
+    "Une réserve oubliée dans les nuages : des rangées de plâtres tirés du même moule, copies de copies d'un portrait antique, certains sous des draps blancs qui respirent dans un courant d'air ; de la poussière dans les rais de lumière. Une fois par passage, un plâtre tourne lentement la tête vers nous, puis revient. Pendant un break, un drap glisse et découvre un visage ; au drop, un plâtre se fend et une lumière d'or pâle sort de la fêlure.",
   params: [paletteParam("olympe")],
   uniforms: () => ({
     ...olympeUniforms(),
@@ -53,6 +59,9 @@ export const series = defineShaderScene({
     uVeilX: { value: 9999 },
     uVeilY: { value: 0 },
     uUnveil: { value: 0 },
+    uTurnX: { value: 9999 },
+    uTurnY: { value: 0 },
+    uTurnA: { value: 0 },
     // CPU side only
     uLastPhrase: { value: -1 },
     uWasBreak: { value: 0 },
@@ -62,7 +71,8 @@ export const series = defineShaderScene({
     // the portrait of this passage
     const seed = u.uSeed.value as number;
     let pass = passes.get(u);
-    if (!pass || pass.seed !== seed) passes.set(u, (pass = { seed, head: casting.pass()[0] }));
+    if (!pass || pass.seed !== seed)
+      passes.set(u, (pass = { seed, head: casting.pass()[0], age: 0, turnAt: 6 + Math.random() * 8, turnT: -1 }));
     setHead(u, pass.head);
     u.uTravel.value = (u.uTravel.value as number) + ctx.dt * 0.16;
     u.uKickT.value = f.beat ? 0 : (u.uKickT.value as number) + dt;
@@ -97,6 +107,29 @@ export const series = defineShaderScene({
     u.uBreakT.value = (u.uBreakT.value as number) + dt;
     u.uUnveil.value = u.uVeilX.value === 9999 ? 0 : smooth((u.uBreakT.value as number) / (bar * 4));
     u.uRows.value = 1 + Math.round(2 * f.drift);
+    // once in the passage, a cast before us turns its head toward us over a bar and a half, follows us a bar, and
+    // turns back over two (an uncovered one: the next along if the one in front is under a sheet)
+    pass.age += ctx.dt;
+    const row = view === 2 ? 1 : 0;
+    if (pass.turnT < 0 && pass.age >= pass.turnAt) {
+      let col = Math.round(camX / 0.62);
+      for (let k = 0; k < 6 && veiled(col, row); k++) col += 1;
+      u.uTurnX.value = col;
+      u.uTurnY.value = row;
+      pass.turnT = 0;
+    }
+    if (pass.turnT >= 0) {
+      pass.turnT += ctx.dt;
+      const tt = pass.turnT;
+      const amount = tt < bar * 1.5 ? smooth(tt / (bar * 1.5)) : tt < bar * 2.5 ? 1 : 1 - smooth((tt - bar * 2.5) / (bar * 2));
+      // toward the eye: where the camera is for this way of looking
+      const T = u.uTravel.value as number;
+      const eyeX = view === 0 ? T - 0.9 : view === 1 ? T : T - 0.4;
+      const eyeZ = view === 0 ? 1.6 : view === 1 ? 1.25 : 2;
+      const ang = Math.max(-1, Math.min(1, Math.atan2(eyeX - (u.uTurnX.value as number) * 0.62, eyeZ)));
+      u.uTurnA.value = ang * amount;
+      if (tt > bar * 4.5) u.uTurnX.value = 9999;
+    }
   },
   fragment: /* glsl */ `
 uniform float uTravel;  // how far along the shelves
@@ -109,6 +142,9 @@ uniform float uRows;    // shelves above the first one
 uniform float uVeilX;   // the veiled cast being uncovered (column, row), and how far its sheet has slid
 uniform float uVeilY;
 uniform float uUnveil;
+uniform float uTurnX;   // the cast turning its head toward us (column, row), and its turn
+uniform float uTurnY;
+uniform float uTurnA;
 ${ART_LIB}
 ${HEAD_GLSL}
 ${SKY_GLSL}
@@ -125,12 +161,15 @@ float veiledCell(vec2 c) { return step(hash12(c * vec2(1.7, 3.1) + 11.3), .33); 
  * The dust sheet over a cast (its own frame h): a cloth thrown over the head, rounder than the face under it, hanging
  * in a wide skirt with folds down to the shelf; slide: how far it has slid off.
  */
-float sheetD(vec3 h, float slide) {
+float sheetD(vec3 h, float slide, float cx) {
   h.y += slide * 1.15;
-  float head = sdEllipsoid(h - vec3(0., .12, .02), vec3(.64, .82, .74));
+  // it breathes in the draught running along the shelves: swelling and settling back (never tighter than at rest,
+  // or the cast under it would show through), a ripple running down the skirt
+  float breath = .5 + .5 * sin(uTime * .7 - cx * .9);
+  float head = sdEllipsoid(h - vec3(0., .12 + .02 * breath, .02), vec3(.64, .82, .74) * (1. + .035 * breath));
   float hang = 1. - smoothstep(-.95, .1, h.y);
   float a = atan(h.z, h.x);
-  float r = .62 + .4 * hang + .03 * sin(a * 5. + 1.3) * hang;
+  float r = .62 + .4 * hang + .03 * sin(a * 5. + 1.3) * hang + (.06 * breath + .02 * (.5 + .5 * sin(h.y * 9. - uTime * 1.8 + cx + a))) * hang;
   float skirt = max((length(h.xz * vec2(1., 1.05)) - r) * .75, h.y - .1);
   return smin(head, skirt, .3);
 }
@@ -138,20 +177,24 @@ float sheetD(vec3 h, float slide) {
 /** One cast from the mould, cut flat on its little block; or its sheet. Origin at the shelf's top. */
 float castD(vec3 q, vec2 cell, out float sheet) {
   vec3 h = (q - vec3(0., .02 - CUT * S, .02)) / S;
+  // (the one turning its head toward us)
+  if (cell == vec2(uTurnX, uTurnY)) h.xz *= rot(uTurnA);
   float block = sdBox(q - vec3(0., .01, .02), vec3(.09, .01, .09));
   float d = max(headD(h), CUT - h.y) * S;
   sheet = 1e3;
   if (veiledCell(cell) > .5) {
     float slide = cell == vec2(uVeilX, uVeilY) ? uUnveil : 0.;
     // the sheet sinks through the shelf as it slides off
-    sheet = max(sheetD(h, slide) * S, -q.y);
-    if (slide < .99) d = max(d, -sheet - .002);
+    sheet = max(sheetD(h, slide, cell.x) * S, -q.y);
+    if (slide < .99) d = max(d, -sheet - .006);
   }
   return min(block, d);
 }
 
 float map(vec3 p) {
-  float row = clamp(floor(p.y / SY + .5), 0., uRows);
+  // (the rows change hands well above the casts' and sheets' tops, under the next shelf: not half-way, where the
+  // tops of the sheets were cut off)
+  float row = clamp(floor(p.y / SY + .3), 0., uRows);
   float yr = row * SY;
   // the shelves: long boards on posts, standing in the clouds
   float shelf = sdBox(p - vec3(p.x, yr - .03, -.1), vec3(1., .03, .24));
@@ -163,8 +206,10 @@ float map(vec3 p) {
   float b = sdCapsule(q, vec3(0., 0., .02), vec3(0., .52, .02), .29);
   float sheet = 1e3;
   float face = b > .1 ? b : castD(q, gCell, sheet);
-  // never step past a neighbour's cast
+  // never step past a neighbour's cast, nor into the next row's (above or below) without seeing it
   face = min(face, max(SX * .5 - abs(q.x), .02));
+  if (row < uRows) face = min(face, max((row + .7) * SY - p.y, .02));
+  if (row > 0.) face = min(face, max(p.y - (row - .3) * SY, .02));
   float wood = min(shelf, post);
   float d = min(min(face, sheet), wood);
   gMat = d == face ? 0. : d == sheet ? 1. : 2.;
