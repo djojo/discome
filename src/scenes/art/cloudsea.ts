@@ -66,6 +66,7 @@ export const cloudSea = defineShaderScene({
     uFaceS: { value: 0 },
     uFaceForm: { value: 0 },
     uFaceGone: { value: 0 },
+    uRuin: { value: 1 },
     uM0: { value: 0 },
     uWho: { value: new Array<number>(AHEAD + 2).fill(-1) },
     uKickT: { value: 9 },
@@ -105,6 +106,12 @@ export const cloudSea = defineShaderScene({
     u.uPlunge.value = Math.sin(Math.PI * Math.min(1, t / (bar * 2))) * (f.safeFlash ? 0.7 : 1);
     // deep in the white: another sea
     if (t >= bar && t - dt < bar) u.uSeaShift.value = (u.uSeaShift.value as number) + 1;
+    // the ruins: through the build time runs back and they rebuild; whole on the drop; through the breakdown they
+    // come apart again, slowly
+    const ruinGoal = f.section === "build" ? 1 - f.buildProgress : f.section === "drop" ? 0 : f.section === "breakdown" ? 1 : (u.uRuin.value as number);
+    const rv = u.uRuin.value as number;
+    u.uRuin.value = ruinGoal < rv ? Math.max(ruinGoal, rv - dt / (bar * 3)) : Math.min(ruinGoal, rv + dt / (bar * 12));
+    if (f.drop) u.uRuin.value = Math.min(rv, 0.15);
     // the face in the clouds: it forms through a build, holds through the drop, then the wind carries it off
     const travel = ctx.flight?.travel ?? 0;
     let face = faces.get(u);
@@ -142,6 +149,7 @@ uniform vec3 uFaceC;
 uniform float uFaceS;
 uniform float uFaceForm;
 uniform float uFaceGone;
+uniform float uRuin;
 ${SLOTS.slice(1)
   .map(
     (s) => `uniform highp sampler3D uHeadTex${s};
@@ -167,7 +175,8 @@ ${SKY_GLSL}
 ${TEMPLE_GLSL}
 const float STEP = ${STEP.toFixed(1)};
 
-// ---- the ruins of temples standing on the clouds, far off the way, one now and then on either side
+// ---- the ruins of temples standing on the clouds, far off the way, one now and then on either side; they rebuild
+// through the build (uRuin: 1 ruins, 0 whole)
 const float RSTEP = 230.;
 vec3 ruinC(float i) {
   float side = mod(i, 2.) < .5 ? 1. : -1.;
@@ -176,7 +185,7 @@ vec3 ruinC(float i) {
 float ruinD(vec3 p, float i) {
   vec3 q = p - ruinC(i);
   q.xz *= rot(hash12(vec2(i, 5.)) * 6.2831853);
-  return templeD(q, 6., 9., 3.2, 9.5, .85, 1.);
+  return templeD(q, 6., 9., 3.2, 9.5, .85, uRuin);
 }
 
 // ---- the colossus being drawn: its centre, scale, turn (yaw, then pitch: the face up to the sky), slot, top

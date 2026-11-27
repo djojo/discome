@@ -42,7 +42,8 @@ float doricRuin(vec3 p, float H, float R, float h) {
 }
 
 /** A rectangular peristyle: nx by nz columns at spacing s round a rectangle centred on the origin (y = 0 at their foot).
- * ruin: 0 whole, 1 every column broken at a height of its own and some missing. */
+ * ruin: 0 whole, 1 every column broken at a height of its own and some missing; in between, the ruin rebuilding: each
+ * column in its turn, drum after drum, every new drum coming down out of the air onto the one below. */
 float peristyle(vec3 p, float nx, float nz, float s, float H, float R, float ruin) {
   float hx = (nx - 1.) * .5, hz = (nz - 1.) * .5;
   // the nearest column of the front or back row, and of the nearest side row
@@ -51,24 +52,44 @@ float peristyle(vec3 p, float nx, float nz, float s, float H, float R, float rui
   float iz = clamp(floor(p.z / s + .5), -hz, hz);
   if (fract(hz) > .25) iz = clamp(floor(p.z / s) + .5, -hz, hz);
   vec2 cf = vec2(ix, sign(p.z) * hz), cs = vec2(sign(p.x) * hx, iz);
+  // (the columns are all back by the time the rebuilding is three quarters done)
+  float rb = (1. - ruin) / .75;
   float d = 1e3;
   for (int k = 0; k < 2; k++) {
     vec2 c = k == 0 ? cf : cs;
-    float h = H;
-    if (ruin > .5) {
-      float r1 = hash12(c * 1.37 + 4.1);
-      if (r1 < .2) continue;
-      h = H * (r1 < .55 ? .15 + .7 * hash12(c * 2.1 + 1.3) : 1.);
+    vec3 q = p - vec3(c.x * s, 0., c.y * s);
+    if (ruin <= 0.) { d = min(d, doricColumn(q, H, R)); continue; }
+    float r1 = hash12(c * 1.37 + 4.1);
+    float hb = r1 < .2 ? 0. : r1 < .55 ? H * (.15 + .7 * hash12(c * 2.1 + 1.3)) : H;
+    float rc = hb >= H ? 1. : smoothstep(0., .45, rb - .55 * hash12(c * 3.7 + .9));
+    if (rc <= 0.) {
+      if (hb > 0.) d = min(d, doricRuin(q, H, R, hb));
+      continue;
     }
-    d = min(d, doricRuin(p - vec3(c.x * s, 0., c.y * s), H, R, h));
+    if (rc >= 1.) { d = min(d, doricColumn(q, H, R)); continue; }
+    // drums of about a fifth of its height, laid one after another
+    float n = max(1., ceil((H - hb) / (H * .2)));
+    float dh = (H - hb) / n;
+    float kk = rc * n, kb = floor(kk), f = kk - kb;
+    float level = hb + kb * dh;
+    if (kb < .5) { if (hb > 0.) d = min(d, doricRuin(q, H, R, hb)); }
+    else d = min(d, max(doricColumn(q, H, R), q.y - level));
+    // the next one, growing out of the light above its place and settling on it
+    float g = smoothstep(0., .3, f);
+    if (g > .01) {
+      vec3 cc = vec3(0., level + dh * .5, 0.);
+      vec3 qd = (q - cc - vec3(0., (1. - f) * (1. - f) * dh * 2.2, 0.)) / g + cc;
+      d = min(d, max(doricColumn(qd, H, R), abs(qd.y - cc.y) - dh * .5) * g);
+    }
   }
   return d;
 }
 
 /**
  * A Doric temple, its floor (the top of the stylobate) at y = 0: three steps, a peristyle of nx by nz columns, the
- * entablature (architrave, frieze, cornice) and a gabled roof with its pediments. ruin: broken columns, no roof, a
- * few drums fallen on the steps. Sets gPart.
+ * entablature (architrave, frieze, cornice) and a gabled roof with its pediments. ruin: 1 broken columns, no roof, a
+ * few drums fallen on the steps; 0 whole; in between it rebuilds: the fallen drums rise and melt into the air, the
+ * columns come back, the entablature and the roof last, laid from the back to the front. Sets gPart.
  */
 float templeD(vec3 p, float nx, float nz, float s, float H, float R, float ruin) {
   float hx = (nx - 1.) * .5 * s, hz = (nz - 1.) * .5 * s;
@@ -81,7 +102,9 @@ float templeD(vec3 p, float nx, float nz, float s, float H, float R, float ruin)
   float cols = peristyle(p, nx, nz, s, H, R, ruin);
   float d = min(st, cols);
   gPart = cols < st ? 0. : 1.;
-  if (ruin < .5) {
+  float rb = 1. - ruin;
+  float lay = smoothstep(.72, .97, rb);
+  if (lay > 0.) {
     // the entablature: architrave and frieze (its triglyphs grooved), the cornice over them
     float eb = sdBox(p - vec3(0., H + .55 * R, 0.), vec3(hx + R * 1.15, .55 * R, hz + R * 1.15));
     float tri = .04 * R * step(.5, fract(p.x / (s * .5) + .25)) * step(H + .55 * R, p.y);
@@ -93,16 +116,20 @@ float templeD(vec3 p, float nx, float nz, float s, float H, float R, float ruin)
     float gable = max(abs(q.x) * roofH / (hx + R * 1.45) + q.y - roofH, -q.y);
     float roof = max(gable, abs(q.z) - hz - R * 1.45);
     float ent = min(min(eb, co), roof);
+    // (laid from the back to the front)
+    if (lay < 1.) ent = max(ent, p.z - mix(-hz - R * 2., hz + R * 2., lay));
     if (ent < d) gPart = 2.;
     d = min(d, ent);
-  } else {
-    // drums fallen on the steps
+  }
+  if (rb < .3) {
+    // drums fallen on the steps; as it starts rebuilding they rise and melt into the air
+    float up = smoothstep(0., .3, rb), g = 1. - smoothstep(.1, .3, rb);
     for (int i = 0; i < 3; i++) {
       float fi = float(i);
-      vec3 c = vec3((hash12(vec2(fi, 3.)) - .5) * 2. * (hx + R), -.15 * R + R * .85, (hash12(vec2(fi, 7.)) - .5) * 2. * (hz + R * 2.5));
-      vec3 q = p - c;
-      q.xz *= rot(hash12(vec2(fi, 9.)) * 6.28);
-      float drum = sdCapCyl(q.yxz, R * .9, R * .85);
+      vec3 c = vec3((hash12(vec2(fi, 3.)) - .5) * 2. * (hx + R), -.15 * R + R * .85 + up * up * H * .8, (hash12(vec2(fi, 7.)) - .5) * 2. * (hz + R * 2.5));
+      vec3 q = (p - c) / g;
+      q.xz *= rot(hash12(vec2(fi, 9.)) * 6.28 + up * 1.5);
+      float drum = sdCapCyl(q.yxz, R * .9, R * .85) * g;
       if (drum < d) gPart = 3.;
       d = min(d, drum);
     }
