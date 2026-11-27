@@ -385,6 +385,12 @@ void main() {
   gSun = normalize(vec3(.65 * side, .16, -1.));
   gKey = normalize(vec3(.6 * side, .62, .55));
   gSeaY = -9.;
+  gCloudBase = -21.;
+  gCloudThick = 13.;
+  gCover = .6;
+  gWind = vec2(uTime * .9 + uSeed * 50., uTime * .25);
+  gCloudGlow = .35 * exp(-uWave * 1.6);
+  gGlowR = uWave * 30.;
   gSeaDrift = vec2(uTime * .003, uSeed * .1);
   if (uTitle > .5) {
     gCore = vec3(0., .05, -.45);
@@ -396,7 +402,7 @@ void main() {
 
   // the white sky and the sea of clouds far below; the sun's shafts, stronger as the build lifts the light. Behind the
   // night's title the sky turns a paler grey round it, so that its marble stands out
-  vec3 col = heavenO(ro, rd, 130.);
+  vec3 col = heavenV(ro, rd, 300.);
   col += uAccent * sunRays(rd, 3.) * (.3 + .5 * uLeak + .3 * uBeat);
   col *= 1. - .4 * uTitle * (1. - .35 * smoothstep(.2, .9, length(uv)));
   // March, gathering the glow of the inner sun
@@ -475,6 +481,11 @@ void main() {
         col = lightO(marbleO(q * 1.3) * .97, n, rd, ao) + uInk * .25 * uLeak;
       }
     }
+  }
+  // wisps of cloud drifting by at the bust's height, now and then before it (not before the night's title)
+  if (uTitle < .5) {
+    vec4 wv = wispsO(ro, rd, tt > 0. ? tt : 24., -1.7, 3.4, .3);
+    col = col * wv.a + wv.rgb;
   }
   // the glow of the sun inside, round it
   col += (uAccent * 1.2 + uInk * .4) * glow * sunLight * (uOpen + .03);

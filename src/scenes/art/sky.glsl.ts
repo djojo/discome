@@ -142,6 +142,14 @@ vec2 gWind = vec2(0.);
  */
 float gCloudGlow = 0.;
 float gGlowR = -1.;
+/** Columns of cloud standing in a ring (L'Assemblée): how many (0: none), the ring's radius, theirs, their top. */
+float gColN = 0.;
+float gColRing = 13.;
+float gColR = 2.5;
+float gColTop = 0.;
+float gColA0 = 0.;
+/** How light the clouds' undersides stay (a white floor bouncing the light up into them: higher). */
+float gCloudUnder = .45;
 vec3 gClearing = vec3(0., 0., 0.);
 
 float cremap(float v, float a, float b, float c, float d) { return c + (v - a) * (d - c) / (b - a); }
@@ -156,6 +164,13 @@ float cloudDensity(vec3 p, bool cheap) {
   float mid = textureLod(uCloudTex, vec3(w.xz * .009, .67), 0.).g;
   float cov = clamp((smoothstep(.32, .7, big) * .65 + smoothstep(.35, .8, mid) * .55) * gCover * 1.5, 0., 1.);
   if (gClearing.z > 0.) cov *= smoothstep(gClearing.z * .6, gClearing.z, length(p.xz - gClearing.xy));
+  if (gColN > .5) {
+    // the nearest column of the ring: full where it stands, up to its top
+    float seg = 6.2831853 / gColN;
+    float ca = gColA0 + floor((atan(p.z, p.x) - gColA0) / seg + .5) * seg;
+    float r = length(p.xz - gColRing * vec2(cos(ca), sin(ca))) / gColR;
+    cov = max(cov, (1. - smoothstep(.4, 1., r)) * (1. - smoothstep(gColTop - 2., gColTop, p.y)));
+  }
   if (cov < .03) return 0.;
   vec4 n = textureLod(uCloudTex, w * .019 + vec3(0., uTime * .0025, 0.), 0.);
   float shape = cremap(n.r, n.g - 1., 1., 0., 1.);
@@ -208,7 +223,7 @@ vec4 cloudsO(vec3 ro, vec3 rd, float tmax) {
       // (the powder: the edges turned away from the sun stay darker than a thin veil would)
       float sunT = exp(-ld * 3.) * (1. - exp(-d * 4.));
       float h = clamp((p.y - gCloudBase) / gCloudThick, 0., 1.);
-      vec3 amb = mix(uPal1 * .45, uInk * 1., smoothstep(.05, .9, h));
+      vec3 amb = mix(mix(uPal1, uInk, gCloudUnder - .45) * gCloudUnder, uInk * 1., smoothstep(.05, .9, h));
       float glow = gCloudGlow * (gGlowR < 0. ? 1. : exp(-pow(t - gGlowR, 2.) * .006));
       vec3 S = amb + (uInk * 1.9 + uAccent * .6) * sunT * (.45 + phase) + uAccent * glow * 1.6;
       // far away the clouds melt into the white
@@ -221,6 +236,32 @@ vec4 cloudsO(vec3 ro, vec3 rd, float tmax) {
   }
   L = mix(L, L * vec3(.84, .85, .88), tarnish());
   return vec4(L, T);
+}
+
+/** Wisps drifting through a band of height (base..base + thick) between the eye and tEnd, thin and broken (cover). */
+vec4 wispsO(vec3 ro, vec3 rd, float tEnd, float base, float thick, float cover) {
+  if (uCloudReady < .5) return vec4(0., 0., 0., 1.);
+  float b = gCloudBase, th = gCloudThick, cv = gCover, dn = gCloudDensity, cn = gColN;
+  gCloudBase = base;
+  gCloudThick = thick;
+  gCover = cover;
+  gCloudDensity = .6;
+  gColN = 0.;
+  vec4 r = cloudsO(ro, rd, tEnd);
+  gCloudBase = b;
+  gCloudThick = th;
+  gCover = cv;
+  gCloudDensity = dn;
+  gColN = cn;
+  return r;
+}
+
+/** How much sunlight reaches p through the cloud layer above it (1: no cloud in the way). */
+float cloudShadow(vec3 p) {
+  if (uCloudReady < .5 || gSun.y <= .05) return 1.;
+  float ym = gCloudBase + gCloudThick * .35;
+  if (p.y > ym) return 1.;
+  return exp(-cloudDensity(p + gSun * ((ym - p.y) / gSun.y), true) * gCloudThick * .45);
 }
 
 /** The sky toward rd with the clouds before tmax (the old sea of clouds while the noise is still cooking). */

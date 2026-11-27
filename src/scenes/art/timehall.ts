@@ -213,14 +213,17 @@ void main() {
   }
   float tFloor = rd.y < -1e-4 ? -ro.y / rd.y : 1e4;
 
-  vec3 col = skyO(rd);
-  // the clouds' shadows, racing over the floor with the time-lapse
-  vec2 cloudGo = vec2(uClock * 6., uClock * 2.5);
+  // high clouds racing over the hall with the time-lapse; their shadows run over the floor
+  gCloudBase = 26.;
+  gCloudThick = 7.;
+  gCover = .34;
+  gCloudUnder = 1.25;
+  gWind = vec2(uClock * 70. + uSeed * 30., uClock * 28.);
+  vec3 col = heavenV(ro, rd, 500.);
   if (tFloor < tBest && tFloor < 1e3) {
     vec3 p = ro + rd * tFloor;
     float sh = floorShadow(p);
-    float cl = smoothstep(.5, .72, vnoise2(p.xz * .03 + cloudGo * .05));
-    float lit = sh * (1. - .7 * cl);
+    float lit = sh * mix(.25, 1., cloudShadow(p));
     vec3 shade = uPal1 * .62;
     vec3 c = mix(shade, uInk * (2.15 + .18 * exp(-uKickT * 3.)), lit);
     // far away, and toward the horizon, the floor melts into the sky: no line where they meet
@@ -242,8 +245,7 @@ void main() {
     // the sun's own light on it, cut where its body hides it (a cheap self-shadow: the floor's caster test)
     vec3 q = bustFrame(p);
     col = lightO(mBest < .5 ? marbleO(q) : marbleO(p * .7) * .96, n, rd, ao);
-    float cl = smoothstep(.5, .72, vnoise2(p.xz * .03 + cloudGo * .05));
-    col *= 1. - .25 * cl;
+    col *= mix(.78, 1., cloudShadow(p));
     col = mix(col, skyO(rd), 1. - exp(-tBest * .011));
   }
   // rays wheeling with the sun

@@ -147,7 +147,8 @@ float map(vec3 p) {
   float a = atan(p.z, p.x) - A0;
   float f = a / SEG;
   float k = floor(f + .5);
-  float g = godD(p, k), c = pillarD(p, k);
+  // the columns of cloud are clouds in volume (cloudsO), unless the noise is still cooking
+  float g = godD(p, k), c = uCloudReady > .5 ? 1e3 : pillarD(p, k);
   // the neighbour on that side, as bounds only (the ring is wide: the nearest is all that matters)
   float k2 = f - k > 0. ? k + 1. : k - 1.;
   vec3 c2 = godPos(k2);
@@ -167,6 +168,17 @@ void main() {
   gKey = normalize(vec3(0., .75, 0.) + gSun * .35);
   gSeaY = -10.;
   gSeaDrift = vec2(uTime * .003, uSeed * .1);
+  // the columns of cloud in volume, under each god, churning slowly, fast while the light stands
+  gColN = N;
+  gColRing = RR;
+  gColR = 2.8;
+  gColTop = GY - 1.05 * GS;
+  gColA0 = A0;
+  gCloudBase = -9.;
+  gCloudThick = gColTop + 9.5;
+  gCover = 0.;
+  gWind = vec2(uSwirl * 6., uTime * .3);
+  gCloudGlow = .4 * uBeam + .25 * exp(-uKickT * 2.);
   // the camera, near the middle, turning slowly, looking up at the gods across the ring
   float az = uTurn + uSeed;
   vec3 ro = vec3(.8 * cos(az + 3.1416), 2.2 + .3 * sin(uTime * .1), .8 * sin(az + 3.1416));
@@ -209,6 +221,11 @@ void main() {
       col = c;
     }
     col = mix(col, skyO(rd), 1. - exp(-tt * .006));
+  }
+  // the columns of cloud, before the gods and the far sea
+  if (uCloudReady > .5) {
+    vec4 cl = cloudsO(ro, rd, tt > 0. ? tt : 90.);
+    col = col * cl.a + cl.rgb;
   }
   // ---- the ring of light under their chins: a thread of light, and on every kick a light running once round it
   float yr = GY - .95 * GS;

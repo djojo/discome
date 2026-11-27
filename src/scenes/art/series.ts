@@ -198,6 +198,10 @@ void main() {
   gSun = normalize(vec3(-.55, .5, -.65));
   gKey = normalize(vec3(-.4, .75, .55));
   gSeaY = -6.;
+  gCloudBase = -15.;
+  gCloudThick = 10.;
+  gCover = .58;
+  gWind = vec2(uTime * .7 + uSeed * 40., uTime * .2);
   gSeaDrift = vec2(uTime * .003, uSeed * .1);
   // three ways of looking, each sliding along the shelves at its own pace
   vec3 ro, ta;
@@ -206,7 +210,7 @@ void main() {
   else if (uView < 1.5) { ro = vec3(T + .08 * sin(uTime * .1), .42, 1.25); ta = vec3(T, .4, 0.); focal = 1.9; }
   else { ro = vec3(T - .4, 2.6, 2.); ta = vec3(T + .9, .9, -.1); focal = 1.6; }
   vec3 rd = lookAt(ro, ta) * normalize(vec3(uv, focal));
-  vec3 col = heavenO(ro, rd, 150.);
+  vec3 col = heavenV(ro, rd, 260.);
   float t = .02, tt = -1.;
   for (int i = 0; i < 90; i++) {
     float d = map(ro + rd * t);
@@ -246,8 +250,11 @@ void main() {
     // the gold light spilling from the crack onto its neighbours
     vec3 cp = vec3(uCrackX * SX, uCrackY * SY + .42, .1);
     col += uAccent * exp(-length(p - cp) * 3.5) * .6 * smoothstep(0., .5, uCrackT) * step(uCrackT, 600.);
-    col = mix(col, heavenO(ro, rd, 150.), smoothstep(10., 34., tt));
+    col = mix(col, heavenV(ro, rd, 260.), smoothstep(10., 34., tt));
   }
+  // wisps of cloud drifting through the storeroom
+  vec4 wv = wispsO(ro, rd, tt > 0. ? tt : 20., -.6, 3.6, .26);
+  col = col * wv.a + wv.rgb;
   // the shafts of light through the air, and the dust glinting in them on the hats
   col = withShafts(col, ro, rd, tt > 0. ? tt : 30., .7 + .3 * exp(-uKickT * 3.));
   for (int i = 0; i < 28; i++) {
